@@ -237,6 +237,31 @@ td.push{color:#9ca3af;font-weight:700}
 .bs-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
 .bs-val{font-size:18px;font-weight:800;color:#22c55e}
 .bs-lbl{font-size:9px;color:#86efac;margin-top:2px}
+/* ═══ Smart Slips ═══ */
+.slip-section{padding:12px 16px 0}
+.slip-tier{color:#4ade80;font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.slip-tier .payout{font-size:11px;color:#86efac;font-weight:600}
+.slip-card{background:#163024;border-radius:10px;padding:14px;margin:0 16px 10px;border-left:3px solid #4ade80;transition:transform .15s,box-shadow .15s}
+.slip-card.best{border-left-color:#22c55e;background:#16302a}
+.slip-card.aggressive{border-left-color:#f59726}
+.slip-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.slip-rank{font-size:11px;font-weight:700;color:#4ade80;background:#1a3d2a;padding:2px 8px;border-radius:4px}
+.slip-score{font-size:13px;font-weight:800;color:#4ade80}
+.slip-legs{display:flex;flex-direction:column;gap:6px}
+.slip-leg{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1a3d2a;border-radius:6px}
+.slip-leg-name{font-weight:600;font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slip-leg-prop{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.slip-leg-metric{font-size:10px;font-weight:700;color:#4ade80;background:#0f291a;padding:2px 5px;border-radius:3px}
+.slip-leg-lean{font-size:11px;font-weight:700}
+.slip-leg-lean.over{color:#22c55e}
+.slip-leg-lean.under{color:#ef4444}
+.slip-leg-edge{font-size:9px;font-weight:600;color:#86efac}
+.slip-leg-team{font-size:9px;color:#6b8f7b;min-width:28px;text-align:center}
+.slip-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.slip-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px}
+.slip-meta{color:#6b8f7b;font-size:10px;margin-top:6px;display:flex;justify-content:space-between}
+.slip-controls{display:flex;gap:8px;padding:8px 16px;align-items:center;flex-wrap:wrap}
+.slip-controls .pf-btn{font-size:11px}
 
 /* ═══ DESKTOP TOP NAV (hidden on mobile) ═══ */
 .top-nav{display:none}
@@ -271,6 +296,8 @@ td.push{color:#9ca3af;font-weight:700}
   .sug-item:hover{background:#2d5a3d}
   .bet-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
   .bet-card{margin:0 0 8px}
+  .slip-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
+  .slip-card{margin:0 0 10px}
   .top-nav{display:flex;gap:2px;align-items:center}
   .top-nav .tab-btn{padding:8px 16px;font-size:13px;border-radius:8px;border:none;background:none;color:#6b8f7b;cursor:pointer;font-weight:600;white-space:nowrap}
   .top-nav .tab-btn:hover{background:#1a3d2a}
@@ -370,7 +397,7 @@ let st={
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",
-  streakFilter:"all",drafted:new Set(),
+  streakFilter:"all",drafted:new Set(),slipLegs:"3",
   lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
   lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
@@ -622,6 +649,117 @@ function getBestBets(){
   return bets;
 }
 
+// ═══ SMART SLIP GENERATOR ═══
+// Combines +EV edge, AI confidence, streaks, and hit rate into optimal Underdog slips
+function getConvictionLegs(){
+  const bets=getBestBets().filter(b=>b.edge>0);
+  if(!bets.length)return[];
+
+  // Build lookup maps for AI picks and streaks
+  const aiMap=new Map();
+  st.picks.forEach(pk=>{if(pk.player)aiMap.set(pk.player.toLowerCase(),pk)});
+  const streakMap=new Map();
+  try{
+    const streaks=getStreaks();
+    streaks.forEach(s=>{const k=`${s.player.toLowerCase()}|${s.stat}`;streakMap.set(k,s)});
+  }catch(e){}
+
+  const legs=[];
+  for(const b of bets){
+    const nl=b.name.toLowerCase();
+    // 1. EV score (0-10 scale, capped)
+    const evScore=Math.min(b.edge*40,10);
+    // 2. AI confidence bonus
+    let aiScore=0;
+    const aiPick=aiMap.get(nl);
+    if(aiPick){
+      const conf=(aiPick.confidence||"").toUpperCase();
+      if(conf==="SMASH")aiScore=4;
+      else if(conf==="STRONG")aiScore=2.5;
+      else aiScore=1;
+      // Extra if AI picked same prop type
+      if((aiPick.prop_type||"").toUpperCase()===b.metric.toUpperCase())aiScore+=2;
+    }
+    // 3. Streak bonus
+    let streakScore=0;
+    const logCol=propToLogCol(b.metric);
+    const sk=`${nl}|${logCol}`;
+    const streak=streakMap.get(sk);
+    if(streak){
+      if(streak.streak>=7)streakScore=3;
+      else if(streak.streak>=5)streakScore=2;
+      else if(streak.streak>=3)streakScore=1;
+    }
+    // 4. Sample reliability (more games = more trust)
+    const reliabilityScore=Math.min(b.total/10,2);
+    // 5. Hit rate strength
+    const hrScore=b.hitRate>=0.8?2:b.hitRate>=0.65?1:0;
+
+    const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
+
+    let signals=[];
+    if(aiPick){const c=(aiPick.confidence||"").toUpperCase();signals.push(c==="SMASH"?"🤖 SMASH":c==="STRONG"?"🤖 STRONG":"🤖 AI")}
+    if(streak)signals.push(`🔥 ${streak.streak}G streak`);
+    if(b.edge>=0.15)signals.push("💎 Elite EV");
+    else if(b.edge>=0.08)signals.push("📈 Strong EV");
+    if(b.hitRate>=0.8)signals.push(`✅ ${(b.hitRate*100).toFixed(0)}% hit`);
+
+    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:!!aiPick,hasStreak:!!streak});
+  }
+  legs.sort((a,b)=>b.conviction-a.conviction);
+  return legs;
+}
+
+function generateSlips(legs,legCount){
+  if(legs.length<legCount)return[];
+  const slips=[];
+  const maxIter=legCount<=3?500:300;
+
+  function gen(start,current,usedPlayers,teamCounts){
+    if(current.length===legCount){
+      const score=current.reduce((s,l)=>s+l.conviction,0);
+      const avgEdge=current.reduce((s,l)=>s+l.edge,0)/legCount;
+      const avgHitRate=current.reduce((s,l)=>s+l.hitRate,0)/legCount;
+      const teams=[...new Set(current.map(l=>l.team))];
+      const signals=current.reduce((s,l)=>s+l.signals.length,0);
+      slips.push({legs:current.slice(),score,avgEdge,avgHitRate,teams,signalCount:signals,legCount});
+      return;
+    }
+    for(let i=start;i<legs.length&&slips.length<maxIter;i++){
+      const leg=legs[i];
+      // Unique players
+      if(usedPlayers.has(leg.name.toLowerCase()))continue;
+      // Max 2 legs from same team/game
+      const tc=teamCounts.get(leg.team)||0;
+      if(tc>=2)continue;
+
+      usedPlayers.add(leg.name.toLowerCase());
+      teamCounts.set(leg.team,(tc||0)+1);
+      current.push(leg);
+      gen(i+1,current,usedPlayers,teamCounts);
+      current.pop();
+      usedPlayers.delete(leg.name.toLowerCase());
+      teamCounts.set(leg.team,tc);
+    }
+  }
+  // Only use top legs to keep combo generation fast
+  const pool=legs.slice(0,legCount<=3?15:legCount<=4?18:20);
+  gen(0,[],new Set(),new Map());
+  slips.sort((a,b)=>b.score-a.score);
+  return slips.slice(0,8);
+}
+
+function getSmartSlips(){
+  const legs=getConvictionLegs();
+  if(!legs.length)return{legs:[],slips3:[],slips4:[],slips5:[]};
+  return{
+    legs,
+    slips3:generateSlips(legs,3),
+    slips4:generateSlips(legs,4),
+    slips5:generateSlips(legs,5)
+  };
+}
+
 function pickDashPlayer(name){
   st.player=name;st.oppFilter="";
   console.log("Selected:",name);
@@ -629,6 +767,7 @@ function pickDashPlayer(name){
 }
 
 function setStreakFilter(f){st.streakFilter=f;render()}
+function setSlipLegs(n){st.slipLegs=n;render()}
 function toggleDrafted(name){if(st.drafted.has(name))st.drafted.delete(name);else st.drafted.add(name);render()}
 function resetDrafted(){st.drafted.clear();render()}
 function streakToDash(name){
@@ -871,6 +1010,55 @@ function render(){
       }).join("");
       picksHTML+=`</div>`;
     }
+  }else if(st.picksView==="slips"){
+    // ═══ SMART SLIP GENERATOR ═══
+    const result=getSmartSlips();
+    const {legs}=result;
+    if(!legs.length){picksHTML=`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
+    else{
+      const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
+      const payouts={"3":"6x","4":"10x","5":"20x"};
+      const topLeg=legs[0];
+      const aiCount=legs.filter(l=>l.hasAI).length;
+      const streakCount=legs.filter(l=>l.hasStreak).length;
+
+      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#86efac">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
+      picksHTML+=`<div class="slip-controls"><span style="color:#6b8f7b;font-size:11px">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
+      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team.</div>`;
+
+      if(!slips.length){picksHTML+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
+      else{
+        picksHTML+=slips.map((slip,si)=>{
+          const isBest=si===0;
+          const isAgg=parseInt(st.slipLegs)>=5;
+          const avgEdgePct=(slip.avgEdge*100).toFixed(1);
+          const avgHRPct=(slip.avgHitRate*100).toFixed(0);
+          const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
+          const uniqueSignals=[...new Set(allSignals)].slice(0,4);
+
+          return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
+            <div class="slip-header">
+              <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
+              <span class="slip-score">${slip.score.toFixed(1)} pts</span>
+            </div>
+            <div class="slip-legs">${slip.legs.map(l=>{
+              const leanCls=l.lean==="OVER"?"over":"under";
+              return`<div class="slip-leg">
+                <span class="slip-leg-team">${esc(l.team)}</span>
+                <span class="slip-leg-name">${esc(l.name)}</span>
+                <div class="slip-leg-prop">
+                  <span class="slip-leg-metric">${l.metric}</span>
+                  <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
+                  <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
+                </div>
+              </div>`;
+            }).join("")}</div>
+            ${uniqueSignals.length?`<div class="slip-tags">${uniqueSignals.map(s=>`<span class="slip-tag" style="background:#1a3d2a;color:#86efac;border:1px solid #2d5a3d">${s}</span>`).join("")}</div>`:""}
+            <div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
+          </div>`;
+        }).join("");
+      }
+    }
   }else if(st.picksView==="picks"){
     if(!st.picks.length){picksHTML=`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
     else{
@@ -988,6 +1176,7 @@ function render(){
       picksHTML+=`</div>`;
     }
   }else{
+    const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
     const fil=st.propsMetric==="ALL"?st.props:st.props.filter(p=>p.METRIC===st.propsMetric);
     const srch=st.propsSearch?fil.filter(p=>(p.PLAYER_NAME||"").toLowerCase().includes(st.propsSearch.toLowerCase())):fil;
     const sorted=[...srch].sort((a,b)=>(a.PLAYER_NAME||"").localeCompare(b.PLAYER_NAME||"")).slice(0,200);
@@ -1094,6 +1283,7 @@ function render(){
   <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
     <div class="sub-tabs" style="padding-top:12px">
       <div class="sub-tab ${st.picksView==="bets"?"active":""}" onclick="switchPicksView('bets')">💰 Best Bets</div>
+      <div class="sub-tab ${st.picksView==="slips"?"active":""}" onclick="switchPicksView('slips')">🎫 Slips</div>
       <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">🤖 AI Picks</div>
       <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">⚾ Draft</div>
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
