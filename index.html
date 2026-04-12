@@ -88,7 +88,7 @@ td.push{color:#9ca3af;font-weight:700}
 .prop-odds{font-size:11px;font-weight:600}
 .prop-over{color:#22c55e}
 .prop-under{color:#ef4444}
-.pick-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 10px;border-left:3px solid #2d5a3d;transition:transform .15s,box-shadow .15s}
+.pick-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 10px;border-left:3px solid #2d5a3d}
 .pick-card.smash{border-left-color:#22c55e;background:#16302a}
 .pick-card.strong{border-left-color:#3b82f6}
 .pick-rank{display:inline-block;background:#1a3d2a;color:#4ade80;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:6px}
@@ -114,7 +114,7 @@ td.push{color:#9ca3af;font-weight:700}
 .pf-btn{padding:6px 12px;font-size:11px;font-weight:600;color:#6b8f7b;background:#1a3d2a;border:1px solid #2d5a3d;border-radius:16px;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .pf-btn.active{color:#4ade80;background:#24503a;border-color:#4ade80}
 .props-tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:50vh;padding:0 16px 16px}
-.props-tbl-wrap table{min-width:420px}
+.props-tbl-wrap table{min-width:320px}
 .odds-over{color:#22c55e;font-weight:600}
 .odds-under{color:#ef4444;font-weight:600}
 .odds-even{color:#f59726;font-weight:600}
@@ -144,7 +144,7 @@ td.push{color:#9ca3af;font-weight:700}
 .ps-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
 .ps-val{font-size:18px;font-weight:800;color:#4ade80}
 .ps-lbl{font-size:9px;color:#86efac;margin-top:2px}
-.dinger-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #f59726;display:flex;align-items:center;justify-content:space-between;transition:transform .15s,box-shadow .15s}
+.dinger-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #f59726;display:flex;align-items:center;justify-content:space-between}
 .dinger-card.top3{border-left-color:#ef4444;background:#1a2024}
 .dinger-left{flex:1}
 .dinger-rank{display:inline-block;background:#1a3d2a;color:#f59726;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-right:6px;min-width:20px;text-align:center}
@@ -169,215 +169,38 @@ td.push{color:#9ca3af;font-weight:700}
 .combo-teams{color:#86efac;font-size:10px;margin-top:2px}
 .combo-score{float:right;font-size:12px;font-weight:700;color:#f59726}
 .combo-card.best .combo-score{color:#ef4444}
-/* ── Streaks ── */
-.streak-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #ffd966;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:transform .15s,box-shadow .15s}
-.streak-card.fire{border-left-color:#ff6b35}.streak-card.inferno{border-left-color:#ef4444}.streak-card.hot{border-left-color:#ffaa00}
-.streak-left{flex:1}
-.streak-emoji{font-size:14px;margin-right:4px}
-.streak-name{font-weight:700;font-size:14px}
-.streak-label{font-size:10px;font-weight:600;color:#ffaa00;margin-left:6px}
-.streak-meta{color:#86efac;font-size:11px;margin-top:2px}
-.streak-right{text-align:right;min-width:55px}
-.streak-count{font-size:22px;font-weight:800;color:#ffaa00}
-.streak-card.fire .streak-count{color:#ff6b35}.streak-card.inferno .streak-count{color:#ef4444}
-.streak-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.streak-chart{display:flex;gap:2px;align-items:flex-end;height:28px;margin-top:6px}
-.streak-chart-bar{width:8px;border-radius:2px 2px 0 0;min-height:3px}
-.streak-prop{font-size:10px;color:#86efac;margin-top:4px}
-.streak-filters{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
-/* ── Draft ── */
-.draft-card{background:#163024;border-radius:10px;padding:10px 14px;margin:0 16px 6px;border-left:3px solid #2d5a3d;display:flex;align-items:center;gap:10px;cursor:pointer;transition:transform .15s,box-shadow .15s,opacity .15s}
-.draft-card:active{transform:scale(.98)}
-.draft-card.drafted{opacity:.3;text-decoration:line-through}
-.draft-card.smash{border-left-color:#22c55e}
-.draft-card.tier1{border-left-color:#4ade80}
-.draft-card.tier2{border-left-color:#3b82f6}
-.draft-card.tier3{border-left-color:#8b5cf6}
-.draft-card.pitcher{border-left-color:#06b6d4}
-.draft-rank{font-size:16px;font-weight:800;min-width:24px;text-align:center}
-.draft-main{flex:1;min-width:0}
-.draft-name{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.draft-meta{color:#86efac;font-size:10px;margin-top:2px}
-.draft-fp{text-align:right;min-width:50px}
-.draft-fp-val{font-size:18px;font-weight:800}
-.draft-fp-lbl{font-size:8px;color:#6b8f7b}
-.draft-pos{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:6px}
-.draft-pos-p{background:#06b6d422;color:#06b6d4;border:1px solid #06b6d444}
-.draft-pos-if{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
-.draft-pos-of{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
-.draft-pos-flex{background:#8b5cf622;color:#8b5cf6;border:1px solid #8b5cf644}
-.draft-tag{font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px;margin-right:4px;display:inline-block;margin-top:3px}
-.draft-tags{margin-top:2px}
-.draft-tier-label{padding:8px 16px 4px;font-size:11px;font-weight:700}
-.draft-controls{display:flex;justify-content:space-between;align-items:center;padding:6px 16px}
-.draft-reset{background:#1a3d2a;border:1px solid #2d5a3d;color:#6b8f7b;font-size:10px;padding:4px 10px;border-radius:6px;cursor:pointer}
-.draft-count{color:#6b8f7b;font-size:10px}
-/* ═══ +EV Badges & Best Bets ═══ */
-.ev-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px}
-.ev-pos{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
-.ev-neg{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
-.ev-neutral{background:#f5972622;color:#f59726;border:1px solid #f5972644}
-.ev-big{font-size:10px;padding:3px 8px}
-.bet-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #22c55e;display:flex;align-items:center;justify-content:space-between;transition:transform .15s,box-shadow .15s}
-.bet-card.elite{border-left-color:#ef4444;background:#1a2024}
-.bet-card.strong{border-left-color:#4ade80}
-.bet-card.mid{border-left-color:#f59726}
-.bet-left{flex:1}
-.bet-name{font-weight:700;font-size:14px}
-.bet-meta{color:#86efac;font-size:11px;margin-top:2px}
-.bet-prop{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
-.bet-right{text-align:right;min-width:70px}
-.bet-edge{font-size:20px;font-weight:800}
-.bet-edge.pos{color:#22c55e}
-.bet-edge.neg{color:#ef4444}
-.bet-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.bet-bar{height:4px;border-radius:2px;margin-top:6px;background:#1a3d2a;overflow:hidden}
-.bet-bar-fill{height:100%;border-radius:2px}
-.bet-summary{display:flex;gap:8px;padding:0 16px 8px}
-.bs-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
-.bs-val{font-size:18px;font-weight:800;color:#22c55e}
-.bs-lbl{font-size:9px;color:#86efac;margin-top:2px}
-/* ═══ Smart Slips ═══ */
-.slip-section{padding:12px 16px 0}
-.slip-tier{color:#4ade80;font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
-.slip-tier .payout{font-size:11px;color:#86efac;font-weight:600}
-.slip-card{background:#163024;border-radius:10px;padding:14px;margin:0 16px 10px;border-left:3px solid #4ade80;transition:transform .15s,box-shadow .15s}
-.slip-card.best{border-left-color:#22c55e;background:#16302a}
-.slip-card.aggressive{border-left-color:#f59726}
-.slip-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.slip-rank{font-size:11px;font-weight:700;color:#4ade80;background:#1a3d2a;padding:2px 8px;border-radius:4px}
-.slip-score{font-size:13px;font-weight:800;color:#4ade80}
-.slip-legs{display:flex;flex-direction:column;gap:6px}
-.slip-leg{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1a3d2a;border-radius:6px}
-.slip-leg-name{font-weight:600;font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.slip-leg-prop{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.slip-leg-metric{font-size:10px;font-weight:700;color:#4ade80;background:#0f291a;padding:2px 5px;border-radius:3px}
-.slip-leg-lean{font-size:11px;font-weight:700}
-.slip-leg-lean.over{color:#22c55e}
-.slip-leg-lean.under{color:#ef4444}
-.slip-leg-edge{font-size:9px;font-weight:600;color:#86efac}
-.slip-leg-team{font-size:9px;color:#6b8f7b;min-width:28px;text-align:center}
-.slip-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.slip-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px}
-.slip-meta{color:#6b8f7b;font-size:10px;margin-top:6px;display:flex;justify-content:space-between}
-.slip-controls{display:flex;gap:8px;padding:8px 16px;align-items:center;flex-wrap:wrap}
-.slip-controls .pf-btn{font-size:11px}
 
-/* ═══ DESKTOP TOP NAV (hidden on mobile) ═══ */
-.top-nav{display:none}
-.header-controls{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.mode-toggle{display:flex;gap:8px}
-.mode-btn{flex:1;padding:6px;text-align:center;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid #2d5a3d}
-.ctrl-row{display:flex;gap:8px}
-.dash-grid{}
-
-/* ═══ Custom Scrollbars ═══ */
-::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-track{background:#0f291a}
-::-webkit-scrollbar-thumb{background:#2d5a3d;border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:#3d7a5d}
-::-webkit-scrollbar-corner{background:#0f291a}
-*{scrollbar-width:thin;scrollbar-color:#2d5a3d #0f291a}
-
-/* ═══ TABLET+ (768px) ═══ */
-@media(min-width:768px){
-  body{max-width:1400px;padding-bottom:0}
-  .tab-bar{display:none}
-  /* Desktop hover states */
-  .draft-card:hover:not(.drafted){transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .streak-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .dinger-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .pick-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .combo-card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.2)}
-  .prop-card:hover{background:#1a3d2a}
-  .avg-card:hover{border-color:#4ade80 !important;transition:border-color .15s}
-  .sub-tab:hover:not(.active){background:#1a3d2a;color:#86efac}
-  .pf-btn:hover:not(.active){background:#1a3d2a;color:#86efac}
-  .sug-item:hover{background:#2d5a3d}
-  .bet-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .bet-card{margin:0 0 8px}
-  .slip-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
-  .slip-card{margin:0 0 10px}
-  .top-nav{display:flex;gap:2px;align-items:center}
-  .top-nav .tab-btn{padding:8px 16px;font-size:13px;border-radius:8px;border:none;background:none;color:#6b8f7b;cursor:pointer;font-weight:600;white-space:nowrap}
-  .top-nav .tab-btn:hover{background:#1a3d2a}
-  .top-nav .tab-btn.active{color:#4ade80;background:#1a3d2a}
-  .header{padding:12px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px}
-  .header-title{font-size:18px;margin-bottom:0;margin-right:auto}
-  .header-controls{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px}
-  .header-controls .mode-toggle{display:flex;gap:6px}
-  .header-controls .mode-btn{padding:7px 14px;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;white-space:nowrap;border:1px solid #2d5a3d}
-  .header-controls .search-wrap{flex:1;max-width:300px}
-  .header-controls .ctrl-row{display:flex;gap:8px;min-width:200px}
-  .header-controls .ctrl-row select,.header-controls .ctrl-row input{width:auto;min-width:90px}
-  .section{padding:16px 24px 0}
-  .stats-strip{padding:12px 24px}
-  .stats-strip-inner{gap:28px}
-  .stat-item{min-width:55px}
-  .stat-val{font-size:15px}
-  .stat-label{font-size:10px}
-  .bar-chart{height:130px;gap:5px}
-  .bar-val{font-size:9px}
-  .bar-date{font-size:9px}
-  .avg-card{padding:14px 10px}
-  .avg-val{font-size:18px}
-  .avg-label{font-size:11px}
-  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;padding:0 24px}
-  .dash-grid>.section{padding:16px 0 0}
-  .dash-full{grid-column:1/-1}
-  table{font-size:13px}
-  th,td{padding:8px 6px}
-  .log-table-wrap{padding:0 24px 24px;max-height:calc(100vh - 140px)}
-  .log-controls{padding:12px 24px;max-width:300px}
-  .pick-card,.dinger-card,.streak-card,.draft-card{margin:0 0 8px}
-  .cards-wrap{padding:0 24px}
-  .picks-summary{padding:0 24px 12px}
-  .bet-summary{padding:0 24px 12px}
-  .sub-tabs{padding:8px 24px}
-  .combo-section{padding:12px 24px 0}
-  .dinger-header{padding:12px 24px 4px}
-  .dinger-desc{padding:0 24px 8px}
-  .stat-grid{margin:0 24px 8px}
-  .props-filter{padding:8px 24px}
-  .props-tbl-wrap{padding:0 24px 16px;max-height:65vh}
-  .profile{padding:16px 24px;gap:20px}
-  .profile-info h2{font-size:22px}
-  .lk-section{padding:14px 24px 0}
-  .lk-tbl-wrap{padding:0 24px 16px}
-  .draft-controls{padding:6px 24px}
-  .draft-tier-label{padding:8px 24px 4px}
-  .streak-filters{padding:8px 24px}
-  .early-banner{margin:14px 24px 0}
-  .timestamp{padding:20px 24px}
-  .empty{padding:40px 24px}
-  .matchup-card{padding:16px 18px}
-  .matchup-header{font-size:16px}
-  .weather-card{padding:16px 18px}
-  .split-card{padding:16px}
-  .card{padding:16px 18px}
-}
-
-/* ═══ DESKTOP (1024px+) ═══ */
-@media(min-width:1024px){
-  .header-controls{margin-top:0;width:auto;flex:1;justify-content:flex-end}
-  .cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .cards-grid .draft-tier-label{grid-column:1/-1}
-  .combo-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  .matchup-stats{grid-template-columns:repeat(4,1fr);gap:10px}
-  .matchup-stat .val{font-size:16px}
-  .split-row{gap:16px}
-  .profile-img{width:80px;height:80px}
-  .stat-grid{grid-template-columns:repeat(4,1fr);gap:10px}
-  .stat-box .val{font-size:18px}
-}
-
-/* ═══ WIDE DESKTOP (1400px+) ═══ */
-@media(min-width:1400px){
-  .cards-grid{grid-template-columns:repeat(3,1fr)}
-  .header{padding:12px 32px}
-  .section{padding:16px 32px 0}
-  .dash-grid{padding:0 32px;gap:0 28px}
-}
+/* ── Streak Cards ── */
+.streak-header{padding:12px 16px 4px}
+.streak-title{color:#f59726;font-size:13px;font-weight:700}
+.streak-desc{color:#6b8f7b;font-size:10px;padding:0 16px 8px}
+.streak-filters{display:flex;gap:6px;padding:4px 16px 10px;overflow-x:auto}
+.sf-btn{padding:5px 10px;font-size:10px;font-weight:700;color:#6b8f7b;background:#1a3d2a;border:1px solid #2d5a3d;border-radius:14px;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.sf-btn.active{color:#f59726;background:#2a2418;border-color:#f59726}
+.streak-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #2d5a3d;position:relative;overflow:hidden}
+.streak-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,170,0,0.4),transparent);opacity:0;transition:opacity .3s}
+.streak-card.hot{border-left-color:#f59726;background:#1a2418}
+.streak-card.hot::before{opacity:1}
+.streak-card.fire{border-left-color:#ef4444;background:#1a1818}
+.streak-card.fire::before{background:linear-gradient(90deg,transparent,rgba(239,68,68,0.5),transparent);opacity:1}
+.streak-top{display:flex;justify-content:space-between;align-items:flex-start}
+.streak-player{font-weight:800;font-size:15px;color:#fff}
+.streak-type-pill{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:6px;vertical-align:middle}
+.streak-type-bat{background:rgba(255,170,0,0.15);color:#ffaa00;border:1px solid rgba(255,170,0,0.25)}
+.streak-type-pitch{background:rgba(100,149,237,0.15);color:#6495ed;border:1px solid rgba(100,149,237,0.25)}
+.streak-heat{text-align:right}
+.streak-num{font-size:28px;font-weight:900;line-height:1}
+.streak-num-label{font-size:8px;color:#6b8f7b;text-transform:uppercase;letter-spacing:1px;font-weight:700;text-align:right;margin-top:1px}
+.streak-meta{color:#86efac;font-size:11px;margin-top:3px}
+.streak-heat-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:4px;letter-spacing:0.3px}
+.streak-stats{display:flex;gap:8px;margin-top:8px;padding:8px 10px;background:rgba(0,0,0,0.25);border-radius:8px;border:1px solid rgba(255,255,255,0.03)}
+.streak-stat{flex:1;text-align:center}
+.streak-stat-lbl{font-size:8px;color:#6b8f7b;text-transform:uppercase;font-weight:700;letter-spacing:0.3px}
+.streak-stat-val{font-size:13px;font-weight:700;color:#fff;margin-top:1px}
+.streak-chart{display:flex;align-items:flex-end;gap:2px;height:28px;margin-top:8px}
+.streak-bar{flex:1;border-radius:2px 2px 0 0;min-width:4px;transition:height .3s}
+.streak-go-btn{margin-top:8px;width:100%;padding:7px;border:1px solid #2d5a3d;border-radius:6px;background:#1a3d2a;color:#86efac;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.streak-go-btn:hover{background:#24503a;border-color:#4ade80;color:#4ade80}
 </style>
 </head>
 <body>
@@ -392,12 +215,12 @@ let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
   picks:[],props:[],
-  mode:"batter",
+  mode:"batter", 
   player:"",metric:"H",line:"",activeTab:"dashboard",oppFilter:"",
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",
-  streakFilter:"all",drafted:new Set(),slipLegs:"3",
+  streakFilter:"all",
   lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
   lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
@@ -416,26 +239,8 @@ function cleanRows(rows){
   });
 }
 
-// Fix sheets where column headers contain data values
-// e.g. "player_name Adam Frazier Addison Barger" → "player_name"
-function normalizeKeys(rows){
-  if(!rows||!rows.length)return rows;
-  const firstKeys=Object.keys(rows[0]);
-  const hasSpaceKeys=firstKeys.some(k=>k.includes(' '));
-  if(!hasSpaceKeys)return rows; // already clean
-  console.log("🔧 Normalizing dirty column names:",firstKeys.slice(0,3).map(k=>k.slice(0,30)+"...").join(" | "));
-  return rows.map(row=>{
-    const clean={};
-    for(const[k,v]of Object.entries(row)){
-      const baseKey=k.split(' ')[0];
-      clean[baseKey]=v;
-    }
-    return clean;
-  });
-}
-
 const fetchSheet=(name)=>new Promise((res,rej)=>{
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}`;
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
   fetch(url)
   .then(r=>{
     if(!r.ok){console.error(`❌ Sheet fetch failed: ${name} (${r.status})`);throw new Error(`Failed: ${name}`)}
@@ -475,7 +280,6 @@ function firstValidPlayer(arr){
       if(v&&String(v).trim().length>1)return String(v).trim();
     }
   }
-  console.warn("⚠️ Could not find player_name. Keys:",Object.keys(first).slice(0,5));
   return "";
 }
 
@@ -496,11 +300,11 @@ function switchMode(m){
   st.line="";st.oppFilter="";st.playerSearch="";st.playerSuggestions=[];st.showPlayerSugs=false;
   const src=m==="pitcher"?st.pTonight:st.tonight;
   st.player=firstValidPlayer(src);
-  console.log(`Mode → ${m}, default player: "${st.player}", source has ${src.length} entries`);
   render();
 }
 function switchPicksView(v){st.picksView=v;render()}
 function setPropsMetric(m){st.propsMetric=m;render()}
+function setStreakFilter(f){st.streakFilter=f;render()}
 
 function getDingerCombos(board,legs){
   if(board.length<legs)return[];
@@ -529,21 +333,21 @@ function getDingerBoard(){
   const rows=[];
   for(const p of st.tonight){
     const name=p.player_name;if(!name)continue;
+    const pLogs=st.gameLogs.filter(g=>g.player_name===name);
+    const totalAB=pLogs.reduce((s,g)=>s+toNum(g.AB),0);
+    if(totalAB===0)continue;
     const seasHR=toNum(p.Seas_HR);
     const l7HR=toNum(p.L7_HR);
     const l14HR=toNum(p.L14_HR);
-    // Compute AB and HR from game logs (not sheet columns)
-    const pLogs=st.gameLogs.filter(g=>g.player_name===name);
-    if(!pLogs.length)continue;
-    const totalAB=pLogs.reduce((s,g)=>s+toNum(g.AB),0);
-    if(totalAB===0)continue;
     const seasHRtotal=pLogs.reduce((s,g)=>s+toNum(g.HR),0);
-    const hrRate=totalAB>0?seasHRtotal/totalAB:0;
+    const hrRate=seasHRtotal/totalAB;
     const gamesPlayed=pLogs.length;
     const hrPerGame=gamesPlayed>0?seasHRtotal/gamesPlayed:0;
+    
     const hrProp=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC==="HR");
     const dkLine=hrProp?hrProp.DK_LINE:null;
     const overOdds=hrProp?parseInt(hrProp.OVER_ODDS)||null:null;
+    
     let score=0;
     score+=hrRate*100;
     score+=l7HR*15;
@@ -552,6 +356,7 @@ function getDingerBoard(){
     score+=hrPerGame*20;
     if(overOdds&&overOdds<0)score+=10;
     if(overOdds&&overOdds>0&&overOdds<=200)score+=5;
+    
     rows.push({
       name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",
       hand:p.opp_pitcher_hand||"?",venue:p.venue_tonight||"",
@@ -564,308 +369,192 @@ function getDingerBoard(){
   return rows.slice(0,30);
 }
 
-// ═══ +EV ENGINE ═══
-// Convert American odds to implied probability (0-1)
-function impliedProb(odds){
-  if(!odds&&odds!==0)return null;
-  const o=parseInt(odds);if(isNaN(o))return null;
-  return o<0?Math.abs(o)/(Math.abs(o)+100):100/(o+100);
-}
+// ═══════════════════════════════════════════
+// ── STREAK DETECTION ENGINE ──
+// ═══════════════════════════════════════════
+function getStreaks(){
+  const streaks=[];
+  const tonightNames=new Set([
+    ...st.tonight.map(p=>(p.player_name||"").toLowerCase()),
+    ...st.pTonight.map(p=>(p.player_name||"").toLowerCase())
+  ]);
 
-// Calculate hit rate: how often player exceeds a line for a metric
-function getHitRate(name,metric,line,isP){
-  const logs=(isP?st.pGameLogs:st.gameLogs).filter(g=>g.player_name===name);
-  if(logs.length<3)return null;
-  const ln=parseFloat(line);if(isNaN(ln))return null;
-  const hits=logs.filter(g=>toNum(g[metric])>ln).length;
-  return{rate:hits/logs.length,hits,total:logs.length};
-}
-
-// Map prop METRIC names to game log column names
-function propToLogCol(metric){
-  const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
-  return map[metric]||metric;
-}
-
-// Is this a pitcher prop?
-function isPitcherProp(metric){return(metric||"").startsWith("P_")}
-
-// Build full edge analysis for all props
-function getBestBets(){
-  if(!st.props.length)return[];
-  const bets=[];
-  for(const p of st.props){
-    const name=p.PLAYER_NAME;if(!name)continue;
-    const metric=p.METRIC;
-    const line=parseFloat(p.DK_LINE);if(isNaN(line))continue;
-    const overOdds=parseInt(p.OVER_ODDS);
-    const underOdds=parseInt(p.UNDER_ODDS);
-    if(isNaN(overOdds)&&isNaN(underOdds))continue;
-
-    const logCol=propToLogCol(metric);
-    const isP=isPitcherProp(metric);
-    const hr=getHitRate(name,logCol,line,isP);
-    if(!hr||hr.total<3)continue;
-
-    const overIP=impliedProb(overOdds);
-    const underIP=impliedProb(underOdds);
-
-    // Calculate edge for OVER
-    let overEdge=null,underEdge=null;
-    if(overIP!==null)overEdge=hr.rate-overIP;
-    if(underIP!==null)underEdge=(1-hr.rate)-underIP;
-
-    // Pick the better side
-    let lean,edge,odds,ip,hitRate;
-    if(overEdge!==null&&underEdge!==null){
-      if(overEdge>=underEdge){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.rate}
-      else{lean="UNDER";edge=underEdge;odds=underOdds;ip=underIP;hitRate=1-hr.rate}
-    }else if(overEdge!==null){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.rate}
-    else{lean="UNDER";edge=underEdge;odds=underOdds;ip=underIP;hitRate=1-hr.rate}
-
-    if(edge===null)continue;
-
-    // Find player's tonight info
-    const pT=st.tonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||
-             st.pTonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||{};
-
-    bets.push({
-      name,metric,line,lean,edge,odds,
-      impliedProb:ip,hitRate,
-      hits:lean==="OVER"?hr.hits:hr.total-hr.hits,
-      total:hr.total,
-      team:pT.team_abbr||"",
-      opp:pT.opp_abbr_tonight||"",
-      pitcher:pT.opp_pitcher_name||"",
-      hand:pT.opp_pitcher_hand||"",
-      dkLine:p.DK_LINE,
-      overOdds:p.OVER_ODDS,
-      underOdds:p.UNDER_ODDS,
-      isP
-    });
-  }
-  // Sort by edge descending
-  bets.sort((a,b)=>b.edge-a.edge);
-  return bets;
-}
-
-// ═══ SMART SLIP GENERATOR ═══
-// Combines +EV edge, AI confidence, streaks, and hit rate into optimal Underdog slips
-function getConvictionLegs(){
-  const bets=getBestBets().filter(b=>b.edge>0);
-  if(!bets.length)return[];
-
-  // Build lookup maps for AI picks and streaks
-  const aiMap=new Map();
-  st.picks.forEach(pk=>{if(pk.player)aiMap.set(pk.player.toLowerCase(),pk)});
-  const streakMap=new Map();
-  try{
-    const streaks=getStreaks();
-    streaks.forEach(s=>{const k=`${s.player.toLowerCase()}|${s.stat}`;streakMap.set(k,s)});
-  }catch(e){}
-
-  const legs=[];
-  for(const b of bets){
-    const nl=b.name.toLowerCase();
-    // 1. EV score (0-10 scale, capped)
-    const evScore=Math.min(b.edge*40,10);
-    // 2. AI confidence bonus
-    let aiScore=0;
-    const aiPick=aiMap.get(nl);
-    if(aiPick){
-      const conf=(aiPick.confidence||"").toUpperCase();
-      if(conf==="SMASH")aiScore=4;
-      else if(conf==="STRONG")aiScore=2.5;
-      else aiScore=1;
-      // Extra if AI picked same prop type
-      if((aiPick.prop_type||"").toUpperCase()===b.metric.toUpperCase())aiScore+=2;
-    }
-    // 3. Streak bonus
-    let streakScore=0;
-    const logCol=propToLogCol(b.metric);
-    const sk=`${nl}|${logCol}`;
-    const streak=streakMap.get(sk);
-    if(streak){
-      if(streak.streak>=7)streakScore=3;
-      else if(streak.streak>=5)streakScore=2;
-      else if(streak.streak>=3)streakScore=1;
-    }
-    // 4. Sample reliability (more games = more trust)
-    const reliabilityScore=Math.min(b.total/10,2);
-    // 5. Hit rate strength
-    const hrScore=b.hitRate>=0.8?2:b.hitRate>=0.65?1:0;
-
-    const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
-
-    let signals=[];
-    if(aiPick){const c=(aiPick.confidence||"").toUpperCase();signals.push(c==="SMASH"?"🤖 SMASH":c==="STRONG"?"🤖 STRONG":"🤖 AI")}
-    if(streak)signals.push(`🔥 ${streak.streak}G streak`);
-    if(b.edge>=0.15)signals.push("💎 Elite EV");
-    else if(b.edge>=0.08)signals.push("📈 Strong EV");
-    if(b.hitRate>=0.8)signals.push(`✅ ${(b.hitRate*100).toFixed(0)}% hit`);
-
-    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:!!aiPick,hasStreak:!!streak});
-  }
-  legs.sort((a,b)=>b.conviction-a.conviction);
-  return legs;
-}
-
-function generateSlips(legs,legCount){
-  if(legs.length<legCount)return[];
-  const slips=[];
-  const maxIter=legCount<=3?500:300;
-
-  function gen(start,current,usedPlayers,teamCounts){
-    if(current.length===legCount){
-      const score=current.reduce((s,l)=>s+l.conviction,0);
-      const avgEdge=current.reduce((s,l)=>s+l.edge,0)/legCount;
-      const avgHitRate=current.reduce((s,l)=>s+l.hitRate,0)/legCount;
-      const teams=[...new Set(current.map(l=>l.team))];
-      const signals=current.reduce((s,l)=>s+l.signals.length,0);
-      slips.push({legs:current.slice(),score,avgEdge,avgHitRate,teams,signalCount:signals,legCount});
-      return;
-    }
-    for(let i=start;i<legs.length&&slips.length<maxIter;i++){
-      const leg=legs[i];
-      // Unique players
-      if(usedPlayers.has(leg.name.toLowerCase()))continue;
-      // Max 2 legs from same team/game
-      const tc=teamCounts.get(leg.team)||0;
-      if(tc>=2)continue;
-
-      usedPlayers.add(leg.name.toLowerCase());
-      teamCounts.set(leg.team,(tc||0)+1);
-      current.push(leg);
-      gen(i+1,current,usedPlayers,teamCounts);
-      current.pop();
-      usedPlayers.delete(leg.name.toLowerCase());
-      teamCounts.set(leg.team,tc);
+  // ── Batter Streaks ──
+  const batters=[...new Set(st.gameLogs.map(g=>g.player_name).filter(Boolean))];
+  const batChecks=[
+    {metric:"H",threshold:1,label:"Hit Streak",short:"H≥1",emoji:"🔥",cat:"bat"},
+    {metric:"H",threshold:2,label:"Multi-Hit",short:"H≥2",emoji:"🔥🔥",cat:"bat"},
+    {metric:"HR",threshold:1,label:"HR Streak",short:"HR≥1",emoji:"💣",cat:"hr"},
+    {metric:"RBI",threshold:1,label:"RBI Streak",short:"RBI≥1",emoji:"💰",cat:"bat"},
+    {metric:"TB",threshold:2,label:"2+ TB",short:"TB≥2",emoji:"💪",cat:"bat"},
+    {metric:"R",threshold:1,label:"Runs Scored",short:"R≥1",emoji:"🏃",cat:"bat"},
+    {metric:"SB",threshold:1,label:"SB Streak",short:"SB≥1",emoji:"⚡",cat:"bat"},
+    {metric:"BB",threshold:1,label:"Walk Streak",short:"BB≥1",emoji:"👁️",cat:"bat"},
+    {metric:"DK_FP",threshold:10,label:"10+ DKFP",short:"FP≥10",emoji:"💎",cat:"bat"},
+  ];
+  for(const name of batters){
+    const logs=st.gameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
+    if(logs.length<3)continue;
+    const tonight=st.tonight.find(t=>t.player_name===name);
+    for(const chk of batChecks){
+      let count=0;
+      for(const g of logs){
+        if(toNum(g[chk.metric])>=chk.threshold)count++;
+        else break;
+      }
+      if(count<3)continue;
+      const duringLogs=logs.slice(0,count);
+      const duringAvg=(duringLogs.reduce((s,g)=>s+toNum(g[chk.metric]),0)/count);
+      const seasAvg=logs.length>0?(logs.reduce((s,g)=>s+toNum(g[chk.metric]),0)/logs.length):0;
+      const last7=logs.slice(0,Math.min(7,logs.length));
+      streaks.push({
+        player:name,
+        team:tonight?.team_abbr||logs[0]?.team_abbr||"",
+        opp:tonight?.opp_abbr_tonight||"",
+        pitcher:tonight?.opp_pitcher_name||"",
+        hand:tonight?.opp_pitcher_hand||"",
+        type:"bat",cat:chk.cat,
+        metric:chk.metric,threshold:chk.threshold,
+        streak:count,label:chk.label,short:chk.short,emoji:chk.emoji,
+        duringAvg,seasAvg,
+        lastGames:last7.map(g=>toNum(g[chk.metric])).reverse(),
+        isTonight:tonightNames.has(name.toLowerCase()),
+        gamesPlayed:logs.length
+      });
     }
   }
-  // Only use top legs to keep combo generation fast
-  const pool=legs.slice(0,legCount<=3?15:legCount<=4?18:20);
-  gen(0,[],new Set(),new Map());
-  slips.sort((a,b)=>b.score-a.score);
-  return slips.slice(0,8);
+
+  // ── Pitcher Streaks ──
+  const pitchers=[...new Set(st.pGameLogs.map(g=>g.player_name).filter(Boolean))];
+  const pitchChecks=[
+    {metric:"SO",threshold:6,label:"6+ K Streak",short:"K≥6",emoji:"⚡",cat:"pitch"},
+    {metric:"SO",threshold:8,label:"8+ K Streak",short:"K≥8",emoji:"⚡⚡",cat:"pitch"},
+    {metric:"W",threshold:1,label:"Win Streak",short:"W",emoji:"🏆",cat:"pitch"},
+    {metric:"DK_FP",threshold:15,label:"15+ DKFP",short:"FP≥15",emoji:"💎",cat:"pitch"},
+  ];
+  for(const name of pitchers){
+    const logs=st.pGameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
+    if(logs.length<2)continue;
+    const tonight=st.pTonight.find(t=>t.player_name===name);
+    for(const chk of pitchChecks){
+      let count=0;
+      for(const g of logs){
+        if(toNum(g[chk.metric])>=chk.threshold)count++;
+        else break;
+      }
+      if(count<2)continue;
+      const duringLogs=logs.slice(0,count);
+      const duringAvg=(duringLogs.reduce((s,g)=>s+toNum(g[chk.metric]),0)/count);
+      const seasAvg=logs.length>0?(logs.reduce((s,g)=>s+toNum(g[chk.metric]),0)/logs.length):0;
+      const last7=logs.slice(0,Math.min(7,logs.length));
+      streaks.push({
+        player:name,
+        team:tonight?.team_abbr||logs[0]?.team_abbr||"",
+        opp:tonight?.opp_abbr_tonight||"",
+        pitcher:tonight?.opp_starter||"",
+        hand:"",
+        type:"pitch",cat:chk.cat,
+        metric:chk.metric,threshold:chk.threshold,
+        streak:count,label:chk.label,short:chk.short,emoji:chk.emoji,
+        duringAvg,seasAvg,
+        lastGames:last7.map(g=>toNum(g[chk.metric])).reverse(),
+        isTonight:tonightNames.has(name.toLowerCase()),
+        gamesPlayed:logs.length
+      });
+    }
+
+    // ── QS streak (custom: 6+ IP, ≤3 ER) ──
+    let qsCount=0;
+    for(const g of logs){
+      const ip=parseFloat(g.IP)||0;const er=toNum(g.ER);
+      if(ip>=6&&er<=3)qsCount++;else break;
+    }
+    if(qsCount>=2){
+      const tonight=st.pTonight.find(t=>t.player_name===name);
+      const last7=logs.slice(0,Math.min(7,logs.length));
+      const eraD=logs.slice(0,qsCount);
+      const outs=eraD.reduce((a,g)=>{const p=(g.IP||"").toString().split(".");return a+(parseInt(p[0])||0)*3+(parseInt(p[1])||0)},0);
+      const ipD=outs/3;const erD=eraD.reduce((a,g)=>a+toNum(g.ER),0);
+      streaks.push({
+        player:name,
+        team:tonight?.team_abbr||logs[0]?.team_abbr||"",
+        opp:tonight?.opp_abbr_tonight||"",
+        pitcher:"",hand:"",
+        type:"pitch",cat:"pitch",
+        metric:"QS",threshold:1,
+        streak:qsCount,label:"QS Streak",short:"QS",emoji:"🏆",
+        duringAvg:ipD>0?((erD*9)/ipD):0,seasAvg:0,
+        lastGames:last7.map(g=>{const ip=parseFloat(g.IP)||0;const er=toNum(g.ER);return ip>=6&&er<=3?1:0}).reverse(),
+        isTonight:tonightNames.has(name.toLowerCase()),
+        gamesPlayed:logs.length
+      });
+    }
+  }
+
+  // Deduplicate: for each player, keep only the best streak per metric
+  const seen={};
+  const unique=[];
+  for(const s of streaks){
+    const key=`${s.player}|${s.metric}|${s.threshold}`;
+    if(!seen[key]){seen[key]=true;unique.push(s)}
+  }
+
+  // Sort: longest streaks first, then tonight's players first
+  unique.sort((a,b)=>{
+    if(a.isTonight!==b.isTonight)return a.isTonight?-1:1;
+    return b.streak-a.streak;
+  });
+
+  return unique;
 }
 
-function getSmartSlips(){
-  const legs=getConvictionLegs();
-  if(!legs.length)return{legs:[],slips3:[],slips4:[],slips5:[]};
-  return{
-    legs,
-    slips3:generateSlips(legs,3),
-    slips4:generateSlips(legs,4),
-    slips5:generateSlips(legs,5)
-  };
+function getStreakHeat(s){
+  if(s>=10)return{label:"INFERNO",color:"#ef4444",bg:"rgba(239,68,68,0.15)"};
+  if(s>=7)return{label:"ON FIRE",color:"#f97316",bg:"rgba(249,115,22,0.12)"};
+  if(s>=5)return{label:"HOT",color:"#f59726",bg:"rgba(245,151,38,0.10)"};
+  if(s>=3)return{label:"HEATING UP",color:"#fbbf24",bg:"rgba(251,191,36,0.08)"};
+  return{label:"WARM",color:"#86efac",bg:"rgba(134,239,172,0.06)"};
 }
+
+function streakMiniChart(games,threshold){
+  if(!games||!games.length)return"";
+  const max=Math.max(...games,threshold+1);
+  const threshY=28-((threshold/max)*28);
+  let svg=`<div class="streak-chart">`;
+  for(const g of games){
+    const h=Math.max(2,(g/max)*26);
+    const hit=g>=threshold;
+    svg+=`<div class="streak-bar" style="height:${h}px;background:${hit?"#22c55e":"#ef4444"}"></div>`;
+  }
+  svg+=`</div>`;
+  return svg;
+}
+
+// === SEARCH — case-insensitive with autocomplete ===
+function filterPlayerSugs(val){
+  const box=document.getElementById("sugBox");if(!box)return;
+  if(val.length<1){box.innerHTML="";box.style.display="none";return}
+  const src=st.mode==="pitcher"?st.pTonight:st.tonight;
+  const ql=val.toLowerCase();
+  const matches=src.filter(p=>{const n=p.player_name;return n&&String(n).toLowerCase().includes(ql)}).slice(0,10);
+  if(matches.length){
+    box.style.display="block";
+    box.innerHTML=matches.map(p=>{
+      const safe=String(p.player_name).replace(/'/g,"\\'");
+      return`<div class="sug-item" onmousedown="pickDashPlayer('${safe}')"><div class="sug-name">${esc(p.player_name)}</div><div class="sug-meta">${esc(p.team_abbr||"")}</div></div>`;
+    }).join("");
+  }else{box.innerHTML="";box.style.display="none"}
+}
+document.addEventListener("click",e=>{
+  if(!e.target.closest(".search-wrap")){const box=document.getElementById("sugBox");if(box){box.innerHTML="";box.style.display="none"}}
+});
 
 function pickDashPlayer(name){
   st.player=name;st.oppFilter="";
-  console.log("Selected:",name);
   render();
 }
 
-function setStreakFilter(f){st.streakFilter=f;render()}
-function setSlipLegs(n){st.slipLegs=n;render()}
-function toggleDrafted(name){if(st.drafted.has(name))st.drafted.delete(name);else st.drafted.add(name);render()}
-function resetDrafted(){st.drafted.clear();render()}
-function streakToDash(name){
-  const b=st.tonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase());
-  const p=st.pTonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase());
-  if(b){st.mode="batter";st.metric="H";st.player=b.player_name}
-  else if(p){st.mode="pitcher";st.metric="SO";st.player=p.player_name}
-  st.activeTab="dashboard";render();
-}
-
-// ═══ STREAKS ═══
-function getStreakHeat(s){if(s>=10)return{l:"INFERNO",c:"#ef4444",cls:"inferno"};if(s>=5)return{l:"ON FIRE",c:"#ff6b35",cls:"fire"};if(s>=3)return{l:"HOT",c:"#ffaa00",cls:"hot"};return{l:"WARM",c:"#ffd966",cls:"warm"}}
-function miniChart(vals,thr){const mx=Math.max(...vals,thr+1);return vals.slice().reverse().map(v=>{const h=Math.max(3,(v/mx)*26);return`<div class="streak-chart-bar" style="height:${h}px;background:${v>=thr?'#22c55e':'#ef4444'};opacity:.85"></div>`}).join("")}
-
-function getStreaks(){
-  const streaks=[];
-  const BAT=[{key:"H",threshold:1,label:"Hit Streak",emoji:"🔥",desc:"games w/ a hit"},{key:"HR",threshold:1,label:"HR Streak",emoji:"💣",desc:"games w/ a HR"},{key:"H",threshold:2,label:"Multi-Hit",emoji:"🔥🔥",desc:"games w/ 2+ hits"},{key:"RBI",threshold:1,label:"RBI Streak",emoji:"💰",desc:"games w/ an RBI"},{key:"TB",threshold:3,label:"Power Surge",emoji:"⚡",desc:"games w/ 3+ TB"},{key:"R",threshold:1,label:"Runs Streak",emoji:"🏃",desc:"games scoring a run"},{key:"SB",threshold:1,label:"SB Streak",emoji:"💨",desc:"games w/ a steal"}];
-  const tonightNames=new Set(st.tonight.map(p=>p.player_name).filter(Boolean));
-  for(const sType of BAT){for(const name of tonightNames){
-    const logs=st.gameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(logs.length<3)continue;let streak=0;
-    for(const g of logs){if(toNum(g[sType.key])>=sType.threshold)streak++;else break}
-    if(streak<3)continue;
-    const pT=st.tonight.find(t=>t.player_name===name)||{};
-    const recentVals=logs.slice(0,7).map(g=>toNum(g[sType.key]));
-    const avgDuring=(logs.slice(0,streak).reduce((s,g)=>s+toNum(g[sType.key]),0)/streak)||0;
-    const seasAvg=toNum(logs[0][`Seas_${sType.key}`]);
-    const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===sType.key);
-    streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"bat",desc:sType.desc,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
-  }}
-  // Pitcher streaks
-  const PITCH=[{key:"SO",threshold:6,label:"K Streak",emoji:"🔥",desc:"starts w/ 6+ K"},{key:"SO",threshold:8,label:"Elite K",emoji:"⚡",desc:"starts w/ 8+ K"},{key:"ER",threshold:2,label:"Lockdown",emoji:"🔒",compare:"lte",desc:"starts w/ ≤2 ER"},{key:"W",threshold:1,label:"Win Streak",emoji:"👑",desc:"consecutive wins"}];
-  const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
-  for(const sType of PITCH){for(const name of pNames){
-    const logs=st.pGameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(logs.length<2)continue;let streak=0;const isLte=sType.compare==="lte";
-    for(const g of logs){const v=toNum(g[sType.key]);if(isLte?v<=sType.threshold:v>=sType.threshold)streak++;else break}
-    if(streak<2)continue;
-    const pT=st.pTonight.find(t=>t.player_name===name)||{};
-    const recentVals=logs.slice(0,7).map(g=>toNum(g[sType.key]));
-    const avgDuring=(logs.slice(0,streak).reduce((s,g)=>s+toNum(g[sType.key]),0)/streak)||0;
-    const seasAvg=toNum(logs[0][`Seas_${sType.key}`])||toNum(logs[0][`L7_${sType.key}`]);
-    const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===sType.key);
-    streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:"",hand:"",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"pitch",desc:sType.desc,isLte,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
-  }}
-  // Deduplicate: keep longest streak per player+stat
-  const best={};for(const s of streaks){const k=`${s.player}|${s.stat}`;if(!best[k]||s.streak>best[k].streak||(s.streak===best[k].streak&&s.threshold>best[k].threshold))best[k]=s}
-  const result=Object.values(best);result.sort((a,b)=>b.streak-a.streak);
-  return result;
-}
-
-// ═══ DRAFT CHEAT SHEET ═══
-function getDraftBoard(){
-  const board=[];
-  const aiMap=new Map();
-  st.picks.forEach(p=>{if(p.player)aiMap.set(p.player.toLowerCase(),p)});
-  for(const p of st.tonight){
-    const name=p.player_name;if(!name)continue;
-    const logs=st.gameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(!logs.length)continue;const most=logs[0]||{};
-    const sH=toNum(most.Seas_H),sHR=toNum(most.Seas_HR),s2B=toNum(most.Seas_2B);
-    const sTB=toNum(most.Seas_TB),sRBI=toNum(most.Seas_RBI),sR=toNum(most.Seas_R);
-    const sSB=toNum(most.Seas_SB),sBB=toNum(most.Seas_BB);
-    const s3B=Math.max(0,(sTB-sH-s2B-3*sHR)/2)||0;
-    const s1B=Math.max(0,sH-s2B-s3B-sHR)||0;
-    // Check for engine-computed UD_FP first, fall back to client-side calc
-    const projUD=toNum(most.Seas_UD_FP)||(s1B*3+s2B*6+s3B*8+sHR*10+sBB*3+sRBI*2+sR*2+sSB*4)||0;
-    const l7H=toNum(most.L7_H),l7HR=toNum(most.L7_HR),l72B=toNum(most.L7_2B);
-    const l7TB=toNum(most.L7_TB),l7RBI=toNum(most.L7_RBI),l7R=toNum(most.L7_R);
-    const l7SB=toNum(most.L7_SB),l7BB=toNum(most.L7_BB);
-    const l73B=Math.max(0,(l7TB-l7H-l72B-3*l7HR)/2)||0;
-    const l71B=Math.max(0,l7H-l72B-l73B-l7HR)||0;
-    const l7UD=toNum(most.L7_UD_FP)||(l71B*3+l72B*6+l73B*8+l7HR*10+l7BB*3+l7RBI*2+l7R*2+l7SB*4)||0;
-    const ai=aiMap.get(name.toLowerCase()),isSmash=ai&&(ai.confidence||"").toUpperCase()==="SMASH";
-    let pos="FLEX";const posRaw=(p.position||"").toUpperCase();
-    if(posRaw.includes("C")||posRaw.includes("1B")||posRaw.includes("2B")||posRaw.includes("3B")||posRaw.includes("SS"))pos="IF";
-    else if(posRaw.includes("OF")||posRaw.includes("LF")||posRaw.includes("CF")||posRaw.includes("RF"))pos="OF";
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos});
-  }
-  for(const p of st.pTonight){
-    const name=p.player_name;if(!name)continue;
-    const logs=st.pGameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(!logs.length)continue;const most=logs[0]||{};
-    const sSO=toNum(most.Seas_SO),sER=toNum(most.Seas_ER),sW=toNum(most.Seas_W),sIP=toNum(most.Seas_IP);
-    const qsRate=logs.length>0?logs.filter(g=>toNum(g.IP)>=6&&toNum(g.ER)<=3).length/logs.length:0;
-    const projUD=toNum(most.Seas_UD_FP)||(sW*2+qsRate*3+sSO+sIP+sER*-1)||0;
-    const l3SO=toNum(most.L3_SO),l3ER=toNum(most.L3_ER),l3W=toNum(most.L3_W),l3IP=toNum(most.L3_IP);
-    const l3QS=logs.slice(0,3).filter(g=>toNum(g.IP)>=6&&toNum(g.ER)<=3).length/Math.min(3,logs.length);
-    const l7UD=toNum(most.L7_UD_FP)||(l3W*2+l3QS*3+l3SO+l3IP+l3ER*-1)||0;
-    const ai=aiMap.get(name.toLowerCase()),isSmash=ai&&(ai.confidence||"").toUpperCase()==="SMASH";
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P"});
-  }
-  board.sort((a,b)=>parseFloat(b.projUD)-parseFloat(a.projUD));
-  return board;
-}
-
 function render(){
-  var picksHTML="";
   const focus=saveFocus();
   const app=document.getElementById("app");
   if(st.loading){app.innerHTML=`<div class="loading"><div style="font-size:32px;animation:bounce .8s ease-in-out infinite">⚾</div><div style="color:#6b8f7b;font-size:14px">Loading dashboard...</div></div>`;return}
@@ -911,31 +600,6 @@ function render(){
     sT.WHIP=rIP>0?(((sT.H||0)+(sT.BB||0))/rIP).toFixed(2):"0.00";
     sT.K9=rIP>0?((sT.SO*9)/rIP).toFixed(1):"0.0";
     statStrip=["W","L","ERA","WHIP","SO","K9","IP","DK_FP"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${sT[s]}</div></div>`).join("");
-  }else if(st.picksView==="dingers"){
-    const db=getDingerBoard();
-    if(!db.length){picksHTML=`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`}
-    else{
-      picksHTML=`<div class="dinger-header"><div class="dinger-title">💣 Tonight's Dinger Board</div></div>
-      <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
-      picksHTML+=db.map((d,i)=>{
-        const isTop=i<3;
-        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
-        const ratePct=(d.hrRate*100).toFixed(1);
-        const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
-        return`<div class="dinger-card ${isTop?"top3":""}">
-          <div class="dinger-left">
-            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${esc(d.name)}</span></div>
-            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
-            <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
-          </div>
-          <div class="dinger-right">
-            <div class="dinger-rate">${ratePct}%</div>
-            <div class="dinger-sub">HR/AB · 1 per ${abPerHR} AB</div>
-            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
-          </div>
-        </div>`;
-      }).join("");
-    }
   }else{
     ["H","HR","RBI","R","SB","BB","TB","SO","AB"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
     sT.AVG=sT.AB>0?(sT.H/sT.AB).toFixed(3):".000";
@@ -971,95 +635,8 @@ function render(){
   const tRows=fLogs.map(g=>{const cells=logCols.map(c=>{const v=toNum(g[c]);let cls=c===metric?"hl":"";if(c===metric&&lineNum){cls=v>lineNum?"hit":v===lineNum?"push":"miss"}return`<td class="${cls}">${c==="DK_FP"?v.toFixed(1):v}</td>`}).join("");return`<tr><td>${(g.game_date||"").slice(5)}</td><td>${g.opp_abbr||"—"}</td><td>${g.home_away||"—"}</td>${cells}</tr>`}).join("");
 
   // === PICKS TAB ===
-  picksHTML="";
-  if(st.picksView==="bets"){
-    // ═══ BEST BETS (+EV) ═══
-    const allBets=getBestBets();
-    const posEV=allBets.filter(b=>b.edge>0);
-    const elite=posEV.filter(b=>b.edge>=0.15);
-    const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
-    if(!allBets.length){picksHTML=`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
-    else{
-      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:#ef4444">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:#6b8f7b">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=posEV.slice(0,40).map((b,i)=>{
-        const edgePct=(b.edge*100).toFixed(1);
-        const hrPct=(b.hitRate*100).toFixed(0);
-        const ipPct=(b.impliedProb*100).toFixed(0);
-        const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
-        const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
-        return`<div class="bet-card ${cls}">
-          <div class="bet-left">
-            <div class="bet-name">${esc(b.name)}</div>
-            <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
-            <div class="bet-prop">
-              <span class="prop-metric" style="font-size:10px">${b.metric}</span>
-              <span class="${leanCls}" style="font-weight:700;font-size:13px">${b.lean} ${b.dkLine}</span>
-              <span style="color:#86efac;font-size:11px">${fmtOdds(b.odds)}</span>
-              <span class="ev-badge ev-pos ev-big">+${edgePct}% EV</span>
-            </div>
-            <div class="bet-bar"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"#ef4444":b.edge>=0.08?"#22c55e":"#f59726"}"></div></div>
-            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:9px;color:#6b8f7b"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
-          </div>
-          <div class="bet-right">
-            <div class="bet-edge pos">+${edgePct}%</div>
-            <div class="bet-sub">edge</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="slips"){
-    // ═══ SMART SLIP GENERATOR ═══
-    const result=getSmartSlips();
-    const {legs}=result;
-    if(!legs.length){picksHTML=`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
-    else{
-      const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
-      const payouts={"3":"6x","4":"10x","5":"20x"};
-      const topLeg=legs[0];
-      const aiCount=legs.filter(l=>l.hasAI).length;
-      const streakCount=legs.filter(l=>l.hasStreak).length;
-
-      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#86efac">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
-      picksHTML+=`<div class="slip-controls"><span style="color:#6b8f7b;font-size:11px">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team.</div>`;
-
-      if(!slips.length){picksHTML+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
-      else{
-        picksHTML+=slips.map((slip,si)=>{
-          const isBest=si===0;
-          const isAgg=parseInt(st.slipLegs)>=5;
-          const avgEdgePct=(slip.avgEdge*100).toFixed(1);
-          const avgHRPct=(slip.avgHitRate*100).toFixed(0);
-          const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
-          const uniqueSignals=[...new Set(allSignals)].slice(0,4);
-
-          return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
-            <div class="slip-header">
-              <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
-              <span class="slip-score">${slip.score.toFixed(1)} pts</span>
-            </div>
-            <div class="slip-legs">${slip.legs.map(l=>{
-              const leanCls=l.lean==="OVER"?"over":"under";
-              return`<div class="slip-leg">
-                <span class="slip-leg-team">${esc(l.team)}</span>
-                <span class="slip-leg-name">${esc(l.name)}</span>
-                <div class="slip-leg-prop">
-                  <span class="slip-leg-metric">${l.metric}</span>
-                  <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
-                  <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
-                </div>
-              </div>`;
-            }).join("")}</div>
-            ${uniqueSignals.length?`<div class="slip-tags">${uniqueSignals.map(s=>`<span class="slip-tag" style="background:#1a3d2a;color:#86efac;border:1px solid #2d5a3d">${s}</span>`).join("")}</div>`:""}
-            <div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
-          </div>`;
-        }).join("");
-      }
-    }
-  }else if(st.picksView==="picks"){
+  let picksHTML="";
+  if(st.picksView==="picks"){
     if(!st.picks.length){picksHTML=`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
     else{
       const hits=st.picks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="YES"||h==="TRUE"}).length;
@@ -1067,7 +644,6 @@ function render(){
       const smash=st.picks.filter(p=>(p.confidence||"").toUpperCase()==="SMASH").length;
       const tracked=hits+miss;
       picksHTML=`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${st.picks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"#22c55e":"#ef4444"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:#6b8f7b">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
-      picksHTML+=`<div class="cards-grid">`;
       picksHTML+=st.picks.map(pk=>{
         const c=(pk.confidence||"").toUpperCase(),cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"";
         const h=(pk.HIT||"").toString().toUpperCase();
@@ -1076,15 +652,87 @@ function render(){
         if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${pk.ACTUAL_STAT}</span>`:""}</div>`}
         return`<div class="pick-card ${cls}"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${rHTML}</div>`;
       }).join("");
-      picksHTML+=`</div>`;
+    }
+  }else if(st.picksView==="streaks"){
+    // ═══════════════════════════════════════
+    // ── STREAKS / TRENDS VIEW ──
+    // ═══════════════════════════════════════
+    const allStreaks=getStreaks();
+    let filtered=allStreaks;
+    if(st.streakFilter==="tonight")filtered=allStreaks.filter(s=>s.isTonight);
+    else if(st.streakFilter==="bat")filtered=allStreaks.filter(s=>s.type==="bat"&&s.cat!=="hr");
+    else if(st.streakFilter==="hr")filtered=allStreaks.filter(s=>s.cat==="hr");
+    else if(st.streakFilter==="pitch")filtered=allStreaks.filter(s=>s.type==="pitch");
+    else if(st.streakFilter==="hot")filtered=allStreaks.filter(s=>s.streak>=5);
+
+    if(!filtered.length){
+      picksHTML=`<div class="empty" style="padding:40px">No active streaks found${st.streakFilter!=="all"?" for this filter":""}. Need game log data to detect streaks.</div>`;
+    }else{
+      const tonightCount=filtered.filter(s=>s.isTonight).length;
+      const hotCount=filtered.filter(s=>s.streak>=5).length;
+      picksHTML=`<div class="streak-header"><div class="streak-title">🔥 Active Streaks & Trends</div></div>
+        <div class="streak-desc">Auto-detected from game logs. ${filtered.length} active streaks${tonightCount?` · ${tonightCount} playing tonight`:""}</div>
+        <div class="streak-filters">
+          <div class="sf-btn ${st.streakFilter==="all"?"active":""}" onclick="setStreakFilter('all')">All (${allStreaks.length})</div>
+          <div class="sf-btn ${st.streakFilter==="tonight"?"active":""}" onclick="setStreakFilter('tonight')">🎯 Tonight</div>
+          <div class="sf-btn ${st.streakFilter==="hot"?"active":""}" onclick="setStreakFilter('hot')">🔥 5+ Games</div>
+          <div class="sf-btn ${st.streakFilter==="bat"?"active":""}" onclick="setStreakFilter('bat')">⚾ Batting</div>
+          <div class="sf-btn ${st.streakFilter==="hr"?"active":""}" onclick="setStreakFilter('hr')">💣 HR</div>
+          <div class="sf-btn ${st.streakFilter==="pitch"?"active":""}" onclick="setStreakFilter('pitch')">⚡ Pitching</div>
+        </div>`;
+      picksHTML+=filtered.slice(0,40).map(s=>{
+        const heat=getStreakHeat(s.streak);
+        const cardCls=s.streak>=7?"fire":s.streak>=4?"hot":"";
+        const typeCls=s.type==="bat"?"streak-type-bat":"streak-type-pitch";
+        const typeLabel=s.type==="bat"?"BAT":"ARM";
+        const prop=getProps(s.player).find(p=>p.METRIC===s.metric);
+        const propLine=prop?`${prop.DK_LINE} (O ${fmtOdds(prop.OVER_ODDS)})`:"";
+        return`<div class="streak-card ${cardCls}">
+          <div class="streak-top">
+            <div style="flex:1">
+              <div>
+                <span class="streak-player">${esc(s.player)}</span>
+                <span class="streak-type-pill ${typeCls}">${typeLabel}</span>
+              </div>
+              <div class="streak-meta">
+                ${esc(s.team)}${s.opp?` vs ${esc(s.opp)}`:""}${s.pitcher?` · vs ${esc(s.pitcher)}${s.hand?` (${s.hand}HP)`:""}`:""}
+                ${s.isTonight?` · <span style="color:#4ade80;font-weight:700">TONIGHT</span>`:""}
+              </div>
+            </div>
+            <div class="streak-heat">
+              <div class="streak-num" style="color:${heat.color}">${s.streak}</div>
+              <div class="streak-num-label">GAMES</div>
+            </div>
+          </div>
+          <div class="streak-stats">
+            <div class="streak-stat">
+              <div class="streak-stat-lbl">${esc(s.label)}</div>
+              <div class="streak-stat-val" style="color:${heat.color}">${esc(s.short)}</div>
+            </div>
+            <div class="streak-stat">
+              <div class="streak-stat-lbl">Streak Avg</div>
+              <div class="streak-stat-val" style="color:#22c55e">${s.duringAvg.toFixed(2)}</div>
+            </div>
+            <div class="streak-stat">
+              <div class="streak-stat-lbl">Season Avg</div>
+              <div class="streak-stat-val">${s.seasAvg.toFixed(2)}</div>
+            </div>
+            ${propLine?`<div class="streak-stat"><div class="streak-stat-lbl">DK Line</div><div class="streak-stat-val" style="color:#f59726;font-size:11px">${esc(propLine)}</div></div>`:`<div class="streak-stat"><div class="streak-stat-lbl">${s.gamesPlayed} GP</div><div class="streak-stat-val">${s.streak}/${s.gamesPlayed}</div></div>`}
+          </div>
+          ${streakMiniChart(s.lastGames,s.threshold)}
+          <button class="streak-go-btn" onclick="st.player='${s.player.replace(/'/g,"\\'")}';st.mode='${s.type==="pitch"?"pitcher":"batter"}';st.metric='${s.metric==="QS"?(s.type==="pitch"?"SO":"H"):s.metric}';st.activeTab='dashboard';render()">📊 View ${esc(s.player)} on Dashboard</button>
+        </div>`;
+      }).join("");
+      if(filtered.length>40)picksHTML+=`<div class="empty">Showing top 40 of ${filtered.length} streaks</div>`;
     }
   }else if(st.picksView==="dingers"){
     const db=getDingerBoard();
-    if(!db.length){picksHTML=`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`}
-    else{
+    if(!db.length){
+      picksHTML=`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`;
+    }else{
       picksHTML=`<div class="dinger-header"><div class="dinger-title">💣 Tonight's Dinger Board</div></div>
       <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
+      
       picksHTML+=db.map((d,i)=>{
         const isTop=i<3;
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
@@ -1103,77 +751,20 @@ function render(){
           </div>
         </div>`;
       }).join("");
-      picksHTML+=`</div>`;
 
-      const combos=getDingerCombos(db,3);
-      if(combos.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg Dinger Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos.slice(0,8).map((c,i)=>`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${c.score.toFixed(0)}</span><div class="combo-teams">${c.teams.join(" · ")}</div></div>`).join("");
-        picksHTML+=`</div></div>`;
+      const combos = getDingerCombos(db.slice(0, 10), 3);
+      if(combos.length > 0) {
+        picksHTML += `<div class="combo-section"><div class="combo-title">🔥 Optimal 3-Leg Parlays</div>`;
+        picksHTML += combos.map((c, i) => {
+          const isBest = i === 0 ? "best" : "";
+          return `<div class="combo-card ${isBest}">
+            <div><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p => esc(p.name)).join(" + ")}</span></div>
+            <div class="combo-score">Score: ${Math.round(c.score)}</div>
+            <div class="combo-teams">${c.teams.join(" / ")}</div>
+          </div>`;
+        }).join("");
+        picksHTML += `</div>`;
       }
-    }
-  }else if(st.picksView==="streaks"){
-    // ═══ STREAKS ═══
-    const allStreaks=getStreaks();
-    const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
-    if(!fil.length){picksHTML=`<div class="empty" style="padding:40px">${allStreaks.length?`No ${st.streakFilter} streaks found.`:"No active streaks yet. Need 3+ games of data."}</div>`}
-    else{
-      picksHTML=`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#ffaa00;font-size:13px;font-weight:700">🔥 Active Streaks</div><div style="color:#6b8f7b;font-size:10px">${fil.length} streaks found</div></div>
-      <div class="streak-filters"><div class="pf-btn ${st.streakFilter==="all"?"active":""}" onclick="setStreakFilter('all')">All</div><div class="pf-btn ${st.streakFilter==="bat"?"active":""}" onclick="setStreakFilter('bat')">🏏 Batters</div><div class="pf-btn ${st.streakFilter==="pitch"?"active":""}" onclick="setStreakFilter('pitch')">⚾ Pitchers</div></div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=fil.map(s=>{
-        const heat=getStreakHeat(s.streak);
-        const odds=s.overOdds?fmtOdds(s.overOdds):"";
-        return`<div class="streak-card ${heat.cls}" onclick="streakToDash('${esc(s.player)}')">
-          <div class="streak-left">
-            <div><span class="streak-emoji">${s.emoji}</span><span class="streak-name">${esc(s.player)}</span><span class="streak-label">${s.label}</span></div>
-            <div class="streak-meta">${esc(s.team)} vs ${s.propType==="pitch"?esc(s.opp):esc(s.pitcher)+" ("+s.hand+"HP)"} · ${s.desc}</div>
-            <div class="streak-chart">${miniChart(s.recentVals,s.threshold)}</div>
-            ${s.dkLine?`<div class="streak-prop">DK ${s.stat} ${s.dkLine} ${odds?" O:"+odds:""} · Avg during: ${s.avgDuring}</div>`:`<div class="streak-prop">Avg during streak: ${s.avgDuring} · Season: ${s.seasAvg}</div>`}
-          </div>
-          <div class="streak-right">
-            <div class="streak-count">${s.streak}</div>
-            <div class="streak-sub">games</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="draft"){
-    // ═══ DRAFT ═══
-    const board=getDraftBoard();
-    const available=board.filter(p=>!st.drafted.has(p.name));
-    const draftedCount=st.drafted.size;
-    function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"#4ade80"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"#3b82f6"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"#4ade80"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"#3b82f6"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"#86efac"};return{label:"TIER 5 — Dart Throw",cls:"",color:"#6b8f7b"}}
-    function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
-    if(!board.length){picksHTML=`<div class="empty" style="padding:40px">No draft data available. Run the engine first.</div>`}
-    else{
-      picksHTML=`<div style="padding:12px 16px 4px;color:#4ade80;font-size:13px;font-weight:700">⚾ Draft Cheat Sheet</div>
-      <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×2 QS×3 K×1 IP×1 ER×-1</div>
-      <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
-      <div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
-      picksHTML+=`<div class="cards-grid draft-board">`;
-      let lastTier="";
-      board.forEach((p,i)=>{
-        const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
-        const tierChanged=tier.label!==lastTier;lastTier=tier.label;
-        let tags=[];
-        if(p.isSmash)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">SMASH</span>`);
-        if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:#3b82f622;color:#3b82f6">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
-        else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:#3b82f622;color:#3b82f6">👁️ PATIENT</span>`)}
-        const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
-        if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">📈 HOT</span>`);
-        if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">📉 COLD</span>`);
-        const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
-        const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}`;
-        picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
-        <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
-          <div class="draft-rank" style="color:${isDrafted?"#2d5a3d":tier.color}">${i+1}</div>
-          <div class="draft-main"><div class="draft-name">${esc(p.name)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span></div><div class="draft-meta">${metaLine}</div>${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
-          <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"#2d5a3d":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">UD FP</div>${l7v!==projv?`<div style="font-size:9px;color:${l7v>projv?"#22c55e":"#ef4444"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
-        </div>`;
-      });
-      picksHTML+=`</div>`;
     }
   }else{
     const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
@@ -1183,17 +774,9 @@ function render(){
     picksHTML=`<div style="padding:8px 16px"><input type="text" id="propsSearchInput" placeholder="Search player..." value="${esc(st.propsSearch)}"/></div>
     <div class="props-filter"><div class="pf-btn ${st.propsMetric==="ALL"?"active":""}" onclick="setPropsMetric('ALL')">All</div>${allM.map(m=>`<div class="pf-btn ${st.propsMetric===m?"active":""}" onclick="setPropsMetric('${m}')">${m}</div>`).join("")}</div>
     <div style="padding:0 16px;color:#6b8f7b;font-size:10px;margin-bottom:4px">${srch.length} props${srch.length>200?" (showing 200)":""}</div>
-    <div class="props-tbl-wrap"><table><thead><tr><th>Player</th><th>Prop</th><th>Line</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th></tr></thead><tbody>${sorted.map(p=>{
-      const lc=propToLogCol(p.METRIC);const isP=isPitcherProp(p.METRIC);
-      const hr=getHitRate(p.PLAYER_NAME,lc,parseFloat(p.DK_LINE),isP);
-      const oIP=impliedProb(parseInt(p.OVER_ODDS));
-      const hrPct=hr?`${(hr.rate*100).toFixed(0)}%`:"—";
-      const edge=hr&&oIP!==null?hr.rate-oIP:null;
-      const edgeStr=edge!==null?`<span class="ev-badge ${edge>0.08?"ev-pos":edge>0?"ev-neutral":"ev-neg"}">${edge>0?"+":""}${(edge*100).toFixed(0)}%</span>`:"—";
-      return`<tr><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
+    <div class="props-tbl-wrap"><table><thead><tr><th>Player</th><th>Prop</th><th>Line</th><th>Over</th><th>Under</th></tr></thead><tbody>${sorted.map(p=>`<tr><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td></tr>`).join("")}</tbody></table></div>`;
   }
 
-  // === LOOKUP ===
   const lk=st.lkPlayer;
   const lkC=st.lkPlayerType==="pitcher"?[{k:"gamesPlayed",l:"G"},{k:"gamesStarted",l:"GS"},{k:"wins",l:"W"},{k:"losses",l:"L"},{k:"era",l:"ERA"},{k:"inningsPitched",l:"IP"},{k:"strikeOuts",l:"SO"},{k:"baseOnBalls",l:"BB"},{k:"whip",l:"WHIP"},{k:"avg",l:"BAA"}]:[{k:"gamesPlayed",l:"G"},{k:"atBats",l:"AB"},{k:"hits",l:"H"},{k:"homeRuns",l:"HR"},{k:"rbi",l:"RBI"},{k:"runs",l:"R"},{k:"stolenBases",l:"SB"},{k:"baseOnBalls",l:"BB"},{k:"strikeOuts",l:"SO"},{k:"avg",l:"AVG"},{k:"obp",l:"OBP"},{k:"slg",l:"SLG"},{k:"ops",l:"OPS"}];
   const fv=(s,k)=>{if(!s)return"—";const v=s[k];return v===undefined||v===null?"—":v};
@@ -1230,37 +813,25 @@ function render(){
   app.innerHTML=`
   <div class="header">
     <div class="header-title">⚾ MLB DFS Dashboard</div>
-    <div class="top-nav">
-      <button class="tab-btn ${activeTab==="dashboard"?"active":""}" onclick="switchTab('dashboard')">📊 Dash</button>
-      <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">📋 Log</button>
-      <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">🎯 Picks</button>
-      <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">🔍 Lookup</button>
-    </div>
     ${showCtrl?`
-    <div class="header-controls">
-      <div class="mode-toggle">
-        <div class="mode-btn" onclick="switchMode('batter')" style="${st.mode==='batter'?'background:#22c55e;color:#0f291a;border-color:#22c55e':'background:#1a3d2a;color:#6b8f7b'}">🏏 Batters</div>
-        <div class="mode-btn" onclick="switchMode('pitcher')" style="${st.mode==='pitcher'?'background:#22c55e;color:#0f291a;border-color:#22c55e':'background:#1a3d2a;color:#6b8f7b'}">⚾ Pitchers</div>
-      </div>
-      <div class="search-wrap">
-        <input type="text" id="dashPlayerSearch" list="playerList" placeholder="Search ${st.mode==='pitcher'?'pitcher':'batter'}..." value="${esc(player)}" autocomplete="off"
-          onfocus="this.select()"
-          onchange="if(this.value)pickDashPlayer(this.value)"
-        />
-        <datalist id="playerList">${curTonight.filter(p=>p.player_name).map(p=>`<option value="${esc(p.player_name)}">${esc(p.team_abbr||"")}</option>`).join("")}</datalist>
-      </div>
-      <div class="ctrl-row">
-        <select id="metricSel">${metricOpts}</select>
-        <input type="number" id="lineInput" value="${line}" placeholder="Line" step="0.5"/>
-      </div>
+    <div class="row" style="margin-top:0;margin-bottom:8px">
+      <div onclick="switchMode('batter')" style="flex:1;padding:6px;text-align:center;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;${st.mode==='batter'?'background:#22c55e;color:#0f291a':'background:#1a3d2a;color:#6b8f7b;border:1px solid #2d5a3d'}">🏏 Batters</div>
+      <div onclick="switchMode('pitcher')" style="flex:1;padding:6px;text-align:center;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;${st.mode==='pitcher'?'background:#22c55e;color:#0f291a':'background:#1a3d2a;color:#6b8f7b;border:1px solid #2d5a3d'}">⚾ Pitchers</div>
+    </div>
+    <div class="search-wrap">
+      <input type="text" id="dashPlayerSearch" placeholder="Search ${st.mode==='pitcher'?'pitcher':'batter'}..." value="${esc(player)}" autocomplete="off"/>
+      <div id="sugBox" class="suggestions" style="display:none"></div>
+    </div>
+    <div class="row">
+      <select id="metricSel">${metricOpts}</select>
+      <input type="number" id="lineInput" value="${line}" placeholder="Enter Line" step="0.5"/>
     </div>`:""}
-    ${activeTab==="lookup"?`<div class="header-controls"><div class="search-wrap" style="flex:1;max-width:500px"><input type="text" id="lkSearch" placeholder="Search any MLB player..." autocomplete="off"/>${lkSugs}</div></div>`:""}
+    ${activeTab==="lookup"?`<div class="search-wrap"><input type="text" id="lkSearch" placeholder="Search any MLB player..." autocomplete="off"/>${lkSugs}</div>`:""}
   </div>
 
   <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
     ${earlyBanner}
     ${pHasLogs?`<div class="stats-strip"><div class="stats-strip-inner">${statStrip}</div></div>`:""}
-    <div class="dash-grid">
     ${pHasLogs?`<div class="section"><div class="label">Game Log — ${metric}</div><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Line: ${lineNum}</div>`:""}</div>`:""}
     ${pHasLogs?`<div class="section"><div class="label">Averages</div><div class="avg-cards">${avgs}</div></div>`:""}
     ${pickBanner}${propsHTML}
@@ -1270,8 +841,7 @@ function render(){
     </div></div>
     <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">⚾ vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">⚾ vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>`}</div></div>
     ${wx.temp_f?`<div class="section"><div class="weather-card"><div class="card-title">🌤️ Weather</div><div class="weather-row"><span class="weather-key">Temp</span><span class="weather-val">${wx.temp_f}°F (feels ${wx.feels_like_f}°F)</span></div><div class="weather-row"><span class="weather-key">Wind</span><span class="weather-val">${wx.wind_mph} mph ${wx.wind_dir}</span></div><div class="weather-row"><span class="weather-key">Condition</span><span class="weather-val">${wx.description||"—"}</span></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="weather-row"><span class="weather-key">🏟️</span><span class="weather-val" style="color:#4ade80">Dome — weather irrelevant</span></div>`:""}</div></div>`:""}
-    ${lineNum&&pHasLogs?`<div class="section dash-full"><div class="card"><div class="card-title">📊 Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
-    </div>
+    ${lineNum&&pHasLogs?`<div class="section"><div class="card"><div class="card-title">📊 Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
     <div class="timestamp">Last Refreshed: ${lastUp}</div>
     <div class="timestamp" style="color:#2d5a3d;font-size:9px;padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
   </div>
@@ -1282,15 +852,12 @@ function render(){
 
   <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
     <div class="sub-tabs" style="padding-top:12px">
-      <div class="sub-tab ${st.picksView==="bets"?"active":""}" onclick="switchPicksView('bets')">💰 Best Bets</div>
-      <div class="sub-tab ${st.picksView==="slips"?"active":""}" onclick="switchPicksView('slips')">🎫 Slips</div>
       <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">🤖 AI Picks</div>
-      <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">⚾ Draft</div>
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
       <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">💣 Dingers</div>
       <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">🎲 Props</div>
     </div>
-    <div class="cards-wrap">${picksHTML}</div>
+    ${picksHTML}
     <div class="timestamp">Data from MLB Dashboard Engine · DraftKings via The Odds API</div>
   </div>
 
@@ -1307,6 +874,7 @@ function render(){
   </div>`;
 
   const ms=document.getElementById("metricSel");if(ms)ms.onchange=e=>{st.metric=e.target.value;render()};
+  const dps=document.getElementById("dashPlayerSearch");if(dps){dps.oninput=e=>filterPlayerSugs(e.target.value);dps.onfocus=e=>{e.target.select();filterPlayerSugs(e.target.value)}}
   const li=document.getElementById("lineInput");if(li)li.onchange=e=>{st.line=e.target.value;render()};
   const of=document.getElementById("oppFilter");if(of)of.onchange=e=>{st.oppFilter=e.target.value;render()};
   const lkS=document.getElementById("lkSearch");if(lkS)lkS.oninput=e=>{clearTimeout(window._lkT);window._lkT=setTimeout(()=>searchLkPlayers(e.target.value),300)};
@@ -1374,17 +942,17 @@ Promise.all([
   fetchSheet("Daily_Picks").catch(()=>[]),
   fetchSheet("DK_Player_Props").catch(()=>[])
 ]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props])=>{
-  st.tonight=normalizeKeys(cleanRows(tonight));
-  st.gameLogs=normalizeKeys(cleanRows(logs));
-  st.splits=normalizeKeys(cleanRows(splits));
-  st.weather=normalizeKeys(cleanRows(weather));
-  st.pitchers=normalizeKeys(cleanRows(pitchers));
-  st.schedule=normalizeKeys(cleanRows(schedule));
-  st.pTonight=normalizeKeys(cleanRows(pTonight));
-  st.pGameLogs=normalizeKeys(cleanRows(pLogs));
-  st.pSplits=normalizeKeys(cleanRows(pSplits));
-  st.picks=normalizeKeys(cleanRows(picks));
-  st.props=normalizeKeys(cleanRows(props));
+  st.tonight=cleanRows(tonight);
+  st.gameLogs=cleanRows(logs);
+  st.splits=cleanRows(splits);
+  st.weather=cleanRows(weather);
+  st.pitchers=cleanRows(pitchers);
+  st.schedule=cleanRows(schedule);
+  st.pTonight=cleanRows(pTonight);
+  st.pGameLogs=cleanRows(pLogs);
+  st.pSplits=cleanRows(pSplits);
+  st.picks=cleanRows(picks);
+  st.props=cleanRows(props);
   st.loading=false;
 
   st.mode="batter";st.metric="H";
@@ -1394,13 +962,6 @@ Promise.all([
     st.mode="pitcher";st.metric="SO";
     st.player=firstValidPlayer(st.pTonight);
   }
-
-  console.log(`🚀 Dashboard loaded — mode:${st.mode}, player:"${st.player}"`);
-  console.log(`   Batters: ${st.tonight.length}, Logs: ${st.gameLogs.length}, Pitchers: ${st.pTonight.length}`);
-  console.log(`   Props: ${st.props.length}, Picks: ${st.picks.length}, Weather: ${st.weather.length}`);
-  if(st.tonight.length>0)console.log(`   Batter row 0 keys:`,Object.keys(st.tonight[0]).slice(0,8));
-  if(st.pTonight.length>0)console.log(`   Pitcher row 0 keys:`,Object.keys(st.pTonight[0]).slice(0,8));
-  if(!st.player)console.error(`❌ NO DEFAULT PLAYER FOUND. Batter row 0:`,JSON.stringify(st.tonight[0]).slice(0,200));
   render();
 }).catch(err=>{
   console.error("❌ Load failed:",err);
