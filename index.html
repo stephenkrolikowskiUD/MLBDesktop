@@ -114,7 +114,7 @@ td.push{color:#9ca3af;font-weight:700}
 .pf-btn{padding:6px 12px;font-size:11px;font-weight:600;color:#6b8f7b;background:#1a3d2a;border:1px solid #2d5a3d;border-radius:16px;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .pf-btn.active{color:#4ade80;background:#24503a;border-color:#4ade80}
 .props-tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:50vh;padding:0 16px 16px}
-.props-tbl-wrap table{min-width:320px}
+.props-tbl-wrap table{min-width:420px}
 .odds-over{color:#22c55e;font-weight:600}
 .odds-under{color:#ef4444;font-weight:600}
 .odds-even{color:#f59726;font-weight:600}
@@ -212,6 +212,31 @@ td.push{color:#9ca3af;font-weight:700}
 .draft-controls{display:flex;justify-content:space-between;align-items:center;padding:6px 16px}
 .draft-reset{background:#1a3d2a;border:1px solid #2d5a3d;color:#6b8f7b;font-size:10px;padding:4px 10px;border-radius:6px;cursor:pointer}
 .draft-count{color:#6b8f7b;font-size:10px}
+/* ═══ +EV Badges & Best Bets ═══ */
+.ev-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px}
+.ev-pos{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
+.ev-neg{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
+.ev-neutral{background:#f5972622;color:#f59726;border:1px solid #f5972644}
+.ev-big{font-size:10px;padding:3px 8px}
+.bet-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #22c55e;display:flex;align-items:center;justify-content:space-between;transition:transform .15s,box-shadow .15s}
+.bet-card.elite{border-left-color:#ef4444;background:#1a2024}
+.bet-card.strong{border-left-color:#4ade80}
+.bet-card.mid{border-left-color:#f59726}
+.bet-left{flex:1}
+.bet-name{font-weight:700;font-size:14px}
+.bet-meta{color:#86efac;font-size:11px;margin-top:2px}
+.bet-prop{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.bet-right{text-align:right;min-width:70px}
+.bet-edge{font-size:20px;font-weight:800}
+.bet-edge.pos{color:#22c55e}
+.bet-edge.neg{color:#ef4444}
+.bet-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
+.bet-bar{height:4px;border-radius:2px;margin-top:6px;background:#1a3d2a;overflow:hidden}
+.bet-bar-fill{height:100%;border-radius:2px}
+.bet-summary{display:flex;gap:8px;padding:0 16px 8px}
+.bs-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
+.bs-val{font-size:18px;font-weight:800;color:#22c55e}
+.bs-lbl{font-size:9px;color:#86efac;margin-top:2px}
 
 /* ═══ DESKTOP TOP NAV (hidden on mobile) ═══ */
 .top-nav{display:none}
@@ -244,6 +269,8 @@ td.push{color:#9ca3af;font-weight:700}
   .sub-tab:hover:not(.active){background:#1a3d2a;color:#86efac}
   .pf-btn:hover:not(.active){background:#1a3d2a;color:#86efac}
   .sug-item:hover{background:#2d5a3d}
+  .bet-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
+  .bet-card{margin:0 0 8px}
   .top-nav{display:flex;gap:2px;align-items:center}
   .top-nav .tab-btn{padding:8px 16px;font-size:13px;border-radius:8px;border:none;background:none;color:#6b8f7b;cursor:pointer;font-weight:600;white-space:nowrap}
   .top-nav .tab-btn:hover{background:#1a3d2a}
@@ -278,6 +305,7 @@ td.push{color:#9ca3af;font-weight:700}
   .pick-card,.dinger-card,.streak-card,.draft-card{margin:0 0 8px}
   .cards-wrap{padding:0 24px}
   .picks-summary{padding:0 24px 12px}
+  .bet-summary{padding:0 24px 12px}
   .sub-tabs{padding:8px 24px}
   .combo-section{padding:12px 24px 0}
   .dinger-header{padding:12px 24px 4px}
@@ -509,6 +537,91 @@ function getDingerBoard(){
   return rows.slice(0,30);
 }
 
+// ═══ +EV ENGINE ═══
+// Convert American odds to implied probability (0-1)
+function impliedProb(odds){
+  if(!odds&&odds!==0)return null;
+  const o=parseInt(odds);if(isNaN(o))return null;
+  return o<0?Math.abs(o)/(Math.abs(o)+100):100/(o+100);
+}
+
+// Calculate hit rate: how often player exceeds a line for a metric
+function getHitRate(name,metric,line,isP){
+  const logs=(isP?st.pGameLogs:st.gameLogs).filter(g=>g.player_name===name);
+  if(logs.length<3)return null;
+  const ln=parseFloat(line);if(isNaN(ln))return null;
+  const hits=logs.filter(g=>toNum(g[metric])>ln).length;
+  return{rate:hits/logs.length,hits,total:logs.length};
+}
+
+// Map prop METRIC names to game log column names
+function propToLogCol(metric){
+  const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
+  return map[metric]||metric;
+}
+
+// Is this a pitcher prop?
+function isPitcherProp(metric){return(metric||"").startsWith("P_")}
+
+// Build full edge analysis for all props
+function getBestBets(){
+  if(!st.props.length)return[];
+  const bets=[];
+  for(const p of st.props){
+    const name=p.PLAYER_NAME;if(!name)continue;
+    const metric=p.METRIC;
+    const line=parseFloat(p.DK_LINE);if(isNaN(line))continue;
+    const overOdds=parseInt(p.OVER_ODDS);
+    const underOdds=parseInt(p.UNDER_ODDS);
+    if(isNaN(overOdds)&&isNaN(underOdds))continue;
+
+    const logCol=propToLogCol(metric);
+    const isP=isPitcherProp(metric);
+    const hr=getHitRate(name,logCol,line,isP);
+    if(!hr||hr.total<3)continue;
+
+    const overIP=impliedProb(overOdds);
+    const underIP=impliedProb(underOdds);
+
+    // Calculate edge for OVER
+    let overEdge=null,underEdge=null;
+    if(overIP!==null)overEdge=hr.rate-overIP;
+    if(underIP!==null)underEdge=(1-hr.rate)-underIP;
+
+    // Pick the better side
+    let lean,edge,odds,ip,hitRate;
+    if(overEdge!==null&&underEdge!==null){
+      if(overEdge>=underEdge){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.rate}
+      else{lean="UNDER";edge=underEdge;odds=underOdds;ip=underIP;hitRate=1-hr.rate}
+    }else if(overEdge!==null){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.rate}
+    else{lean="UNDER";edge=underEdge;odds=underOdds;ip=underIP;hitRate=1-hr.rate}
+
+    if(edge===null)continue;
+
+    // Find player's tonight info
+    const pT=st.tonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||
+             st.pTonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||{};
+
+    bets.push({
+      name,metric,line,lean,edge,odds,
+      impliedProb:ip,hitRate,
+      hits:lean==="OVER"?hr.hits:hr.total-hr.hits,
+      total:hr.total,
+      team:pT.team_abbr||"",
+      opp:pT.opp_abbr_tonight||"",
+      pitcher:pT.opp_pitcher_name||"",
+      hand:pT.opp_pitcher_hand||"",
+      dkLine:p.DK_LINE,
+      overOdds:p.OVER_ODDS,
+      underOdds:p.UNDER_ODDS,
+      isP
+    });
+  }
+  // Sort by edge descending
+  bets.sort((a,b)=>b.edge-a.edge);
+  return bets;
+}
+
 function pickDashPlayer(name){
   st.player=name;st.oppFilter="";
   console.log("Selected:",name);
@@ -720,7 +833,45 @@ function render(){
 
   // === PICKS TAB ===
   picksHTML="";
-  if(st.picksView==="picks"){
+  if(st.picksView==="bets"){
+    // ═══ BEST BETS (+EV) ═══
+    const allBets=getBestBets();
+    const posEV=allBets.filter(b=>b.edge>0);
+    const elite=posEV.filter(b=>b.edge>=0.15);
+    const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
+    if(!allBets.length){picksHTML=`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
+    else{
+      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:#ef4444">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:#6b8f7b">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
+      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
+      picksHTML+=`<div class="cards-grid">`;
+      picksHTML+=posEV.slice(0,40).map((b,i)=>{
+        const edgePct=(b.edge*100).toFixed(1);
+        const hrPct=(b.hitRate*100).toFixed(0);
+        const ipPct=(b.impliedProb*100).toFixed(0);
+        const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
+        const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
+        return`<div class="bet-card ${cls}">
+          <div class="bet-left">
+            <div class="bet-name">${esc(b.name)}</div>
+            <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
+            <div class="bet-prop">
+              <span class="prop-metric" style="font-size:10px">${b.metric}</span>
+              <span class="${leanCls}" style="font-weight:700;font-size:13px">${b.lean} ${b.dkLine}</span>
+              <span style="color:#86efac;font-size:11px">${fmtOdds(b.odds)}</span>
+              <span class="ev-badge ev-pos ev-big">+${edgePct}% EV</span>
+            </div>
+            <div class="bet-bar"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"#ef4444":b.edge>=0.08?"#22c55e":"#f59726"}"></div></div>
+            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:9px;color:#6b8f7b"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
+          </div>
+          <div class="bet-right">
+            <div class="bet-edge pos">+${edgePct}%</div>
+            <div class="bet-sub">edge</div>
+          </div>
+        </div>`;
+      }).join("");
+      picksHTML+=`</div>`;
+    }
+  }else if(st.picksView==="picks"){
     if(!st.picks.length){picksHTML=`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
     else{
       const hits=st.picks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="YES"||h==="TRUE"}).length;
@@ -843,7 +994,14 @@ function render(){
     picksHTML=`<div style="padding:8px 16px"><input type="text" id="propsSearchInput" placeholder="Search player..." value="${esc(st.propsSearch)}"/></div>
     <div class="props-filter"><div class="pf-btn ${st.propsMetric==="ALL"?"active":""}" onclick="setPropsMetric('ALL')">All</div>${allM.map(m=>`<div class="pf-btn ${st.propsMetric===m?"active":""}" onclick="setPropsMetric('${m}')">${m}</div>`).join("")}</div>
     <div style="padding:0 16px;color:#6b8f7b;font-size:10px;margin-bottom:4px">${srch.length} props${srch.length>200?" (showing 200)":""}</div>
-    <div class="props-tbl-wrap"><table><thead><tr><th>Player</th><th>Prop</th><th>Line</th><th>Over</th><th>Under</th></tr></thead><tbody>${sorted.map(p=>`<tr><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td></tr>`).join("")}</tbody></table></div>`;
+    <div class="props-tbl-wrap"><table><thead><tr><th>Player</th><th>Prop</th><th>Line</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th></tr></thead><tbody>${sorted.map(p=>{
+      const lc=propToLogCol(p.METRIC);const isP=isPitcherProp(p.METRIC);
+      const hr=getHitRate(p.PLAYER_NAME,lc,parseFloat(p.DK_LINE),isP);
+      const oIP=impliedProb(parseInt(p.OVER_ODDS));
+      const hrPct=hr?`${(hr.rate*100).toFixed(0)}%`:"—";
+      const edge=hr&&oIP!==null?hr.rate-oIP:null;
+      const edgeStr=edge!==null?`<span class="ev-badge ${edge>0.08?"ev-pos":edge>0?"ev-neutral":"ev-neg"}">${edge>0?"+":""}${(edge*100).toFixed(0)}%</span>`:"—";
+      return`<tr><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
   }
 
   // === LOOKUP ===
@@ -935,6 +1093,7 @@ function render(){
 
   <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
     <div class="sub-tabs" style="padding-top:12px">
+      <div class="sub-tab ${st.picksView==="bets"?"active":""}" onclick="switchPicksView('bets')">💰 Best Bets</div>
       <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">🤖 AI Picks</div>
       <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">⚾ Draft</div>
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
