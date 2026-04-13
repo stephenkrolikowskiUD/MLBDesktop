@@ -384,7 +384,7 @@ td.push{color:#9ca3af;font-weight:700}
 <div id="app"><div class="loading"><div style="font-size:32px;animation:bounce .8s ease-in-out infinite">⚾</div><div style="color:#6b8f7b;font-size:14px">Loading dashboard...</div></div></div>
 <script>
 const SHEET_ID="1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ";
-const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","DK_FP"];
+const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","DK_FP","H+R+RBI"];
 const P_METRICS=["IP","SO","ER","H","HR","BB","DK_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
 
@@ -455,6 +455,27 @@ const barColor=(v,l)=>!l?"#4ade80":v>l?"#22c55e":"#ef4444";
 const avgColor=(v,l)=>!l?"#4ade80":v>=l?"#4ade80":"#f97316";
 const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
 const fmtOdds=v=>{if(!v&&v!==0)return"—";v=parseInt(v);return v>0?`+${v}`:`${v}`};
+
+// Combo stats: props that sum multiple game log columns
+const COMBO_STATS={
+  "H+R+RBI":["H","R","RBI"],
+  "H+R":["H","R"],
+  "R+RBI":["R","RBI"],
+  "H+RBI":["H","RBI"],
+  "1B+2B":["1B","2B"],
+  "BB+H":["BB","H"],
+};
+
+// Get metric value from a game log row — handles combo stats like H+R+RBI
+function getMetricVal(g,m){
+  if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(g[k]),0);
+  return toNum(g[m]);
+}
+// Get rolling average for a metric — handles combos by summing component averages
+function getRollingVal(row,prefix,m){
+  if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(row[`${prefix}${k}`]),0);
+  return toNum(row[`${prefix}${m}`]);
+}
 
 function hasLogs(name,isP){return(isP?st.pGameLogs:st.gameLogs).some(g=>g.player_name===name)}
 function getProps(name){if(!name||!st.props.length)return[];const n=name.toLowerCase();return st.props.filter(p=>(p.PLAYER_NAME||"").toLowerCase()===n)}
@@ -577,12 +598,16 @@ function getHitRate(name,metric,line,isP){
   const logs=(isP?st.pGameLogs:st.gameLogs).filter(g=>g.player_name===name);
   if(logs.length<3)return null;
   const ln=parseFloat(line);if(isNaN(ln))return null;
-  const hits=logs.filter(g=>toNum(g[metric])>ln).length;
+  const combo=COMBO_STATS[metric];
+  const hits=combo
+    ?logs.filter(g=>combo.reduce((s,k)=>s+toNum(g[k]),0)>ln).length
+    :logs.filter(g=>toNum(g[metric])>ln).length;
   return{rate:hits/logs.length,hits,total:logs.length};
 }
 
 // Map prop METRIC names to game log column names
 function propToLogCol(metric){
+  if(COMBO_STATS[metric])return metric; // combos handled by getHitRate directly
   const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
   return map[metric]||metric;
 }
@@ -885,20 +910,20 @@ function render(){
   const last10=[...allLogs].reverse().slice(-10);
   const most=allLogs[0]||{};
 
-  const seasAvg=toNum(most[`Seas_${metric}`]);
-  const midAvg=isP?toNum(most[`L7_${metric}`]):toNum(most[`L30_${metric}`]);
-  const shortAvg=isP?toNum(most[`L3_${metric}`]):toNum(most[`L7_${metric}`]);
-  const lastGame=toNum(most[metric]);
+  const seasAvg=getRollingVal(most,"Seas_",metric);
+  const midAvg=isP?getRollingVal(most,"L7_",metric):getRollingVal(most,"L30_",metric);
+  const shortAvg=isP?getRollingVal(most,"L3_",metric):getRollingVal(most,"L7_",metric);
+  const lastGame=getMetricVal(most,metric);
   const midLbl=isP?"L7":"L30",shortLbl=isP?"L3":"L7";
 
-  const hL5=lineNum?allLogs.slice(0,5).filter(g=>toNum(g[metric])>lineNum).length:null;
-  const hL10=lineNum?allLogs.slice(0,10).filter(g=>toNum(g[metric])>lineNum).length:null;
-  const hSeas=lineNum?allLogs.filter(g=>toNum(g[metric])>lineNum).length:null;
+  const hL5=lineNum?allLogs.slice(0,5).filter(g=>getMetricVal(g,metric)>lineNum).length:null;
+  const hL10=lineNum?allLogs.slice(0,10).filter(g=>getMetricVal(g,metric)>lineNum).length:null;
+  const hSeas=lineNum?allLogs.filter(g=>getMetricVal(g,metric)>lineNum).length:null;
   const sRate=hSeas!==null&&allLogs.length>0?hSeas/allLogs.length:null;
-  const maxLog=Math.max(...last10.map(g=>toNum(g[metric])),lineNum||0,1);
+  const maxLog=Math.max(...last10.map(g=>getMetricVal(g,metric)),lineNum||0,1);
 
   const metricOpts=curMetrics.map(m=>`<option value="${m}" ${m===metric?"selected":""}>${m}</option>`).join("");
-  const bars=last10.map(g=>{const v=toNum(g[metric]);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div></div>`}).join("");
+  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div></div>`}).join("");
   const avgs=[{l:"Season",v:seasAvg},{l:midLbl,v:midAvg},{l:shortLbl,v:shortAvg},{l:"Last",v:lastGame}].map(a=>`<div class="avg-card" style="border:1px solid ${lineNum&&a.v>=lineNum?"#22c55e44":lineNum?"#ef444433":"#2d5a3d"}"><div class="avg-label">${a.l}</div><div class="avg-val" style="color:${avgColor(a.v,lineNum)}">${a.v.toFixed(2)}</div></div>`).join("");
 
   const sT={};let statStrip="";
