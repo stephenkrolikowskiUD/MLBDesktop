@@ -985,8 +985,12 @@ function render(){
   // Handle combo stats for Home/Away (sum component splits)
   const hV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Home`]),0):toNum(sp[`${metric}_Home`]);
   const aV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Away`]),0):toNum(sp[`${metric}_Away`]);
+  const hGames=toNum(sp.Home_GAMES)||toNum(sp['Home_GAMES']);
+  const aGames=toNum(sp.Away_GAMES)||toNum(sp['Away_GAMES']);
+  const hTotal=hGames>0?Math.round(hV*hGames):0;
+  const aTotal=aGames>0?Math.round(aV*aGames):0;
   let haBars=`<div class="no-data">No data</div>`;
-  if(hV>0||aV>0){const mx=Math.max(hV,aV,.1);haBars=[{l:"Home",v:hV,c:"#8b5cf6"},{l:"Away",v:aV,c:"#06b6d4"}].map(b=>`<div class="mini-bar-wrap"><div class="mini-bar" style="height:${Math.max(4,(b.v/mx)*60)}px;background:${b.c}"></div><div class="mini-bar-label">${b.l}</div><div class="mini-bar-val">${b.v.toFixed(2)}</div></div>`).join("")}
+  if(hV>0||aV>0){const mx=Math.max(hV,aV,.1);haBars=[{l:"Home",v:hV,t:hTotal,g:hGames,c:"#8b5cf6"},{l:"Away",v:aV,t:aTotal,g:aGames,c:"#06b6d4"}].map(b=>`<div class="mini-bar-wrap"><div class="mini-bar" style="height:${Math.max(4,(b.v/mx)*60)}px;background:${b.c}"></div><div class="mini-bar-label">${b.l}</div><div class="mini-bar-val">${b.v.toFixed(2)}/g</div>${b.g?`<div class="mini-bar-val" style="color:#4ade80;font-size:9px">${b.t} in ${b.g}G</div>`:""}</div>`).join("")}
 
   const lastUp=most.LAST_UPDATED||pT.LAST_UPDATED||"—";
   const earlyBanner=!pHasLogs&&player?`<div class="early-banner"><div class="icon">🌱</div><div class="msg">Early Season — No Game Logs Yet</div><div class="sub">${esc(player)} is on the active roster. Matchup info, props, and Lookup are available.</div></div>`:"";
