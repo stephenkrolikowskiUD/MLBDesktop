@@ -270,6 +270,8 @@ td.push{color:#9ca3af;font-weight:700}
 .mode-btn{flex:1;padding:6px;text-align:center;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid #2d5a3d}
 .ctrl-row{display:flex;gap:8px}
 .dash-grid{}
+.dash-bottom{padding:0 16px}
+.dash-props .prop-card{margin-bottom:6px}
 
 /* ═══ Custom Scrollbars ═══ */
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -325,6 +327,10 @@ td.push{color:#9ca3af;font-weight:700}
   .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;padding:0 24px}
   .dash-grid>.section{padding:16px 0 0}
   .dash-full{grid-column:1/-1}
+  .dash-bottom{padding:0 24px}
+  .dash-bottom .section{padding:16px 0 0}
+  .dash-props .prop-card{display:inline-flex;width:calc(33.3% - 6px);margin-right:6px;margin-bottom:6px;vertical-align:top}
+  .dash-props .label{margin-bottom:10px}
   table{font-size:13px}
   th,td{padding:8px 6px}
   .log-table-wrap{padding:0 24px 24px;max-height:calc(100vh - 140px)}
@@ -377,6 +383,8 @@ td.push{color:#9ca3af;font-weight:700}
   .header{padding:12px 32px}
   .section{padding:16px 32px 0}
   .dash-grid{padding:0 32px;gap:0 28px}
+  .dash-bottom{padding:0 32px}
+  .dash-props .prop-card{width:calc(25% - 6px)}
 }
 </style>
 </head>
@@ -974,7 +982,9 @@ function render(){
   const wx=st.weather.find(w=>w.venue_name===venue)||{};
 
   const sp=curSplits.find(s=>s.player_name===player)||{};
-  const hV=toNum(sp[`${metric}_Home`]),aV=toNum(sp[`${metric}_Away`]);
+  // Handle combo stats for Home/Away (sum component splits)
+  const hV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Home`]),0):toNum(sp[`${metric}_Home`]);
+  const aV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Away`]),0):toNum(sp[`${metric}_Away`]);
   let haBars=`<div class="no-data">No data</div>`;
   if(hV>0||aV>0){const mx=Math.max(hV,aV,.1);haBars=[{l:"Home",v:hV,c:"#8b5cf6"},{l:"Away",v:aV,c:"#06b6d4"}].map(b=>`<div class="mini-bar-wrap"><div class="mini-bar" style="height:${Math.max(4,(b.v/mx)*60)}px;background:${b.c}"></div><div class="mini-bar-label">${b.l}</div><div class="mini-bar-val">${b.v.toFixed(2)}</div></div>`).join("")}
 
@@ -1288,7 +1298,6 @@ function render(){
     <div class="dash-grid">
     ${pHasLogs?`<div class="section"><div class="label">Game Log — ${metric}</div><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Line: ${lineNum}</div>`:""}</div>`:""}
     ${pHasLogs?`<div class="section"><div class="label">Averages</div><div class="avg-cards">${avgs}</div></div>`:""}
-    ${pickBanner}${propsHTML}
     <div class="section"><div class="split-row">
       ${isP?`<div class="split-card"><span class="split-title">Season Rates</span>${pHasLogs?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${sT.ERA||"—"}</div><div class="lbl">ERA</div></div><div class="matchup-stat"><div class="val">${sT.WHIP||"—"}</div><div class="lbl">WHIP</div></div><div class="matchup-stat"><div class="val">${sT.K9||"—"}</div><div class="lbl">K/9</div></div><div class="matchup-stat"><div class="val">${sT.SO||"—"}</div><div class="lbl">K</div></div></div>`:`<div class="no-data">No stats yet</div>`}</div>`:`<div class="split-card"><span class="split-title">vs ${oppH}HP Splits</span>${vsAvg||vsOps?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${vsAvg?vsAvg.toFixed(3):"—"}</div><div class="lbl">AVG</div></div><div class="matchup-stat"><div class="val">${vsOps?vsOps.toFixed(3):"—"}</div><div class="lbl">OPS</div></div><div class="matchup-stat"><div class="val">${vsHr||"—"}</div><div class="lbl">HR</div></div><div class="matchup-stat"><div class="val">${vsSo||"—"}</div><div class="lbl">SO</div></div></div>`:`<div class="no-data">No split data yet</div>`}</div>`}
       <div class="split-card"><span class="split-title">Home / Away</span><div class="mini-bars-container">${haBars}</div></div>
@@ -1297,6 +1306,8 @@ function render(){
     ${wx.temp_f?`<div class="section"><div class="weather-card"><div class="card-title">🌤️ Weather</div><div class="weather-row"><span class="weather-key">Temp</span><span class="weather-val">${wx.temp_f}°F (feels ${wx.feels_like_f}°F)</span></div><div class="weather-row"><span class="weather-key">Wind</span><span class="weather-val">${wx.wind_mph} mph ${wx.wind_dir}</span></div><div class="weather-row"><span class="weather-key">Condition</span><span class="weather-val">${wx.description||"—"}</span></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="weather-row"><span class="weather-key">🏟️</span><span class="weather-val" style="color:#4ade80">Dome — weather irrelevant</span></div>`:""}</div></div>`:""}
     ${lineNum&&pHasLogs?`<div class="section dash-full"><div class="card"><div class="card-title">📊 Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
     </div>
+    ${pickBanner?`<div class="dash-bottom">${pickBanner}</div>`:""}
+    ${propsHTML?`<div class="dash-bottom dash-props">${propsHTML}</div>`:""}
     <div class="timestamp">Last Refreshed: ${lastUp}</div>
     <div class="timestamp" style="color:#2d5a3d;font-size:9px;padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
   </div>
