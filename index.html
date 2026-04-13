@@ -262,6 +262,27 @@ td.push{color:#9ca3af;font-weight:700}
 .slip-meta{color:#6b8f7b;font-size:10px;margin-top:6px;display:flex;justify-content:space-between}
 .slip-controls{display:flex;gap:8px;padding:8px 16px;align-items:center;flex-wrap:wrap}
 .slip-controls .pf-btn{font-size:11px}
+/* ═══ They're Due ═══ */
+.due-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #38bdf8;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.due-card.top{border-left-color:#818cf8;background:#161e30}
+.due-card.pitcher{border-left-color:#06b6d4}
+.due-left{flex:1}
+.due-name{font-weight:700;font-size:14px}
+.due-label{font-size:10px;font-weight:600;color:#38bdf8;margin-left:6px}
+.due-meta{color:#86efac;font-size:11px;margin-top:2px}
+.due-right{text-align:right;min-width:65px}
+.due-score{font-size:20px;font-weight:800;color:#38bdf8}
+.due-card.top .due-score{color:#818cf8}
+.due-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
+.due-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.due-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d}
+.due-tag.matchup{background:#1a3d2a;color:#4ade80;border-color:#2d5a3d}
+.due-tag.cold{background:#2a1a2a;color:#f0abfc;border-color:#5a2d5a}
+.due-tag.prop{background:#2a2a1a;color:#fde68a;border-color:#5a5a2d}
+.due-chart{display:flex;gap:2px;align-items:flex-end;height:28px;margin-top:6px}
+.due-chart-bar{width:8px;border-radius:2px 2px 0 0;min-height:3px}
+.due-prop{font-size:10px;color:#86efac;margin-top:4px}
+.due-filters{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
 
 /* ═══ DESKTOP TOP NAV (hidden on mobile) ═══ */
 .top-nav{display:none}
@@ -300,6 +321,8 @@ td.push{color:#9ca3af;font-weight:700}
   .bet-card{margin:0 0 8px}
   .slip-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
   .slip-card{margin:0 0 10px}
+  .due-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
+  .due-card{margin:0 0 8px}
   .top-nav{display:flex;gap:2px;align-items:center}
   .top-nav .tab-btn{padding:8px 16px;font-size:13px;border-radius:8px;border:none;background:none;color:#6b8f7b;cursor:pointer;font-weight:600;white-space:nowrap}
   .top-nav .tab-btn:hover{background:#1a3d2a}
@@ -353,6 +376,7 @@ td.push{color:#9ca3af;font-weight:700}
   .draft-controls{padding:6px 24px}
   .draft-tier-label{padding:8px 24px 4px}
   .streak-filters{padding:8px 24px}
+  .due-filters{padding:8px 24px}
   .early-banner{margin:14px 24px 0}
   .timestamp{padding:20px 24px}
   .empty{padding:40px 24px}
@@ -405,7 +429,7 @@ let st={
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",
-  streakFilter:"all",drafted:new Set(),slipLegs:"3",
+  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",
   lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
   lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
@@ -424,13 +448,11 @@ function cleanRows(rows){
   });
 }
 
-// Fix sheets where column headers contain data values
-// e.g. "player_name Adam Frazier Addison Barger" → "player_name"
 function normalizeKeys(rows){
   if(!rows||!rows.length)return rows;
   const firstKeys=Object.keys(rows[0]);
   const hasSpaceKeys=firstKeys.some(k=>k.includes(' '));
-  if(!hasSpaceKeys)return rows; // already clean
+  if(!hasSpaceKeys)return rows;
   console.log("🔧 Normalizing dirty column names:",firstKeys.slice(0,3).map(k=>k.slice(0,30)+"...").join(" | "));
   return rows.map(row=>{
     const clean={};
@@ -464,7 +486,6 @@ const avgColor=(v,l)=>!l?"#4ade80":v>=l?"#4ade80":"#f97316";
 const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
 const fmtOdds=v=>{if(!v&&v!==0)return"—";v=parseInt(v);return v>0?`+${v}`:`${v}`};
 
-// Combo stats: props that sum multiple game log columns
 const COMBO_STATS={
   "H+R+RBI":["H","R","RBI"],
   "H+R":["H","R"],
@@ -474,12 +495,10 @@ const COMBO_STATS={
   "BB+H":["BB","H"],
 };
 
-// Get metric value from a game log row — handles combo stats like H+R+RBI
 function getMetricVal(g,m){
   if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(g[k]),0);
   return toNum(g[m]);
 }
-// Get rolling average for a metric — handles combos by summing component averages
 function getRollingVal(row,prefix,m){
   if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(row[`${prefix}${k}`]),0);
   return toNum(row[`${prefix}${m}`]);
@@ -530,6 +549,7 @@ function switchMode(m){
 }
 function switchPicksView(v){st.picksView=v;render()}
 function setPropsMetric(m){st.propsMetric=m;render()}
+function setDueFilter(f){st.dueFilter=f;render()}
 
 function getDingerCombos(board,legs){
   if(board.length<legs)return[];
@@ -561,7 +581,6 @@ function getDingerBoard(){
     const seasHR=toNum(p.Seas_HR);
     const l7HR=toNum(p.L7_HR);
     const l14HR=toNum(p.L14_HR);
-    // Compute AB and HR from game logs (not sheet columns)
     const pLogs=st.gameLogs.filter(g=>g.player_name===name);
     if(!pLogs.length)continue;
     const totalAB=pLogs.reduce((s,g)=>s+toNum(g.AB),0);
@@ -594,14 +613,12 @@ function getDingerBoard(){
 }
 
 // ═══ +EV ENGINE ═══
-// Convert American odds to implied probability (0-1)
 function impliedProb(odds){
   if(!odds&&odds!==0)return null;
   const o=parseInt(odds);if(isNaN(o))return null;
   return o<0?Math.abs(o)/(Math.abs(o)+100):100/(o+100);
 }
 
-// Calculate hit rate: how often player exceeds a line for a metric
 function getHitRate(name,metric,line,isP){
   const logs=(isP?st.pGameLogs:st.gameLogs).filter(g=>g.player_name===name);
   if(logs.length<3)return null;
@@ -613,17 +630,14 @@ function getHitRate(name,metric,line,isP){
   return{rate:hits/logs.length,hits,total:logs.length};
 }
 
-// Map prop METRIC names to game log column names
 function propToLogCol(metric){
-  if(COMBO_STATS[metric])return metric; // combos handled by getHitRate directly
+  if(COMBO_STATS[metric])return metric;
   const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
   return map[metric]||metric;
 }
 
-// Is this a pitcher prop?
 function isPitcherProp(metric){return(metric||"").startsWith("P_")}
 
-// Build full edge analysis for all props
 function getBestBets(){
   if(!st.props.length)return[];
   const bets=[];
@@ -643,12 +657,10 @@ function getBestBets(){
     const overIP=impliedProb(overOdds);
     const underIP=impliedProb(underOdds);
 
-    // Calculate edge for OVER
     let overEdge=null,underEdge=null;
     if(overIP!==null)overEdge=hr.rate-overIP;
     if(underIP!==null)underEdge=(1-hr.rate)-underIP;
 
-    // Pick the better side
     let lean,edge,odds,ip,hitRate;
     if(overEdge!==null&&underEdge!==null){
       if(overEdge>=underEdge){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.rate}
@@ -658,7 +670,6 @@ function getBestBets(){
 
     if(edge===null)continue;
 
-    // Find player's tonight info
     const pT=st.tonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||
              st.pTonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||{};
 
@@ -677,18 +688,15 @@ function getBestBets(){
       isP
     });
   }
-  // Sort by edge descending
   bets.sort((a,b)=>b.edge-a.edge);
   return bets;
 }
 
 // ═══ SMART SLIP GENERATOR ═══
-// Combines +EV edge, AI confidence, streaks, and hit rate into optimal Underdog slips
 function getConvictionLegs(){
   const bets=getBestBets().filter(b=>b.edge>0);
   if(!bets.length)return[];
 
-  // Build lookup maps for AI picks and streaks
   const aiMap=new Map();
   st.picks.forEach(pk=>{if(pk.player)aiMap.set(pk.player.toLowerCase(),pk)});
   const streakMap=new Map();
@@ -700,9 +708,7 @@ function getConvictionLegs(){
   const legs=[];
   for(const b of bets){
     const nl=b.name.toLowerCase();
-    // 1. EV score (0-10 scale, capped)
     const evScore=Math.min(b.edge*40,10);
-    // 2. AI confidence bonus
     let aiScore=0;
     const aiPick=aiMap.get(nl);
     if(aiPick){
@@ -710,10 +716,8 @@ function getConvictionLegs(){
       if(conf==="SMASH")aiScore=4;
       else if(conf==="STRONG")aiScore=2.5;
       else aiScore=1;
-      // Extra if AI picked same prop type
       if((aiPick.prop_type||"").toUpperCase()===b.metric.toUpperCase())aiScore+=2;
     }
-    // 3. Streak bonus
     let streakScore=0;
     const logCol=propToLogCol(b.metric);
     const sk=`${nl}|${logCol}`;
@@ -723,9 +727,7 @@ function getConvictionLegs(){
       else if(streak.streak>=5)streakScore=2;
       else if(streak.streak>=3)streakScore=1;
     }
-    // 4. Sample reliability (more games = more trust)
     const reliabilityScore=Math.min(b.total/10,2);
-    // 5. Hit rate strength
     const hrScore=b.hitRate>=0.8?2:b.hitRate>=0.65?1:0;
 
     const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
@@ -760,9 +762,7 @@ function generateSlips(legs,legCount){
     }
     for(let i=start;i<legs.length&&slips.length<maxIter;i++){
       const leg=legs[i];
-      // Unique players
       if(usedPlayers.has(leg.name.toLowerCase()))continue;
-      // Max 2 legs from same team/game
       const tc=teamCounts.get(leg.team)||0;
       if(tc>=2)continue;
 
@@ -775,7 +775,6 @@ function generateSlips(legs,legCount){
       teamCounts.set(leg.team,tc);
     }
   }
-  // Only use top legs to keep combo generation fast
   const pool=legs.slice(0,legCount<=3?15:legCount<=4?18:20);
   gen(0,[],new Set(),new Map());
   slips.sort((a,b)=>b.score-a.score);
@@ -831,7 +830,6 @@ function getStreaks(){
     const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===sType.key);
     streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"bat",desc:sType.desc,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
   }}
-  // Pitcher streaks
   const PITCH=[{key:"SO",threshold:6,label:"K Streak",emoji:"🔥",desc:"starts w/ 6+ K"},{key:"SO",threshold:8,label:"Elite K",emoji:"⚡",desc:"starts w/ 8+ K"},{key:"ER",threshold:2,label:"Lockdown",emoji:"🔒",compare:"lte",desc:"starts w/ ≤2 ER"},{key:"W",threshold:1,label:"Win Streak",emoji:"👑",desc:"consecutive wins"}];
   const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
   for(const sType of PITCH){for(const name of pNames){
@@ -846,10 +844,187 @@ function getStreaks(){
     const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===sType.key);
     streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:"",hand:"",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"pitch",desc:sType.desc,isLte,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
   }}
-  // Deduplicate: keep longest streak per player+stat
   const best={};for(const s of streaks){const k=`${s.player}|${s.stat}`;if(!best[k]||s.streak>best[k].streak||(s.streak===best[k].streak&&s.threshold>best[k].threshold))best[k]=s}
   const result=Object.values(best);result.sort((a,b)=>b.streak-a.streak);
   return result;
+}
+
+// ═══ THEY'RE DUE ENGINE ═══
+function getDueBoard(){
+  const due=[];
+  // --- BATTERS ---
+  const batStats=["H","HR","RBI","R","TB","SB","BB"];
+  const tonightNames=new Set(st.tonight.map(p=>p.player_name).filter(Boolean));
+  for(const name of tonightNames){
+    const logs=st.gameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
+    if(logs.length<7)continue; // need enough data
+    const pT=st.tonight.find(t=>t.player_name===name)||{};
+    const most=logs[0]||{};
+
+    for(const stat of batStats){
+      const seasAvg=toNum(most[`Seas_${stat}`]);
+      const l7Avg=toNum(most[`L7_${stat}`]);
+      if(seasAvg<=0)continue;
+
+      // Cold gap: how far below season average is L7?
+      const coldGap=(seasAvg-l7Avg)/seasAvg;
+      if(coldGap<0.25)continue; // need at least 25% below season avg
+
+      // Drought: consecutive games below season avg for this stat
+      let drought=0;
+      for(const g of logs){
+        if(toNum(g[stat])<seasAvg)drought++;
+        else break;
+      }
+      if(drought<2)continue;
+
+      // Matchup score
+      let matchupScore=0;
+      let matchupTags=[];
+      // Handedness split advantage
+      const hand=pT.opp_pitcher_hand||"R";
+      const vsAvg=toNum(pT.vs_OPP_AVG);
+      const vsOps=toNum(pT.vs_OPP_OPS);
+      if(vsAvg>=0.280){matchupScore+=3;matchupTags.push(`vs ${hand}HP: ${vsAvg.toFixed(3)}`)}
+      else if(vsAvg>=0.250){matchupScore+=1.5;matchupTags.push(`vs ${hand}HP: ${vsAvg.toFixed(3)}`)}
+      if(vsOps>=0.850)matchupScore+=2;
+      else if(vsOps>=0.750)matchupScore+=1;
+
+      // Opposing pitcher quality (check if starter is in our pitcher logs)
+      const oppPitcher=pT.opp_pitcher_name||"";
+      if(oppPitcher&&oppPitcher!=="TBD"){
+        const pLogs=st.pGameLogs.filter(g=>g.player_name===oppPitcher).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
+        if(pLogs.length>0){
+          const pMost=pLogs[0];
+          const era=toNum(pMost.Seas_ERA);
+          const whip=toNum(pMost.Seas_WHIP);
+          if(era>=4.50){matchupScore+=3;matchupTags.push(`vs ${oppPitcher} (${era.toFixed(2)} ERA)`)}
+          else if(era>=4.00){matchupScore+=1.5;matchupTags.push(`vs ${oppPitcher} (${era.toFixed(2)} ERA)`)}
+          if(whip>=1.40)matchupScore+=1.5;
+          else if(whip>=1.25)matchupScore+=0.5;
+        }
+      }
+
+      // Venue boost (Coors)
+      const venue=pT.venue_tonight||"";
+      if(venue.includes("Coors")){matchupScore+=2;matchupTags.push("🏔️ Coors")}
+
+      // DK prop overlay
+      const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===stat);
+      let propTag=null;
+      if(prop){propTag={line:prop.DK_LINE,overOdds:parseInt(prop.OVER_ODDS)||null}}
+
+      // Total score: cold gap importance + drought length + matchup quality
+      const coldScore=coldGap*15; // 0-15 range (25%-100% below)
+      const droughtScore=Math.min(drought*1.5,10);
+      const totalScore=coldScore+droughtScore+matchupScore;
+
+      if(totalScore<5)continue; // minimum threshold
+
+      const recentVals=logs.slice(0,7).map(g=>toNum(g[stat]));
+
+      due.push({
+        name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",
+        pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",
+        venue,stat,type:"bat",
+        seasAvg:seasAvg.toFixed(2),l7Avg:l7Avg.toFixed(2),
+        coldGap:(coldGap*100).toFixed(0),
+        drought,matchupScore,matchupTags,
+        propTag,recentVals,totalScore
+      });
+    }
+  }
+
+  // --- PITCHERS ---
+  const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
+  for(const name of pNames){
+    const logs=st.pGameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
+    if(logs.length<3)continue;
+    const pT=st.pTonight.find(t=>t.player_name===name)||{};
+    const most=logs[0]||{};
+
+    // Pitcher "due" — strikeout pitcher in a slump, ace with bad recent ERA
+    const pStats=[
+      {key:"SO",label:"Strikeouts",higher:true},
+      {key:"DK_FP",label:"Fantasy Pts",higher:true},
+      {key:"UD_FP",label:"UD Fantasy",higher:true},
+    ];
+
+    for(const ps of pStats){
+      const seasAvg=toNum(most[`Seas_${ps.key}`]);
+      const l3Avg=toNum(most[`L3_${ps.key}`]);
+      if(seasAvg<=0)continue;
+
+      const coldGap=(seasAvg-l3Avg)/seasAvg;
+      if(coldGap<0.20)continue;
+
+      let drought=0;
+      for(const g of logs){
+        if(toNum(g[ps.key])<seasAvg)drought++;
+        else break;
+      }
+      if(drought<2)continue;
+
+      // Matchup: opposing team's batting quality (use schedule to find opp)
+      let matchupScore=0;
+      let matchupTags=[];
+      const oppAbbr=pT.opp_abbr_tonight||"";
+
+      // Check opponent team batting average from tonight's batters
+      if(oppAbbr){
+        const oppBatters=st.tonight.filter(b=>b.team_abbr===oppAbbr);
+        if(oppBatters.length>0){
+          const teamSeasAvg=oppBatters.reduce((s,b)=>s+toNum(b.Seas_H),0)/oppBatters.length;
+          if(teamSeasAvg<0.8){matchupScore+=3;matchupTags.push(`vs weak ${oppAbbr} lineup`)}
+          else if(teamSeasAvg<1.0){matchupScore+=1.5;matchupTags.push(`vs avg ${oppAbbr} lineup`)}
+        }
+      }
+
+      // Home/away advantage
+      const ha=pT.home_away_tonight||"";
+      if(ha==="Home"){matchupScore+=1;matchupTags.push("🏠 Home")}
+
+      const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC==="P_SO");
+      let propTag=null;
+      if(prop){propTag={line:prop.DK_LINE,overOdds:parseInt(prop.OVER_ODDS)||null}}
+
+      const coldScore=coldGap*15;
+      const droughtScore=Math.min(drought*2,10);
+      const totalScore=coldScore+droughtScore+matchupScore;
+
+      if(totalScore<4)continue;
+
+      const recentVals=logs.slice(0,7).map(g=>toNum(g[ps.key]));
+
+      due.push({
+        name,team:pT.team_abbr||"",opp:oppAbbr,
+        pitcher:"",hand:"",
+        venue:pT.venue_tonight||"",stat:ps.key,type:"pitch",
+        seasAvg:seasAvg.toFixed(2),l7Avg:l3Avg.toFixed(2),
+        coldGap:(coldGap*100).toFixed(0),
+        drought,matchupScore,matchupTags,
+        propTag,recentVals,totalScore
+      });
+    }
+  }
+
+  // Deduplicate: keep best stat per player
+  const best={};
+  for(const d of due){
+    const k=d.name;
+    if(!best[k]||d.totalScore>best[k].totalScore)best[k]=d;
+  }
+  const result=Object.values(best);
+  result.sort((a,b)=>b.totalScore-a.totalScore);
+  return result;
+}
+
+function dueMiniChart(vals,seasAvg){
+  const mx=Math.max(...vals,seasAvg+1);
+  return vals.slice().reverse().map(v=>{
+    const h=Math.max(3,(v/mx)*26);
+    return`<div class="due-chart-bar" style="height:${h}px;background:${v>=seasAvg?'#22c55e':'#38bdf8'};opacity:.85"></div>`;
+  }).join("");
 }
 
 // ═══ DRAFT CHEAT SHEET ═══
@@ -866,7 +1041,6 @@ function getDraftBoard(){
     const sSB=toNum(most.Seas_SB),sBB=toNum(most.Seas_BB);
     const s3B=Math.max(0,(sTB-sH-s2B-3*sHR)/2)||0;
     const s1B=Math.max(0,sH-s2B-s3B-sHR)||0;
-    // Check for engine-computed UD_FP first, fall back to client-side calc
     const projUD=toNum(most.Seas_UD_FP)||(s1B*3+s2B*6+s3B*8+sHR*10+sBB*3+sRBI*2+sR*2+sSB*4)||0;
     const l7H=toNum(most.L7_H),l7HR=toNum(most.L7_HR),l72B=toNum(most.L7_2B);
     const l7TB=toNum(most.L7_TB),l7RBI=toNum(most.L7_RBI),l7R=toNum(most.L7_R);
@@ -944,31 +1118,6 @@ function render(){
     sT.WHIP=rIP>0?(((sT.H||0)+(sT.BB||0))/rIP).toFixed(2):"0.00";
     sT.K9=rIP>0?((sT.SO*9)/rIP).toFixed(1):"0.0";
     statStrip=["W","L","ERA","WHIP","SO","K9","IP","DK_FP"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${sT[s]}</div></div>`).join("");
-  }else if(st.picksView==="dingers"){
-    const db=getDingerBoard();
-    if(!db.length){picksHTML=`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`}
-    else{
-      picksHTML=`<div class="dinger-header"><div class="dinger-title">💣 Tonight's Dinger Board</div></div>
-      <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
-      picksHTML+=db.map((d,i)=>{
-        const isTop=i<3;
-        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
-        const ratePct=(d.hrRate*100).toFixed(1);
-        const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
-        return`<div class="dinger-card ${isTop?"top3":""}">
-          <div class="dinger-left">
-            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${esc(d.name)}</span></div>
-            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
-            <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
-          </div>
-          <div class="dinger-right">
-            <div class="dinger-rate">${ratePct}%</div>
-            <div class="dinger-sub">HR/AB · 1 per ${abPerHR} AB</div>
-            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
-          </div>
-        </div>`;
-      }).join("");
-    }
   }else{
     ["H","HR","RBI","R","SB","BB","TB","SO","AB"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
     sT.AVG=sT.AB>0?(sT.H/sT.AB).toFixed(3):".000";
@@ -982,7 +1131,6 @@ function render(){
   const wx=st.weather.find(w=>w.venue_name===venue)||{};
 
   const sp=curSplits.find(s=>s.player_name===player)||{};
-  // Handle combo stats for Home/Away (sum component splits)
   const hV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Home`]),0):toNum(sp[`${metric}_Home`]);
   const aV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Away`]),0):toNum(sp[`${metric}_Away`]);
   const hGames=toNum(sp.Home_GAMES)||toNum(sp['Home_GAMES']);
@@ -1012,7 +1160,6 @@ function render(){
   // === PICKS TAB ===
   picksHTML="";
   if(st.picksView==="bets"){
-    // ═══ BEST BETS (+EV) ═══
     const allBets=getBestBets();
     const posEV=allBets.filter(b=>b.edge>0);
     const elite=posEV.filter(b=>b.edge>=0.15);
@@ -1050,7 +1197,6 @@ function render(){
       picksHTML+=`</div>`;
     }
   }else if(st.picksView==="slips"){
-    // ═══ SMART SLIP GENERATOR ═══
     const result=getSmartSlips();
     const {legs}=result;
     if(!legs.length){picksHTML=`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
@@ -1152,7 +1298,6 @@ function render(){
       }
     }
   }else if(st.picksView==="streaks"){
-    // ═══ STREAKS ═══
     const allStreaks=getStreaks();
     const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
     if(!fil.length){picksHTML=`<div class="empty" style="padding:40px">${allStreaks.length?`No ${st.streakFilter} streaks found.`:"No active streaks yet. Need 3+ games of data."}</div>`}
@@ -1178,8 +1323,43 @@ function render(){
       }).join("");
       picksHTML+=`</div>`;
     }
+  }else if(st.picksView==="due"){
+    // ═══ THEY'RE DUE ═══
+    const allDue=getDueBoard();
+    const fil=st.dueFilter==="all"?allDue:st.dueFilter==="bat"?allDue.filter(d=>d.type==="bat"):allDue.filter(d=>d.type==="pitch");
+    if(!fil.length){picksHTML=`<div class="empty" style="padding:40px">${allDue.length?`No ${st.dueFilter} candidates found.`:"No \"due\" candidates found. Need 7+ games of data and a cold streak."}</div>`}
+    else{
+      const withMatchup=fil.filter(d=>d.matchupScore>=2).length;
+      const withProp=fil.filter(d=>d.propTag).length;
+      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val" style="color:#38bdf8">${fil.length}</div><div class="bs-lbl">DUE UP</div></div><div class="bs-card"><div class="bs-val" style="color:#818cf8">${withMatchup}</div><div class="bs-lbl">+ MATCHUP</div></div><div class="bs-card"><div class="bs-val" style="color:#fde68a">${withProp}</div><div class="bs-lbl">HAS PROP</div></div></div>`;
+      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Cold streak + strong season numbers + tonight's matchup = regression coming. Buy low.</div>`;
+      picksHTML+=`<div class="due-filters"><div class="pf-btn ${st.dueFilter==="all"?"active":""}" onclick="setDueFilter('all')">All</div><div class="pf-btn ${st.dueFilter==="bat"?"active":""}" onclick="setDueFilter('bat')">🏏 Batters</div><div class="pf-btn ${st.dueFilter==="pitch"?"active":""}" onclick="setDueFilter('pitch')">⚾ Pitchers</div></div>`;
+      picksHTML+=`<div class="cards-grid">`;
+      picksHTML+=fil.map((d,i)=>{
+        const isTop=i<3;
+        const tags=[];
+        tags.push(`<span class="due-tag cold">❄️ ${d.coldGap}% below avg</span>`);
+        tags.push(`<span class="due-tag cold">📉 ${d.drought}G drought</span>`);
+        d.matchupTags.forEach(mt=>tags.push(`<span class="due-tag matchup">✅ ${esc(mt)}</span>`));
+        if(d.propTag)tags.push(`<span class="due-tag prop">🎲 DK ${d.stat} ${d.propTag.line}${d.propTag.overOdds?" O:"+fmtOdds(d.propTag.overOdds):""}</span>`);
+
+        return`<div class="due-card ${isTop?"top":""} ${d.type==="pitch"?"pitcher":""}" onclick="streakToDash('${esc(d.name)}')">
+          <div class="due-left">
+            <div><span style="font-size:14px;margin-right:4px">🧊</span><span class="due-name">${esc(d.name)}</span><span class="due-label">${d.stat}</span></div>
+            <div class="due-meta">${esc(d.team)} vs ${d.type==="pitch"?esc(d.opp):esc(d.pitcher)+" ("+d.hand+"HP)"} · ${esc(d.venue)}</div>
+            <div class="due-meta">Season: ${d.seasAvg}/g → L7: ${d.l7Avg}/g</div>
+            <div class="due-chart">${dueMiniChart(d.recentVals,parseFloat(d.seasAvg))}</div>
+            <div class="due-tags">${tags.join("")}</div>
+          </div>
+          <div class="due-right">
+            <div class="due-score">${d.totalScore.toFixed(0)}</div>
+            <div class="due-sub">due score</div>
+          </div>
+        </div>`;
+      }).join("");
+      picksHTML+=`</div>`;
+    }
   }else if(st.picksView==="draft"){
-    // ═══ DRAFT ═══
     const board=getDraftBoard();
     const available=board.filter(p=>!st.drafted.has(p.name));
     const draftedCount=st.drafted.size;
@@ -1327,6 +1507,7 @@ function render(){
       <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">🤖 AI Picks</div>
       <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">⚾ Draft</div>
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
+      <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">🧊 Due</div>
       <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">💣 Dingers</div>
       <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">🎲 Props</div>
     </div>
