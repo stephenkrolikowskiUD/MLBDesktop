@@ -262,27 +262,6 @@ td.push{color:#9ca3af;font-weight:700}
 .slip-meta{color:#6b8f7b;font-size:10px;margin-top:6px;display:flex;justify-content:space-between}
 .slip-controls{display:flex;gap:8px;padding:8px 16px;align-items:center;flex-wrap:wrap}
 .slip-controls .pf-btn{font-size:11px}
-/* ═══ They're Due ═══ */
-.due-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #38bdf8;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:transform .15s,box-shadow .15s}
-.due-card.top{border-left-color:#818cf8;background:#161e30}
-.due-card.pitcher{border-left-color:#06b6d4}
-.due-left{flex:1}
-.due-name{font-weight:700;font-size:14px}
-.due-label{font-size:10px;font-weight:600;color:#38bdf8;margin-left:6px}
-.due-meta{color:#86efac;font-size:11px;margin-top:2px}
-.due-right{text-align:right;min-width:65px}
-.due-score{font-size:20px;font-weight:800;color:#38bdf8}
-.due-card.top .due-score{color:#818cf8}
-.due-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.due-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.due-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d}
-.due-tag.matchup{background:#1a3d2a;color:#4ade80;border-color:#2d5a3d}
-.due-tag.cold{background:#2a1a2a;color:#f0abfc;border-color:#5a2d5a}
-.due-tag.prop{background:#2a2a1a;color:#fde68a;border-color:#5a5a2d}
-.due-chart{display:flex;gap:2px;align-items:flex-end;height:28px;margin-top:6px}
-.due-chart-bar{width:8px;border-radius:2px 2px 0 0;min-height:3px}
-.due-prop{font-size:10px;color:#86efac;margin-top:4px}
-.due-filters{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
 
 /* ═══ DESKTOP TOP NAV (hidden on mobile) ═══ */
 .top-nav{display:none}
@@ -321,8 +300,6 @@ td.push{color:#9ca3af;font-weight:700}
   .bet-card{margin:0 0 8px}
   .slip-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
   .slip-card{margin:0 0 10px}
-  .due-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
-  .due-card{margin:0 0 8px}
   .top-nav{display:flex;gap:2px;align-items:center}
   .top-nav .tab-btn{padding:8px 16px;font-size:13px;border-radius:8px;border:none;background:none;color:#6b8f7b;cursor:pointer;font-weight:600;white-space:nowrap}
   .top-nav .tab-btn:hover{background:#1a3d2a}
@@ -376,7 +353,6 @@ td.push{color:#9ca3af;font-weight:700}
   .draft-controls{padding:6px 24px}
   .draft-tier-label{padding:8px 24px 4px}
   .streak-filters{padding:8px 24px}
-  .due-filters{padding:8px 24px}
   .early-banner{margin:14px 24px 0}
   .timestamp{padding:20px 24px}
   .empty{padding:40px 24px}
@@ -429,8 +405,7 @@ let st={
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",
-  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",parlayStat:"HR",
-  vsSP:[],
+  streakFilter:"all",drafted:new Set(),slipLegs:"3",
   lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
   lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
@@ -449,11 +424,13 @@ function cleanRows(rows){
   });
 }
 
+// Fix sheets where column headers contain data values
+// e.g. "player_name Adam Frazier Addison Barger" → "player_name"
 function normalizeKeys(rows){
   if(!rows||!rows.length)return rows;
   const firstKeys=Object.keys(rows[0]);
   const hasSpaceKeys=firstKeys.some(k=>k.includes(' '));
-  if(!hasSpaceKeys)return rows;
+  if(!hasSpaceKeys)return rows; // already clean
   console.log("🔧 Normalizing dirty column names:",firstKeys.slice(0,3).map(k=>k.slice(0,30)+"...").join(" | "));
   return rows.map(row=>{
     const clean={};
@@ -487,6 +464,7 @@ const avgColor=(v,l)=>!l?"#4ade80":v>=l?"#4ade80":"#f97316";
 const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
 const fmtOdds=v=>{if(!v&&v!==0)return"—";v=parseInt(v);return v>0?`+${v}`:`${v}`};
 
+// Combo stats: props that sum multiple game log columns
 const COMBO_STATS={
   "H+R+RBI":["H","R","RBI"],
   "H+R":["H","R"],
@@ -496,10 +474,12 @@ const COMBO_STATS={
   "BB+H":["BB","H"],
 };
 
+// Get metric value from a game log row — handles combo stats like H+R+RBI
 function getMetricVal(g,m){
   if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(g[k]),0);
   return toNum(g[m]);
 }
+// Get rolling average for a metric — handles combos by summing component averages
 function getRollingVal(row,prefix,m){
   if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(row[`${prefix}${k}`]),0);
   return toNum(row[`${prefix}${m}`]);
@@ -507,7 +487,7 @@ function getRollingVal(row,prefix,m){
 
 function hasLogs(name,isP){return(isP?st.pGameLogs:st.gameLogs).some(g=>g.player_name===name)}
 function getProps(name){if(!name||!st.props.length)return[];const n=name.toLowerCase();return st.props.filter(p=>(p.PLAYER_NAME||"").toLowerCase()===n)}
-function getPick(name){if(!name||!st.picks.length)return null;const n=name.toLowerCase();const allDates=[...new Set(st.picks.map(p=>p.DATE).filter(Boolean))].sort();const latest=allDates.length?allDates[allDates.length-1]:"";return st.picks.find(p=>(p.player||"").toLowerCase()===n&&p.DATE===latest)||null}
+function getPick(name){if(!name||!st.picks.length)return null;const n=name.toLowerCase();return st.picks.find(p=>(p.player||"").toLowerCase()===n)||null}
 
 function firstValidPlayer(arr){
   if(!arr||!arr.length)return "";
@@ -550,8 +530,6 @@ function switchMode(m){
 }
 function switchPicksView(v){st.picksView=v;render()}
 function setPropsMetric(m){st.propsMetric=m;render()}
-function setDueFilter(f){st.dueFilter=f;render()}
-function setParlayStat(s){st.parlayStat=s;render()}
 
 function getDingerCombos(board,legs){
   if(board.length<legs)return[];
@@ -583,6 +561,7 @@ function getDingerBoard(){
     const seasHR=toNum(p.Seas_HR);
     const l7HR=toNum(p.L7_HR);
     const l14HR=toNum(p.L14_HR);
+    // Compute AB and HR from game logs (not sheet columns)
     const pLogs=st.gameLogs.filter(g=>g.player_name===name);
     if(!pLogs.length)continue;
     const totalAB=pLogs.reduce((s,g)=>s+toNum(g.AB),0);
@@ -615,12 +594,14 @@ function getDingerBoard(){
 }
 
 // ═══ +EV ENGINE ═══
+// Convert American odds to implied probability (0-1)
 function impliedProb(odds){
   if(!odds&&odds!==0)return null;
   const o=parseInt(odds);if(isNaN(o))return null;
   return o<0?Math.abs(o)/(Math.abs(o)+100):100/(o+100);
 }
 
+// Calculate hit rate: how often player exceeds a line for a metric
 function getHitRate(name,metric,line,isP){
   const logs=(isP?st.pGameLogs:st.gameLogs).filter(g=>g.player_name===name);
   if(logs.length<3)return null;
@@ -632,14 +613,17 @@ function getHitRate(name,metric,line,isP){
   return{rate:hits/logs.length,hits,total:logs.length};
 }
 
+// Map prop METRIC names to game log column names
 function propToLogCol(metric){
-  if(COMBO_STATS[metric])return metric;
+  if(COMBO_STATS[metric])return metric; // combos handled by getHitRate directly
   const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
   return map[metric]||metric;
 }
 
+// Is this a pitcher prop?
 function isPitcherProp(metric){return(metric||"").startsWith("P_")}
 
+// Build full edge analysis for all props
 function getBestBets(){
   if(!st.props.length)return[];
   const bets=[];
@@ -659,10 +643,12 @@ function getBestBets(){
     const overIP=impliedProb(overOdds);
     const underIP=impliedProb(underOdds);
 
+    // Calculate edge for OVER
     let overEdge=null,underEdge=null;
     if(overIP!==null)overEdge=hr.rate-overIP;
     if(underIP!==null)underEdge=(1-hr.rate)-underIP;
 
+    // Pick the better side
     let lean,edge,odds,ip,hitRate;
     if(overEdge!==null&&underEdge!==null){
       if(overEdge>=underEdge){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.rate}
@@ -672,6 +658,7 @@ function getBestBets(){
 
     if(edge===null)continue;
 
+    // Find player's tonight info
     const pT=st.tonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||
              st.pTonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase())||{};
 
@@ -690,15 +677,18 @@ function getBestBets(){
       isP
     });
   }
+  // Sort by edge descending
   bets.sort((a,b)=>b.edge-a.edge);
   return bets;
 }
 
 // ═══ SMART SLIP GENERATOR ═══
+// Combines +EV edge, AI confidence, streaks, and hit rate into optimal Underdog slips
 function getConvictionLegs(){
   const bets=getBestBets().filter(b=>b.edge>0);
   if(!bets.length)return[];
 
+  // Build lookup maps for AI picks and streaks
   const aiMap=new Map();
   st.picks.forEach(pk=>{if(pk.player)aiMap.set(pk.player.toLowerCase(),pk)});
   const streakMap=new Map();
@@ -710,7 +700,9 @@ function getConvictionLegs(){
   const legs=[];
   for(const b of bets){
     const nl=b.name.toLowerCase();
+    // 1. EV score (0-10 scale, capped)
     const evScore=Math.min(b.edge*40,10);
+    // 2. AI confidence bonus
     let aiScore=0;
     const aiPick=aiMap.get(nl);
     if(aiPick){
@@ -718,8 +710,10 @@ function getConvictionLegs(){
       if(conf==="SMASH")aiScore=4;
       else if(conf==="STRONG")aiScore=2.5;
       else aiScore=1;
+      // Extra if AI picked same prop type
       if((aiPick.prop_type||"").toUpperCase()===b.metric.toUpperCase())aiScore+=2;
     }
+    // 3. Streak bonus
     let streakScore=0;
     const logCol=propToLogCol(b.metric);
     const sk=`${nl}|${logCol}`;
@@ -729,7 +723,9 @@ function getConvictionLegs(){
       else if(streak.streak>=5)streakScore=2;
       else if(streak.streak>=3)streakScore=1;
     }
+    // 4. Sample reliability (more games = more trust)
     const reliabilityScore=Math.min(b.total/10,2);
+    // 5. Hit rate strength
     const hrScore=b.hitRate>=0.8?2:b.hitRate>=0.65?1:0;
 
     const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
@@ -764,7 +760,9 @@ function generateSlips(legs,legCount){
     }
     for(let i=start;i<legs.length&&slips.length<maxIter;i++){
       const leg=legs[i];
+      // Unique players
       if(usedPlayers.has(leg.name.toLowerCase()))continue;
+      // Max 2 legs from same team/game
       const tc=teamCounts.get(leg.team)||0;
       if(tc>=2)continue;
 
@@ -777,6 +775,7 @@ function generateSlips(legs,legCount){
       teamCounts.set(leg.team,tc);
     }
   }
+  // Only use top legs to keep combo generation fast
   const pool=legs.slice(0,legCount<=3?15:legCount<=4?18:20);
   gen(0,[],new Set(),new Map());
   slips.sort((a,b)=>b.score-a.score);
@@ -832,6 +831,7 @@ function getStreaks(){
     const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===sType.key);
     streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"bat",desc:sType.desc,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
   }}
+  // Pitcher streaks
   const PITCH=[{key:"SO",threshold:6,label:"K Streak",emoji:"🔥",desc:"starts w/ 6+ K"},{key:"SO",threshold:8,label:"Elite K",emoji:"⚡",desc:"starts w/ 8+ K"},{key:"ER",threshold:2,label:"Lockdown",emoji:"🔒",compare:"lte",desc:"starts w/ ≤2 ER"},{key:"W",threshold:1,label:"Win Streak",emoji:"👑",desc:"consecutive wins"}];
   const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
   for(const sType of PITCH){for(const name of pNames){
@@ -846,296 +846,13 @@ function getStreaks(){
     const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===sType.key);
     streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:"",hand:"",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"pitch",desc:sType.desc,isLte,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
   }}
+  // Deduplicate: keep longest streak per player+stat
   const best={};for(const s of streaks){const k=`${s.player}|${s.stat}`;if(!best[k]||s.streak>best[k].streak||(s.streak===best[k].streak&&s.threshold>best[k].threshold))best[k]=s}
   const result=Object.values(best);result.sort((a,b)=>b.streak-a.streak);
   return result;
 }
 
-// ═══ THEY'RE DUE ENGINE ═══
-function getDueBoard(){
-  const due=[];
-  // --- BATTERS ---
-  const batStats=["H","HR","RBI","R","TB","SB","BB"];
-  const tonightNames=new Set(st.tonight.map(p=>p.player_name).filter(Boolean));
-  for(const name of tonightNames){
-    const logs=st.gameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(logs.length<7)continue; // need enough data
-    const pT=st.tonight.find(t=>t.player_name===name)||{};
-    const most=logs[0]||{};
-
-    for(const stat of batStats){
-      const seasAvg=toNum(most[`Seas_${stat}`]);
-      const l7Avg=toNum(most[`L7_${stat}`]);
-      if(seasAvg<=0)continue;
-
-      // Cold gap: how far below season average is L7?
-      const coldGap=(seasAvg-l7Avg)/seasAvg;
-      if(coldGap<0.25)continue; // need at least 25% below season avg
-
-      // Drought: consecutive games below season avg for this stat
-      let drought=0;
-      for(const g of logs){
-        if(toNum(g[stat])<seasAvg)drought++;
-        else break;
-      }
-      if(drought<2)continue;
-
-      // Matchup score
-      let matchupScore=0;
-      let matchupTags=[];
-      // Handedness split advantage
-      const hand=pT.opp_pitcher_hand||"R";
-      const vsAvg=toNum(pT.vs_OPP_AVG);
-      const vsOps=toNum(pT.vs_OPP_OPS);
-      if(vsAvg>=0.280){matchupScore+=3;matchupTags.push(`vs ${hand}HP: ${vsAvg.toFixed(3)}`)}
-      else if(vsAvg>=0.250){matchupScore+=1.5;matchupTags.push(`vs ${hand}HP: ${vsAvg.toFixed(3)}`)}
-      if(vsOps>=0.850)matchupScore+=2;
-      else if(vsOps>=0.750)matchupScore+=1;
-
-      // Opposing pitcher quality (check if starter is in our pitcher logs)
-      const oppPitcher=pT.opp_pitcher_name||"";
-      if(oppPitcher&&oppPitcher!=="TBD"){
-        const pLogs=st.pGameLogs.filter(g=>g.player_name===oppPitcher).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-        if(pLogs.length>0){
-          const pMost=pLogs[0];
-          const era=toNum(pMost.Seas_ERA);
-          const whip=toNum(pMost.Seas_WHIP);
-          if(era>=4.50){matchupScore+=3;matchupTags.push(`vs ${oppPitcher} (${era.toFixed(2)} ERA)`)}
-          else if(era>=4.00){matchupScore+=1.5;matchupTags.push(`vs ${oppPitcher} (${era.toFixed(2)} ERA)`)}
-          if(whip>=1.40)matchupScore+=1.5;
-          else if(whip>=1.25)matchupScore+=0.5;
-        }
-      }
-
-      // Venue boost (Coors)
-      const venue=pT.venue_tonight||"";
-      if(venue.includes("Coors")){matchupScore+=2;matchupTags.push("🏔️ Coors")}
-
-      // DK prop overlay
-      const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===stat);
-      let propTag=null;
-      if(prop){propTag={line:prop.DK_LINE,overOdds:parseInt(prop.OVER_ODDS)||null}}
-
-      // Total score: cold gap importance + drought length + matchup quality
-      const coldScore=coldGap*15; // 0-15 range (25%-100% below)
-      const droughtScore=Math.min(drought*1.5,10);
-      const totalScore=coldScore+droughtScore+matchupScore;
-
-      if(totalScore<5)continue; // minimum threshold
-
-      const recentVals=logs.slice(0,7).map(g=>toNum(g[stat]));
-
-      due.push({
-        name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",
-        pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",
-        venue,stat,type:"bat",
-        seasAvg:seasAvg.toFixed(2),l7Avg:l7Avg.toFixed(2),
-        coldGap:(coldGap*100).toFixed(0),
-        drought,matchupScore,matchupTags,
-        propTag,recentVals,totalScore
-      });
-    }
-  }
-
-  // --- PITCHERS ---
-  const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
-  for(const name of pNames){
-    const logs=st.pGameLogs.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(logs.length<3)continue;
-    const pT=st.pTonight.find(t=>t.player_name===name)||{};
-    const most=logs[0]||{};
-
-    // Pitcher "due" — strikeout pitcher in a slump, ace with bad recent ERA
-    const pStats=[
-      {key:"SO",label:"Strikeouts",higher:true},
-      {key:"DK_FP",label:"Fantasy Pts",higher:true},
-      {key:"UD_FP",label:"UD Fantasy",higher:true},
-    ];
-
-    for(const ps of pStats){
-      const seasAvg=toNum(most[`Seas_${ps.key}`]);
-      const l3Avg=toNum(most[`L3_${ps.key}`]);
-      if(seasAvg<=0)continue;
-
-      const coldGap=(seasAvg-l3Avg)/seasAvg;
-      if(coldGap<0.20)continue;
-
-      let drought=0;
-      for(const g of logs){
-        if(toNum(g[ps.key])<seasAvg)drought++;
-        else break;
-      }
-      if(drought<2)continue;
-
-      // Matchup: opposing team's batting quality (use schedule to find opp)
-      let matchupScore=0;
-      let matchupTags=[];
-      const oppAbbr=pT.opp_abbr_tonight||"";
-
-      // Check opponent team batting average from tonight's batters
-      if(oppAbbr){
-        const oppBatters=st.tonight.filter(b=>b.team_abbr===oppAbbr);
-        if(oppBatters.length>0){
-          const teamSeasAvg=oppBatters.reduce((s,b)=>s+toNum(b.Seas_H),0)/oppBatters.length;
-          if(teamSeasAvg<0.8){matchupScore+=3;matchupTags.push(`vs weak ${oppAbbr} lineup`)}
-          else if(teamSeasAvg<1.0){matchupScore+=1.5;matchupTags.push(`vs avg ${oppAbbr} lineup`)}
-        }
-      }
-
-      // Home/away advantage
-      const ha=pT.home_away_tonight||"";
-      if(ha==="Home"){matchupScore+=1;matchupTags.push("🏠 Home")}
-
-      const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC==="P_SO");
-      let propTag=null;
-      if(prop){propTag={line:prop.DK_LINE,overOdds:parseInt(prop.OVER_ODDS)||null}}
-
-      const coldScore=coldGap*15;
-      const droughtScore=Math.min(drought*2,10);
-      const totalScore=coldScore+droughtScore+matchupScore;
-
-      if(totalScore<4)continue;
-
-      const recentVals=logs.slice(0,7).map(g=>toNum(g[ps.key]));
-
-      due.push({
-        name,team:pT.team_abbr||"",opp:oppAbbr,
-        pitcher:"",hand:"",
-        venue:pT.venue_tonight||"",stat:ps.key,type:"pitch",
-        seasAvg:seasAvg.toFixed(2),l7Avg:l3Avg.toFixed(2),
-        coldGap:(coldGap*100).toFixed(0),
-        drought,matchupScore,matchupTags,
-        propTag,recentVals,totalScore
-      });
-    }
-  }
-
-  // Deduplicate: keep best stat per player
-  const best={};
-  for(const d of due){
-    const k=d.name;
-    if(!best[k]||d.totalScore>best[k].totalScore)best[k]=d;
-  }
-  const result=Object.values(best);
-  result.sort((a,b)=>b.totalScore-a.totalScore);
-  return result;
-}
-
-function dueMiniChart(vals,seasAvg){
-  const mx=Math.max(...vals,seasAvg+1);
-  return vals.slice().reverse().map(v=>{
-    const h=Math.max(3,(v/mx)*26);
-    return`<div class="due-chart-bar" style="height:${h}px;background:${v>=seasAvg?'#22c55e':'#38bdf8'};opacity:.85"></div>`;
-  }).join("");
-}
-
 // ═══ DRAFT CHEAT SHEET ═══
-// ═══ VS STARTING PITCHER (career) ═══
-function getVsSP(playerName){
-  if(!playerName||!st.vsSP.length)return null;
-  const n=playerName.toLowerCase();
-  return st.vsSP.find(v=>(v.player_name||"").toLowerCase()===n)||null;
-}
-
-// ═══ STAT PARLAY ENGINE ═══
-function getStatParlayBoard(stat){
-  const rows=[];
-  const isPS=stat.startsWith("P_");
-  const logCol=propToLogCol(stat);
-  const src=isPS?st.pTonight:st.tonight;
-  const logSrc=isPS?st.pGameLogs:st.gameLogs;
-
-  for(const p of src){
-    const name=p.player_name;if(!name)continue;
-    const logs=logSrc.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-    if(logs.length<3)continue;
-    const most=logs[0]||{};
-
-    // Find DK prop for this stat
-    const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===stat);
-    if(!prop)continue; // need a prop line to parlay
-
-    const dkLine=parseFloat(prop.DK_LINE);if(isNaN(dkLine))continue;
-    const overOdds=parseInt(prop.OVER_ODDS);
-    const underOdds=parseInt(prop.UNDER_ODDS);
-
-    // Hit rate over the line
-    const combo=COMBO_STATS[logCol];
-    const hitsOver=combo
-      ?logs.filter(g=>combo.reduce((s,k)=>s+toNum(g[k]),0)>dkLine).length
-      :logs.filter(g=>toNum(g[logCol])>dkLine).length;
-    const hitRate=hitsOver/logs.length;
-
-    // EV edge
-    const overIP=impliedProb(overOdds);
-    const edge=overIP!==null?hitRate-overIP:0;
-
-    // Season and recent averages
-    const seasAvg=getRollingVal(most,"Seas_",logCol);
-    const l7Avg=isPS?getRollingVal(most,"L3_",logCol):getRollingVal(most,"L7_",logCol);
-
-    // Matchup score
-    let matchupScore=0;
-    if(!isPS){
-      const vsAvg=toNum(p.vs_OPP_AVG);
-      if(vsAvg>=0.280)matchupScore+=2;
-      else if(vsAvg>=0.250)matchupScore+=1;
-      // Career vs SP
-      const vsp=getVsSP(name);
-      if(vsp){
-        const cAB=toNum(vsp.AB);const cAVG=toNum(vsp.AVG);
-        if(cAB>=5&&cAVG>=0.300)matchupScore+=2;
-        else if(cAB>=5&&cAVG>=0.250)matchupScore+=1;
-      }
-    }
-
-    // Composite score: hit rate is king, edge matters, matchup bonus
-    const score=hitRate*40+Math.max(edge,0)*30+matchupScore*3+(l7Avg>seasAvg?5:0);
-
-    rows.push({
-      name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
-      pitcher:p.opp_pitcher_name||p.opp_starter||"TBD",
-      hand:p.opp_pitcher_hand||"?",
-      venue:p.venue_tonight||"",
-      stat,dkLine,overOdds,underOdds,
-      hitRate,hitsOver,total:logs.length,
-      edge,seasAvg,l7Avg,matchupScore,score
-    });
-  }
-  rows.sort((a,b)=>b.score-a.score);
-  return rows;
-}
-
-function getStatParlayCombos(board,legs){
-  if(board.length<legs)return[];
-  const combos=[];
-  const pool=board.slice(0,legs<=2?12:15);
-  function gen(start,current){
-    if(current.length===legs){
-      const teams=current.map(d=>d.team);
-      const uniqueTeams=new Set(teams);
-      // Max 2 from same team
-      const teamCounts={};
-      for(const t of teams){teamCounts[t]=(teamCounts[t]||0)+1;if(teamCounts[t]>2)return}
-      const score=current.reduce((s,d)=>s+d.score,0);
-      const avgHitRate=current.reduce((s,d)=>s+d.hitRate,0)/legs;
-      const avgEdge=current.reduce((s,d)=>s+d.edge,0)/legs;
-      combos.push({players:current.slice(),score,avgHitRate,avgEdge,teams:[...uniqueTeams]});
-      return;
-    }
-    for(let i=start;i<pool.length&&combos.length<300;i++){
-      // Unique players
-      if(current.some(c=>c.name===pool[i].name))continue;
-      current.push(pool[i]);
-      gen(i+1,current);
-      current.pop();
-    }
-  }
-  gen(0,[]);
-  combos.sort((a,b)=>b.score-a.score);
-  return combos.slice(0,8);
-}
-
 function getDraftBoard(){
   const board=[];
   const aiMap=new Map();
@@ -1149,6 +866,7 @@ function getDraftBoard(){
     const sSB=toNum(most.Seas_SB),sBB=toNum(most.Seas_BB);
     const s3B=Math.max(0,(sTB-sH-s2B-3*sHR)/2)||0;
     const s1B=Math.max(0,sH-s2B-s3B-sHR)||0;
+    // Check for engine-computed UD_FP first, fall back to client-side calc
     const projUD=toNum(most.Seas_UD_FP)||(s1B*3+s2B*6+s3B*8+sHR*10+sBB*3+sRBI*2+sR*2+sSB*4)||0;
     const l7H=toNum(most.L7_H),l7HR=toNum(most.L7_HR),l72B=toNum(most.L7_2B);
     const l7TB=toNum(most.L7_TB),l7RBI=toNum(most.L7_RBI),l7R=toNum(most.L7_R);
@@ -1213,7 +931,7 @@ function render(){
   const maxLog=Math.max(...last10.map(g=>getMetricVal(g,metric)),lineNum||0,1);
 
   const metricOpts=curMetrics.map(m=>`<option value="${m}" ${m===metric?"selected":""}>${m}</option>`).join("");
-  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div><div class="bar-date" style="color:#6b8f7b;margin-top:0">${g.opp_abbr?(g.home_away==="Home"?"vs":"@")+g.opp_abbr:""}</div></div>`}).join("");
+  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div></div>`}).join("");
   const avgs=[{l:"Season",v:seasAvg},{l:midLbl,v:midAvg},{l:shortLbl,v:shortAvg},{l:"Last",v:lastGame}].map(a=>`<div class="avg-card" style="border:1px solid ${lineNum&&a.v>=lineNum?"#22c55e44":lineNum?"#ef444433":"#2d5a3d"}"><div class="avg-label">${a.l}</div><div class="avg-val" style="color:${avgColor(a.v,lineNum)}">${a.v.toFixed(2)}</div></div>`).join("");
 
   const sT={};let statStrip="";
@@ -1226,6 +944,31 @@ function render(){
     sT.WHIP=rIP>0?(((sT.H||0)+(sT.BB||0))/rIP).toFixed(2):"0.00";
     sT.K9=rIP>0?((sT.SO*9)/rIP).toFixed(1):"0.0";
     statStrip=["W","L","ERA","WHIP","SO","K9","IP","DK_FP"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${sT[s]}</div></div>`).join("");
+  }else if(st.picksView==="dingers"){
+    const db=getDingerBoard();
+    if(!db.length){picksHTML=`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`}
+    else{
+      picksHTML=`<div class="dinger-header"><div class="dinger-title">💣 Tonight's Dinger Board</div></div>
+      <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
+      picksHTML+=db.map((d,i)=>{
+        const isTop=i<3;
+        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
+        const ratePct=(d.hrRate*100).toFixed(1);
+        const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
+        return`<div class="dinger-card ${isTop?"top3":""}">
+          <div class="dinger-left">
+            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${esc(d.name)}</span></div>
+            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
+            <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
+          </div>
+          <div class="dinger-right">
+            <div class="dinger-rate">${ratePct}%</div>
+            <div class="dinger-sub">HR/AB · 1 per ${abPerHR} AB</div>
+            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
+          </div>
+        </div>`;
+      }).join("");
+    }
   }else{
     ["H","HR","RBI","R","SB","BB","TB","SO","AB"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
     sT.AVG=sT.AB>0?(sT.H/sT.AB).toFixed(3):".000";
@@ -1239,6 +982,7 @@ function render(){
   const wx=st.weather.find(w=>w.venue_name===venue)||{};
 
   const sp=curSplits.find(s=>s.player_name===player)||{};
+  // Handle combo stats for Home/Away (sum component splits)
   const hV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Home`]),0):toNum(sp[`${metric}_Home`]);
   const aV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Away`]),0):toNum(sp[`${metric}_Away`]);
   const hGames=toNum(sp.Home_GAMES)||toNum(sp['Home_GAMES']);
@@ -1268,6 +1012,7 @@ function render(){
   // === PICKS TAB ===
   picksHTML="";
   if(st.picksView==="bets"){
+    // ═══ BEST BETS (+EV) ═══
     const allBets=getBestBets();
     const posEV=allBets.filter(b=>b.edge>0);
     const elite=posEV.filter(b=>b.edge>=0.15);
@@ -1283,7 +1028,7 @@ function render(){
         const ipPct=(b.impliedProb*100).toFixed(0);
         const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
         const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
-        return`<div class="bet-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
+        return`<div class="bet-card ${cls}">
           <div class="bet-left">
             <div class="bet-name">${esc(b.name)}</div>
             <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
@@ -1305,6 +1050,7 @@ function render(){
       picksHTML+=`</div>`;
     }
   }else if(st.picksView==="slips"){
+    // ═══ SMART SLIP GENERATOR ═══
     const result=getSmartSlips();
     const {legs}=result;
     if(!legs.length){picksHTML=`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
@@ -1353,19 +1099,15 @@ function render(){
       }
     }
   }else if(st.picksView==="picks"){
-    // Only show most recent date's picks
-    const allDates=[...new Set(st.picks.map(p=>p.DATE).filter(Boolean))].sort();
-    const latestDate=allDates.length?allDates[allDates.length-1]:"";
-    const todayPicks=latestDate?st.picks.filter(p=>p.DATE===latestDate):st.picks;
-    if(!todayPicks.length){picksHTML=`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
+    if(!st.picks.length){picksHTML=`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
     else{
-      const hits=todayPicks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="YES"||h==="TRUE"}).length;
-      const miss=todayPicks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="NO"||h==="FALSE"}).length;
-      const smash=todayPicks.filter(p=>(p.confidence||"").toUpperCase()==="SMASH").length;
+      const hits=st.picks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="YES"||h==="TRUE"}).length;
+      const miss=st.picks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="NO"||h==="FALSE"}).length;
+      const smash=st.picks.filter(p=>(p.confidence||"").toUpperCase()==="SMASH").length;
       const tracked=hits+miss;
-      picksHTML=`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"#22c55e":"#ef4444"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:#6b8f7b">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
+      picksHTML=`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${st.picks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"#22c55e":"#ef4444"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:#6b8f7b">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
       picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=todayPicks.map(pk=>{
+      picksHTML+=st.picks.map(pk=>{
         const c=(pk.confidence||"").toUpperCase(),cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"";
         const h=(pk.HIT||"").toString().toUpperCase();
         const hasR=pk.ACTUAL_STAT!=null&&pk.ACTUAL_STAT!==""&&!isNaN(pk.ACTUAL_STAT);
@@ -1410,6 +1152,7 @@ function render(){
       }
     }
   }else if(st.picksView==="streaks"){
+    // ═══ STREAKS ═══
     const allStreaks=getStreaks();
     const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
     if(!fil.length){picksHTML=`<div class="empty" style="padding:40px">${allStreaks.length?`No ${st.streakFilter} streaks found.`:"No active streaks yet. Need 3+ games of data."}</div>`}
@@ -1435,106 +1178,8 @@ function render(){
       }).join("");
       picksHTML+=`</div>`;
     }
-  }else if(st.picksView==="due"){
-    // ═══ THEY'RE DUE ═══
-    const allDue=getDueBoard();
-    const fil=st.dueFilter==="all"?allDue:st.dueFilter==="bat"?allDue.filter(d=>d.type==="bat"):allDue.filter(d=>d.type==="pitch");
-    if(!fil.length){picksHTML=`<div class="empty" style="padding:40px">${allDue.length?`No ${st.dueFilter} candidates found.`:"No \"due\" candidates found. Need 7+ games of data and a cold streak."}</div>`}
-    else{
-      const withMatchup=fil.filter(d=>d.matchupScore>=2).length;
-      const withProp=fil.filter(d=>d.propTag).length;
-      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val" style="color:#38bdf8">${fil.length}</div><div class="bs-lbl">DUE UP</div></div><div class="bs-card"><div class="bs-val" style="color:#818cf8">${withMatchup}</div><div class="bs-lbl">+ MATCHUP</div></div><div class="bs-card"><div class="bs-val" style="color:#fde68a">${withProp}</div><div class="bs-lbl">HAS PROP</div></div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Cold streak + strong season numbers + tonight's matchup = regression coming. Buy low.</div>`;
-      picksHTML+=`<div class="due-filters"><div class="pf-btn ${st.dueFilter==="all"?"active":""}" onclick="setDueFilter('all')">All</div><div class="pf-btn ${st.dueFilter==="bat"?"active":""}" onclick="setDueFilter('bat')">🏏 Batters</div><div class="pf-btn ${st.dueFilter==="pitch"?"active":""}" onclick="setDueFilter('pitch')">⚾ Pitchers</div></div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=fil.map((d,i)=>{
-        const isTop=i<3;
-        const tags=[];
-        tags.push(`<span class="due-tag cold">❄️ ${d.coldGap}% below avg</span>`);
-        tags.push(`<span class="due-tag cold">📉 ${d.drought}G drought</span>`);
-        d.matchupTags.forEach(mt=>tags.push(`<span class="due-tag matchup">✅ ${esc(mt)}</span>`));
-        if(d.propTag)tags.push(`<span class="due-tag prop">🎲 DK ${d.stat} ${d.propTag.line}${d.propTag.overOdds?" O:"+fmtOdds(d.propTag.overOdds):""}</span>`);
-
-        return`<div class="due-card ${isTop?"top":""} ${d.type==="pitch"?"pitcher":""}" onclick="streakToDash('${esc(d.name)}')">
-          <div class="due-left">
-            <div><span style="font-size:14px;margin-right:4px">🧊</span><span class="due-name">${esc(d.name)}</span><span class="due-label">${d.stat}</span></div>
-            <div class="due-meta">${esc(d.team)} vs ${d.type==="pitch"?esc(d.opp):esc(d.pitcher)+" ("+d.hand+"HP)"} · ${esc(d.venue)}</div>
-            <div class="due-meta">Season: ${d.seasAvg}/g → L7: ${d.l7Avg}/g</div>
-            <div class="due-chart">${dueMiniChart(d.recentVals,parseFloat(d.seasAvg))}</div>
-            <div class="due-tags">${tags.join("")}</div>
-          </div>
-          <div class="due-right">
-            <div class="due-score">${d.totalScore.toFixed(0)}</div>
-            <div class="due-sub">due score</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="parlays"){
-    // ═══ STAT PARLAYS ═══
-    const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>!m.startsWith("P_")&&m!=="Batter_SO");
-    const availStats=["HR","H","RBI","R","TB","SB","BB"].filter(s=>allPropStats.includes(s));
-    const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
-    const board=getStatParlayBoard(pStat);
-    const combos2=getStatParlayCombos(board,2);
-    const combos3=getStatParlayCombos(board,3);
-
-    picksHTML=`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#818cf8;font-size:13px;font-weight:700">🎯 Stat Parlays</div><div style="color:#6b8f7b;font-size:10px">${board.length} players w/ ${pStat} prop</div></div>`;
-    picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Pick a stat, see the best same-stat parlay combos ranked by hit rate + EV edge + matchup.</div>`;
-    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="HR"?"💣":""}${s==="SB"?"💨":""}${s==="H"?"🎯":""}${s==="RBI"?"💰":""}${s==="R"?"🏃":""}${s==="TB"?"⚡":""}${s==="BB"?"👁️":""} ${s}</div>`).join("")}</div>`;
-
-    if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No DK props available. Run the engine first.</div>`}
-    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${pStat} parlays. Need 3+ games.</div>`}
-    else{
-      // Top players board
-      picksHTML+=`<div style="padding:8px 16px 4px;color:#86efac;font-size:11px;font-weight:600">TOP ${pStat} PLAYS — Ranked Board</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=board.slice(0,12).map((d,i)=>{
-        const hrPct=(d.hitRate*100).toFixed(0);
-        const edgePct=d.edge>0?`+${(d.edge*100).toFixed(0)}%`:`${(d.edge*100).toFixed(0)}%`;
-        const isTop=i<3;
-        return`<div class="due-card ${isTop?"top":""}" onclick="streakToDash('${esc(d.name)}')">
-          <div class="due-left">
-            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${esc(d.name)}</span></div>
-            <div class="due-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)</div>
-            <div class="due-tags">
-              <span class="due-tag" style="background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d">${hrPct}% hit rate</span>
-              ${d.edge>0?`<span class="due-tag matchup">${edgePct} EV</span>`:""}
-              <span class="due-tag prop">DK ${d.dkLine} O:${fmtOdds(d.overOdds)}</span>
-              ${d.matchupScore>=2?`<span class="due-tag matchup">✅ Matchup</span>`:""}
-            </div>
-            <div class="due-meta" style="margin-top:4px">Seas: ${d.seasAvg.toFixed(2)}/g · L7: ${d.l7Avg.toFixed(2)}/g · ${d.hitsOver}/${d.total} over ${d.dkLine}</div>
-          </div>
-          <div class="due-right">
-            <div class="due-score" style="color:${isTop?"#818cf8":"#38bdf8"}">${d.score.toFixed(0)}</div>
-            <div class="due-sub">score</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-
-      // 2-Leg Combos
-      if(combos2.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 2-Leg ${pStat} Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos2.map((c,i)=>{
-          const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
-        }).join("");
-        picksHTML+=`</div></div>`;
-      }
-
-      // 3-Leg Combos
-      if(combos3.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg ${pStat} Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos3.map((c,i)=>{
-          const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
-        }).join("");
-        picksHTML+=`</div></div>`;
-      }
-    }
   }else if(st.picksView==="draft"){
+    // ═══ DRAFT ═══
     const board=getDraftBoard();
     const available=board.filter(p=>!st.drafted.has(p.name));
     const draftedCount=st.drafted.size;
@@ -1661,7 +1306,7 @@ function render(){
       ${isP?`<div class="split-card"><span class="split-title">Season Rates</span>${pHasLogs?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${sT.ERA||"—"}</div><div class="lbl">ERA</div></div><div class="matchup-stat"><div class="val">${sT.WHIP||"—"}</div><div class="lbl">WHIP</div></div><div class="matchup-stat"><div class="val">${sT.K9||"—"}</div><div class="lbl">K/9</div></div><div class="matchup-stat"><div class="val">${sT.SO||"—"}</div><div class="lbl">K</div></div></div>`:`<div class="no-data">No stats yet</div>`}</div>`:`<div class="split-card"><span class="split-title">vs ${oppH}HP Splits</span>${vsAvg||vsOps?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${vsAvg?vsAvg.toFixed(3):"—"}</div><div class="lbl">AVG</div></div><div class="matchup-stat"><div class="val">${vsOps?vsOps.toFixed(3):"—"}</div><div class="lbl">OPS</div></div><div class="matchup-stat"><div class="val">${vsHr||"—"}</div><div class="lbl">HR</div></div><div class="matchup-stat"><div class="val">${vsSo||"—"}</div><div class="lbl">SO</div></div></div>`:`<div class="no-data">No split data yet</div>`}</div>`}
       <div class="split-card"><span class="split-title">Home / Away</span><div class="mini-bars-container">${haBars}</div></div>
     </div></div>
-    <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">⚾ vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">⚾ vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>${(()=>{const vsp=getVsSP(player);if(!vsp||!toNum(vsp.AB))return"";return`<div class="matchup-stats" style="margin-top:8px"><div class="matchup-stat"><div class="val">${vsp.AVG||"—"}</div><div class="lbl">Career AVG</div></div><div class="matchup-stat"><div class="val">${vsp.AB||"—"}</div><div class="lbl">AB</div></div><div class="matchup-stat"><div class="val">${vsp.H||"—"}</div><div class="lbl">H</div></div><div class="matchup-stat"><div class="val">${vsp.HR||"—"}</div><div class="lbl">HR</div></div></div><div style="color:#6b8f7b;font-size:9px;margin-top:4px">Career: ${vsp.H||0}-for-${vsp.AB||0}${toNum(vsp.HR)?" · "+vsp.HR+" HR":""}${toNum(vsp.BB)?" · "+vsp.BB+" BB":""}${toNum(vsp.SO)?" · "+vsp.SO+" K":""}</div>`})()}`}</div></div>
+    <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">⚾ vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">⚾ vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>`}</div></div>
     ${wx.temp_f?`<div class="section"><div class="weather-card"><div class="card-title">🌤️ Weather</div><div class="weather-row"><span class="weather-key">Temp</span><span class="weather-val">${wx.temp_f}°F (feels ${wx.feels_like_f}°F)</span></div><div class="weather-row"><span class="weather-key">Wind</span><span class="weather-val">${wx.wind_mph} mph ${wx.wind_dir}</span></div><div class="weather-row"><span class="weather-key">Condition</span><span class="weather-val">${wx.description||"—"}</span></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="weather-row"><span class="weather-key">🏟️</span><span class="weather-val" style="color:#4ade80">Dome — weather irrelevant</span></div>`:""}</div></div>`:""}
     ${lineNum&&pHasLogs?`<div class="section dash-full"><div class="card"><div class="card-title">📊 Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
     </div>
@@ -1682,9 +1327,7 @@ function render(){
       <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">🤖 AI Picks</div>
       <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">⚾ Draft</div>
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
-      <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">🧊 Due</div>
       <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">💣 Dingers</div>
-      <div class="sub-tab ${st.picksView==="parlays"?"active":""}" onclick="switchPicksView('parlays')">🎯 Parlays</div>
       <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">🎲 Props</div>
     </div>
     <div class="cards-wrap">${picksHTML}</div>
@@ -1769,9 +1412,8 @@ Promise.all([
   fetchSheet("Pitcher_Game_Logs").catch(()=>[]),
   fetchSheet("Pitcher_Home_Away").catch(()=>[]),
   fetchSheet("Daily_Picks").catch(()=>[]),
-  fetchSheet("DK_Player_Props").catch(()=>[]),
-  fetchSheet("Batter_vs_SP").catch(()=>[])
-]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,vsSP])=>{
+  fetchSheet("DK_Player_Props").catch(()=>[])
+]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props])=>{
   st.tonight=normalizeKeys(cleanRows(tonight));
   st.gameLogs=normalizeKeys(cleanRows(logs));
   st.splits=normalizeKeys(cleanRows(splits));
@@ -1783,7 +1425,6 @@ Promise.all([
   st.pSplits=normalizeKeys(cleanRows(pSplits));
   st.picks=normalizeKeys(cleanRows(picks));
   st.props=normalizeKeys(cleanRows(props));
-  st.vsSP=normalizeKeys(cleanRows(vsSP));
   st.loading=false;
 
   st.mode="batter";st.metric="H";
