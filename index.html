@@ -507,7 +507,7 @@ function getRollingVal(row,prefix,m){
 
 function hasLogs(name,isP){return(isP?st.pGameLogs:st.gameLogs).some(g=>g.player_name===name)}
 function getProps(name){if(!name||!st.props.length)return[];const n=name.toLowerCase();return st.props.filter(p=>(p.PLAYER_NAME||"").toLowerCase()===n)}
-function getPick(name){if(!name||!st.picks.length)return null;const n=name.toLowerCase();return st.picks.find(p=>(p.player||"").toLowerCase()===n)||null}
+function getPick(name){if(!name||!st.picks.length)return null;const n=name.toLowerCase();const allDates=[...new Set(st.picks.map(p=>p.DATE).filter(Boolean))].sort();const latest=allDates.length?allDates[allDates.length-1]:"";return st.picks.find(p=>(p.player||"").toLowerCase()===n&&p.DATE===latest)||null}
 
 function firstValidPlayer(arr){
   if(!arr||!arr.length)return "";
@@ -1473,17 +1473,19 @@ function render(){
     }
   }else if(st.picksView==="parlays"){
     // ═══ STAT PARLAYS ═══
-    const pStat=st.parlayStat;
+    const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>!m.startsWith("P_")&&m!=="Batter_SO");
+    const availStats=["HR","H","RBI","R","TB","SB","BB"].filter(s=>allPropStats.includes(s));
+    const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
     const board=getStatParlayBoard(pStat);
     const combos2=getStatParlayCombos(board,2);
     const combos3=getStatParlayCombos(board,3);
-    const availStats=["HR","H","RBI","R","TB","SB","BB"];
 
     picksHTML=`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#818cf8;font-size:13px;font-weight:700">🎯 Stat Parlays</div><div style="color:#6b8f7b;font-size:10px">${board.length} players w/ ${pStat} prop</div></div>`;
     picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Pick a stat, see the best same-stat parlay combos ranked by hit rate + EV edge + matchup.</div>`;
     picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="HR"?"💣":""}${s==="SB"?"💨":""}${s==="H"?"🎯":""}${s==="RBI"?"💰":""}${s==="R"?"🏃":""}${s==="TB"?"⚡":""}${s==="BB"?"👁️":""} ${s}</div>`).join("")}</div>`;
 
-    if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No DK ${pStat} props available. Run the engine first.</div>`}
+    if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No DK props available. Run the engine first.</div>`}
+    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${pStat} parlays. Need 3+ games.</div>`}
     else{
       // Top players board
       picksHTML+=`<div style="padding:8px 16px 4px;color:#86efac;font-size:11px;font-weight:600">TOP ${pStat} PLAYS — Ranked Board</div>`;
