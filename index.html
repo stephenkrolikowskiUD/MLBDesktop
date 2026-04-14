@@ -1105,7 +1105,7 @@ function render(){
   const maxLog=Math.max(...last10.map(g=>getMetricVal(g,metric)),lineNum||0,1);
 
   const metricOpts=curMetrics.map(m=>`<option value="${m}" ${m===metric?"selected":""}>${m}</option>`).join("");
-  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div></div>`}).join("");
+  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div><div class="bar-date" style="color:#6b8f7b;margin-top:0">${g.opp_abbr||""}</div></div>`}).join("");
   const avgs=[{l:"Season",v:seasAvg},{l:midLbl,v:midAvg},{l:shortLbl,v:shortAvg},{l:"Last",v:lastGame}].map(a=>`<div class="avg-card" style="border:1px solid ${lineNum&&a.v>=lineNum?"#22c55e44":lineNum?"#ef444433":"#2d5a3d"}"><div class="avg-label">${a.l}</div><div class="avg-val" style="color:${avgColor(a.v,lineNum)}">${a.v.toFixed(2)}</div></div>`).join("");
 
   const sT={};let statStrip="";
