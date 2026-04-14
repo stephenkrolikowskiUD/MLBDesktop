@@ -1283,7 +1283,7 @@ function render(){
         const ipPct=(b.impliedProb*100).toFixed(0);
         const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
         const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
-        return`<div class="bet-card ${cls}">
+        return`<div class="bet-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
           <div class="bet-left">
             <div class="bet-name">${esc(b.name)}</div>
             <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
