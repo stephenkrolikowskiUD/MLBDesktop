@@ -429,7 +429,8 @@ let st={
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",
-  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",
+  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",parlayStat:"HR",
+  vsSP:[],
   lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
   lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
@@ -550,6 +551,7 @@ function switchMode(m){
 function switchPicksView(v){st.picksView=v;render()}
 function setPropsMetric(m){st.propsMetric=m;render()}
 function setDueFilter(f){st.dueFilter=f;render()}
+function setParlayStat(s){st.parlayStat=s;render()}
 
 function getDingerCombos(board,legs){
   if(board.length<legs)return[];
@@ -1028,6 +1030,112 @@ function dueMiniChart(vals,seasAvg){
 }
 
 // ═══ DRAFT CHEAT SHEET ═══
+// ═══ VS STARTING PITCHER (career) ═══
+function getVsSP(playerName){
+  if(!playerName||!st.vsSP.length)return null;
+  const n=playerName.toLowerCase();
+  return st.vsSP.find(v=>(v.player_name||"").toLowerCase()===n)||null;
+}
+
+// ═══ STAT PARLAY ENGINE ═══
+function getStatParlayBoard(stat){
+  const rows=[];
+  const isPS=stat.startsWith("P_");
+  const logCol=propToLogCol(stat);
+  const src=isPS?st.pTonight:st.tonight;
+  const logSrc=isPS?st.pGameLogs:st.gameLogs;
+
+  for(const p of src){
+    const name=p.player_name;if(!name)continue;
+    const logs=logSrc.filter(g=>g.player_name===name).sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
+    if(logs.length<3)continue;
+    const most=logs[0]||{};
+
+    // Find DK prop for this stat
+    const prop=st.props.find(pr=>(pr.PLAYER_NAME||"").toLowerCase()===name.toLowerCase()&&pr.METRIC===stat);
+    if(!prop)continue; // need a prop line to parlay
+
+    const dkLine=parseFloat(prop.DK_LINE);if(isNaN(dkLine))continue;
+    const overOdds=parseInt(prop.OVER_ODDS);
+    const underOdds=parseInt(prop.UNDER_ODDS);
+
+    // Hit rate over the line
+    const combo=COMBO_STATS[logCol];
+    const hitsOver=combo
+      ?logs.filter(g=>combo.reduce((s,k)=>s+toNum(g[k]),0)>dkLine).length
+      :logs.filter(g=>toNum(g[logCol])>dkLine).length;
+    const hitRate=hitsOver/logs.length;
+
+    // EV edge
+    const overIP=impliedProb(overOdds);
+    const edge=overIP!==null?hitRate-overIP:0;
+
+    // Season and recent averages
+    const seasAvg=getRollingVal(most,"Seas_",logCol);
+    const l7Avg=isPS?getRollingVal(most,"L3_",logCol):getRollingVal(most,"L7_",logCol);
+
+    // Matchup score
+    let matchupScore=0;
+    if(!isPS){
+      const vsAvg=toNum(p.vs_OPP_AVG);
+      if(vsAvg>=0.280)matchupScore+=2;
+      else if(vsAvg>=0.250)matchupScore+=1;
+      // Career vs SP
+      const vsp=getVsSP(name);
+      if(vsp){
+        const cAB=toNum(vsp.AB);const cAVG=toNum(vsp.AVG);
+        if(cAB>=5&&cAVG>=0.300)matchupScore+=2;
+        else if(cAB>=5&&cAVG>=0.250)matchupScore+=1;
+      }
+    }
+
+    // Composite score: hit rate is king, edge matters, matchup bonus
+    const score=hitRate*40+Math.max(edge,0)*30+matchupScore*3+(l7Avg>seasAvg?5:0);
+
+    rows.push({
+      name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
+      pitcher:p.opp_pitcher_name||p.opp_starter||"TBD",
+      hand:p.opp_pitcher_hand||"?",
+      venue:p.venue_tonight||"",
+      stat,dkLine,overOdds,underOdds,
+      hitRate,hitsOver,total:logs.length,
+      edge,seasAvg,l7Avg,matchupScore,score
+    });
+  }
+  rows.sort((a,b)=>b.score-a.score);
+  return rows;
+}
+
+function getStatParlayCombos(board,legs){
+  if(board.length<legs)return[];
+  const combos=[];
+  const pool=board.slice(0,legs<=2?12:15);
+  function gen(start,current){
+    if(current.length===legs){
+      const teams=current.map(d=>d.team);
+      const uniqueTeams=new Set(teams);
+      // Max 2 from same team
+      const teamCounts={};
+      for(const t of teams){teamCounts[t]=(teamCounts[t]||0)+1;if(teamCounts[t]>2)return}
+      const score=current.reduce((s,d)=>s+d.score,0);
+      const avgHitRate=current.reduce((s,d)=>s+d.hitRate,0)/legs;
+      const avgEdge=current.reduce((s,d)=>s+d.edge,0)/legs;
+      combos.push({players:current.slice(),score,avgHitRate,avgEdge,teams:[...uniqueTeams]});
+      return;
+    }
+    for(let i=start;i<pool.length&&combos.length<300;i++){
+      // Unique players
+      if(current.some(c=>c.name===pool[i].name))continue;
+      current.push(pool[i]);
+      gen(i+1,current);
+      current.pop();
+    }
+  }
+  gen(0,[]);
+  combos.sort((a,b)=>b.score-a.score);
+  return combos.slice(0,8);
+}
+
 function getDraftBoard(){
   const board=[];
   const aiMap=new Map();
@@ -1359,6 +1467,67 @@ function render(){
       }).join("");
       picksHTML+=`</div>`;
     }
+  }else if(st.picksView==="parlays"){
+    // ═══ STAT PARLAYS ═══
+    const pStat=st.parlayStat;
+    const board=getStatParlayBoard(pStat);
+    const combos2=getStatParlayCombos(board,2);
+    const combos3=getStatParlayCombos(board,3);
+    const availStats=["HR","H","RBI","R","TB","SB","BB"];
+
+    picksHTML=`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#818cf8;font-size:13px;font-weight:700">🎯 Stat Parlays</div><div style="color:#6b8f7b;font-size:10px">${board.length} players w/ ${pStat} prop</div></div>`;
+    picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Pick a stat, see the best same-stat parlay combos ranked by hit rate + EV edge + matchup.</div>`;
+    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="HR"?"💣":""}${s==="SB"?"💨":""}${s==="H"?"🎯":""}${s==="RBI"?"💰":""}${s==="R"?"🏃":""}${s==="TB"?"⚡":""}${s==="BB"?"👁️":""} ${s}</div>`).join("")}</div>`;
+
+    if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No DK ${pStat} props available. Run the engine first.</div>`}
+    else{
+      // Top players board
+      picksHTML+=`<div style="padding:8px 16px 4px;color:#86efac;font-size:11px;font-weight:600">TOP ${pStat} PLAYS — Ranked Board</div>`;
+      picksHTML+=`<div class="cards-grid">`;
+      picksHTML+=board.slice(0,12).map((d,i)=>{
+        const hrPct=(d.hitRate*100).toFixed(0);
+        const edgePct=d.edge>0?`+${(d.edge*100).toFixed(0)}%`:`${(d.edge*100).toFixed(0)}%`;
+        const isTop=i<3;
+        return`<div class="due-card ${isTop?"top":""}" onclick="streakToDash('${esc(d.name)}')">
+          <div class="due-left">
+            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${esc(d.name)}</span></div>
+            <div class="due-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)</div>
+            <div class="due-tags">
+              <span class="due-tag" style="background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d">${hrPct}% hit rate</span>
+              ${d.edge>0?`<span class="due-tag matchup">${edgePct} EV</span>`:""}
+              <span class="due-tag prop">DK ${d.dkLine} O:${fmtOdds(d.overOdds)}</span>
+              ${d.matchupScore>=2?`<span class="due-tag matchup">✅ Matchup</span>`:""}
+            </div>
+            <div class="due-meta" style="margin-top:4px">Seas: ${d.seasAvg.toFixed(2)}/g · L7: ${d.l7Avg.toFixed(2)}/g · ${d.hitsOver}/${d.total} over ${d.dkLine}</div>
+          </div>
+          <div class="due-right">
+            <div class="due-score" style="color:${isTop?"#818cf8":"#38bdf8"}">${d.score.toFixed(0)}</div>
+            <div class="due-sub">score</div>
+          </div>
+        </div>`;
+      }).join("");
+      picksHTML+=`</div>`;
+
+      // 2-Leg Combos
+      if(combos2.length){
+        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 2-Leg ${pStat} Parlays</div><div class="combo-grid">`;
+        picksHTML+=combos2.map((c,i)=>{
+          const avgHR=(c.avgHitRate*100).toFixed(0);
+          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
+        }).join("");
+        picksHTML+=`</div></div>`;
+      }
+
+      // 3-Leg Combos
+      if(combos3.length){
+        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg ${pStat} Parlays</div><div class="combo-grid">`;
+        picksHTML+=combos3.map((c,i)=>{
+          const avgHR=(c.avgHitRate*100).toFixed(0);
+          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
+        }).join("");
+        picksHTML+=`</div></div>`;
+      }
+    }
   }else if(st.picksView==="draft"){
     const board=getDraftBoard();
     const available=board.filter(p=>!st.drafted.has(p.name));
@@ -1486,7 +1655,7 @@ function render(){
       ${isP?`<div class="split-card"><span class="split-title">Season Rates</span>${pHasLogs?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${sT.ERA||"—"}</div><div class="lbl">ERA</div></div><div class="matchup-stat"><div class="val">${sT.WHIP||"—"}</div><div class="lbl">WHIP</div></div><div class="matchup-stat"><div class="val">${sT.K9||"—"}</div><div class="lbl">K/9</div></div><div class="matchup-stat"><div class="val">${sT.SO||"—"}</div><div class="lbl">K</div></div></div>`:`<div class="no-data">No stats yet</div>`}</div>`:`<div class="split-card"><span class="split-title">vs ${oppH}HP Splits</span>${vsAvg||vsOps?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${vsAvg?vsAvg.toFixed(3):"—"}</div><div class="lbl">AVG</div></div><div class="matchup-stat"><div class="val">${vsOps?vsOps.toFixed(3):"—"}</div><div class="lbl">OPS</div></div><div class="matchup-stat"><div class="val">${vsHr||"—"}</div><div class="lbl">HR</div></div><div class="matchup-stat"><div class="val">${vsSo||"—"}</div><div class="lbl">SO</div></div></div>`:`<div class="no-data">No split data yet</div>`}</div>`}
       <div class="split-card"><span class="split-title">Home / Away</span><div class="mini-bars-container">${haBars}</div></div>
     </div></div>
-    <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">⚾ vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">⚾ vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>`}</div></div>
+    <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">⚾ vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">⚾ vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>${(()=>{const vsp=getVsSP(player);if(!vsp||!toNum(vsp.AB))return"";return`<div class="matchup-stats" style="margin-top:8px"><div class="matchup-stat"><div class="val">${vsp.AVG||"—"}</div><div class="lbl">Career AVG</div></div><div class="matchup-stat"><div class="val">${vsp.AB||"—"}</div><div class="lbl">AB</div></div><div class="matchup-stat"><div class="val">${vsp.H||"—"}</div><div class="lbl">H</div></div><div class="matchup-stat"><div class="val">${vsp.HR||"—"}</div><div class="lbl">HR</div></div></div><div style="color:#6b8f7b;font-size:9px;margin-top:4px">Career: ${vsp.H||0}-for-${vsp.AB||0}${toNum(vsp.HR)?" · "+vsp.HR+" HR":""}${toNum(vsp.BB)?" · "+vsp.BB+" BB":""}${toNum(vsp.SO)?" · "+vsp.SO+" K":""}</div>`})()}`}</div></div>
     ${wx.temp_f?`<div class="section"><div class="weather-card"><div class="card-title">🌤️ Weather</div><div class="weather-row"><span class="weather-key">Temp</span><span class="weather-val">${wx.temp_f}°F (feels ${wx.feels_like_f}°F)</span></div><div class="weather-row"><span class="weather-key">Wind</span><span class="weather-val">${wx.wind_mph} mph ${wx.wind_dir}</span></div><div class="weather-row"><span class="weather-key">Condition</span><span class="weather-val">${wx.description||"—"}</span></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="weather-row"><span class="weather-key">🏟️</span><span class="weather-val" style="color:#4ade80">Dome — weather irrelevant</span></div>`:""}</div></div>`:""}
     ${lineNum&&pHasLogs?`<div class="section dash-full"><div class="card"><div class="card-title">📊 Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
     </div>
@@ -1509,6 +1678,7 @@ function render(){
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
       <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">🧊 Due</div>
       <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">💣 Dingers</div>
+      <div class="sub-tab ${st.picksView==="parlays"?"active":""}" onclick="switchPicksView('parlays')">🎯 Parlays</div>
       <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">🎲 Props</div>
     </div>
     <div class="cards-wrap">${picksHTML}</div>
@@ -1593,8 +1763,9 @@ Promise.all([
   fetchSheet("Pitcher_Game_Logs").catch(()=>[]),
   fetchSheet("Pitcher_Home_Away").catch(()=>[]),
   fetchSheet("Daily_Picks").catch(()=>[]),
-  fetchSheet("DK_Player_Props").catch(()=>[])
-]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props])=>{
+  fetchSheet("DK_Player_Props").catch(()=>[]),
+  fetchSheet("Batter_vs_SP").catch(()=>[])
+]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,vsSP])=>{
   st.tonight=normalizeKeys(cleanRows(tonight));
   st.gameLogs=normalizeKeys(cleanRows(logs));
   st.splits=normalizeKeys(cleanRows(splits));
@@ -1606,6 +1777,7 @@ Promise.all([
   st.pSplits=normalizeKeys(cleanRows(pSplits));
   st.picks=normalizeKeys(cleanRows(picks));
   st.props=normalizeKeys(cleanRows(props));
+  st.vsSP=normalizeKeys(cleanRows(vsSP));
   st.loading=false;
 
   st.mode="batter";st.metric="H";
