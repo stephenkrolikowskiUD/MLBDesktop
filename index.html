@@ -804,11 +804,13 @@ function setStreakFilter(f){st.streakFilter=f;render()}
 function setSlipLegs(n){st.slipLegs=n;render()}
 function toggleDrafted(name){if(st.drafted.has(name))st.drafted.delete(name);else st.drafted.add(name);render()}
 function resetDrafted(){st.drafted.clear();render()}
-function streakToDash(name){
+function streakToDash(name,metric,line){
   const b=st.tonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase());
   const p=st.pTonight.find(t=>(t.player_name||"").toLowerCase()===name.toLowerCase());
-  if(b){st.mode="batter";st.metric="H";st.player=b.player_name}
-  else if(p){st.mode="pitcher";st.metric="SO";st.player=p.player_name}
+  if(b){st.mode="batter";st.metric=metric||"H";st.player=b.player_name}
+  else if(p){st.mode="pitcher";st.metric=metric||"SO";st.player=p.player_name}
+  if(line!==undefined&&line!=="")st.line=String(line);
+  else st.line="";
   st.activeTab="dashboard";render();
 }
 
@@ -1338,7 +1340,7 @@ function render(){
               const leanCls=l.lean==="OVER"?"over":"under";
               return`<div class="slip-leg">
                 <span class="slip-leg-team">${esc(l.team)}</span>
-                <span class="slip-leg-name">${esc(l.name)}</span>
+                <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${esc(l.name)}</span>
                 <div class="slip-leg-prop">
                   <span class="slip-leg-metric">${l.metric}</span>
                   <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
@@ -1371,7 +1373,7 @@ function render(){
         const hasR=pk.ACTUAL_STAT!=null&&pk.ACTUAL_STAT!==""&&!isNaN(pk.ACTUAL_STAT);
         let rHTML="";
         if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${pk.ACTUAL_STAT}</span>`:""}</div>`}
-        return`<div class="pick-card ${cls}"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${rHTML}</div>`;
+        return`<div class="pick-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${rHTML}</div>`;
       }).join("");
       picksHTML+=`</div>`;
     }
@@ -1387,7 +1389,7 @@ function render(){
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
         const ratePct=(d.hrRate*100).toFixed(1);
         const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
-        return`<div class="dinger-card ${isTop?"top3":""}">
+        return`<div class="dinger-card ${isTop?"top3":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','HR','${d.dkLine||""}')">
           <div class="dinger-left">
             <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${esc(d.name)}</span></div>
             <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
@@ -1563,7 +1565,7 @@ function render(){
         picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
         <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
           <div class="draft-rank" style="color:${isDrafted?"#2d5a3d":tier.color}">${i+1}</div>
-          <div class="draft-main"><div class="draft-name">${esc(p.name)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span></div><div class="draft-meta">${metaLine}</div>${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+          <div class="draft-main"><div class="draft-name">${esc(p.name)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;font-size:10px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">📊</span></div><div class="draft-meta">${metaLine}</div>${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
           <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"#2d5a3d":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">UD FP</div>${l7v!==projv?`<div style="font-size:9px;color:${l7v>projv?"#22c55e":"#ef4444"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
         </div>`;
       });
@@ -1584,7 +1586,7 @@ function render(){
       const hrPct=hr?`${(hr.rate*100).toFixed(0)}%`:"—";
       const edge=hr&&oIP!==null?hr.rate-oIP:null;
       const edgeStr=edge!==null?`<span class="ev-badge ${edge>0.08?"ev-pos":edge>0?"ev-neutral":"ev-neg"}">${edge>0?"+":""}${(edge*100).toFixed(0)}%</span>`:"—";
-      return`<tr><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
+      return`<tr style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
   }
 
   // === LOOKUP ===
