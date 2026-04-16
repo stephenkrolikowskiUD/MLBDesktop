@@ -103,7 +103,7 @@ td.push{color:#9ca3af;font-weight:700}
 .pick-conf.smash{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
 .pick-conf.strong{background:#3b82f622;color:#3b82f6;border:1px solid #3b82f644}
 .pick-conf.lean{background:#f5972622;color:#f59726;border:1px solid #f5972644}
-.pick-rationale{color:#9ca3af;font-size:11px;margin-top:6px;font-style:italic}
+.pick-rationale{color:#9ca3af;font-size:11px;margin-top:6px;font-style:italic} .pick-card.lineup-risk{border-left-color:#fbbf24;background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:#fbbf24;background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:#fbbf24;background:#2a2418} .lineup-risk-badge{display:inline-block;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:#fbbf24;font-size:11px;margin-top:4px;font-weight:600}
 .pick-result{display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #2d5a3d}
 .result-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
 .result-hit{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
@@ -1258,7 +1258,14 @@ function render(){
   let propsHTML="";
   if(pProps.length>0){propsHTML=`<div class="section"><div class="label">🎲 DraftKings Props</div>${pProps.map(p=>`<div class="prop-card"><div class="prop-left"><div class="prop-metric">${p.METRIC}</div><div class="prop-line">${p.DK_LINE}</div></div><div class="prop-right"><div class="prop-odds prop-over">O ${fmtOdds(p.OVER_ODDS)}</div><div class="prop-odds prop-under">U ${fmtOdds(p.UNDER_ODDS)}</div></div></div>`).join("")}</div>`}
   let pickBanner="";
-  if(pPick){const c=pPick.confidence||"",cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";pickBanner=`<div class="section"><div class="card" style="border-left:3px solid ${c==="SMASH"?"#22c55e":"#3b82f6"}"><div class="card-title">🤖 AI Pick</div><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="pick-type">${pPick.prop_type||""}</div><div class="pick-lean ${(pPick.lean||"").toLowerCase()}">${pPick.lean||""} ${pPick.line||""}</div><div class="pick-conf ${cls}">${c}</div></div><div class="pick-rationale">${esc(pPick.rationale||"")}</div></div></div>`}
+  if(pPick){
+    const c=pPick.confidence||"",cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";
+    const pInjCtx=(pPick.injury_context||"").toString();
+    const pHasRisk=pInjCtx.toUpperCase().startsWith("LINEUP RISK");
+    const borderColor=pHasRisk?"#fbbf24":(c==="SMASH"?"#22c55e":"#3b82f6");
+    const pRiskHTML=pHasRisk?`<div class="lineup-risk-badge">⚠️ LINEUP RISK</div><div class="lineup-risk-text">${esc(pInjCtx)}</div>`:"";
+    pickBanner=`<div class="section"><div class="card" style="border-left:3px solid ${borderColor}${pHasRisk?";background:#2a2418":""}"><div class="card-title">🤖 AI Pick</div><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="pick-type">${pPick.prop_type||""}</div><div class="pick-lean ${(pPick.lean||"").toLowerCase()}">${pPick.lean||""} ${pPick.line||""}</div><div class="pick-conf ${cls}">${c}</div></div><div class="pick-rationale">${esc(pPick.rationale||"")}</div>${pRiskHTML}</div></div>`;
+  }
 
   const opps=[...new Set(allLogs.map(g=>g.opp_abbr).filter(Boolean))].sort();
   const oppOpts=`<option value="">All Opponents</option>`+opps.map(o=>`<option value="${o}" ${oppFilter===o?"selected":""}>${o}</option>`).join("");
@@ -1371,9 +1378,12 @@ function render(){
         const c=(pk.confidence||"").toUpperCase(),cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"";
         const h=(pk.HIT||"").toString().toUpperCase();
         const hasR=pk.ACTUAL_STAT!=null&&pk.ACTUAL_STAT!==""&&!isNaN(pk.ACTUAL_STAT);
+        const injCtx=(pk.injury_context||"").toString();
+        const hasLineupRisk=injCtx.toUpperCase().startsWith("LINEUP RISK");
+        const riskHTML=hasLineupRisk?`<div class="lineup-risk-badge">⚠️ LINEUP RISK</div><div class="lineup-risk-text">${esc(injCtx)}</div>`:"";
         let rHTML="";
         if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${pk.ACTUAL_STAT}</span>`:""}</div>`}
-        return`<div class="pick-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${rHTML}</div>`;
+        return`<div class="pick-card ${cls}${hasLineupRisk?" lineup-risk":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${riskHTML}${rHTML}</div>`;
       }).join("");
       picksHTML+=`</div>`;
     }
