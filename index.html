@@ -807,6 +807,7 @@ function generateSlips(legs,legCount){
     if(selected.length>=MAX_SLIPS)break;
   }
   return selected.slice(0,MAX_SLIPS);
+}
 
 function getSmartSlips(){
   const legs=getConvictionLegs();
