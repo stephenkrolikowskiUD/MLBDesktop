@@ -788,25 +788,19 @@ function generateSlips(legs,legCount){
   gen(0,[],new Set(),new Map());
   slips.sort((a,b)=>b.score-a.score);
 
-  // Player diversity pass: start strict (cap=3), relax only if needed to hit 8 slips
-  const MAX_SLIPS=8;
-  let selected=[];
-  for(let cap=3;cap<=MAX_SLIPS;cap++){
-    selected=[];
-    const playerCount=new Map();
-    for(const slip of slips){
-      if(selected.length>=MAX_SLIPS)break;
-      const wouldExceed=slip.legs.some(l=>(playerCount.get(l.name.toLowerCase())||0)>=cap);
-      if(wouldExceed)continue;
-      selected.push(slip);
-      slip.legs.forEach(l=>{
-        const n=l.name.toLowerCase();
-        playerCount.set(n,(playerCount.get(n)||0)+1);
-      });
-    }
+  const MAX_SLIPS=8,PLAYER_USAGE_LIMIT=2;
+  const selected=[],playerUsageCount=new Map();
+  for(const slip of slips){
     if(selected.length>=MAX_SLIPS)break;
+    const overUsed=slip.legs.some(l=>(playerUsageCount.get(l.name.toLowerCase())||0)>=PLAYER_USAGE_LIMIT);
+    if(overUsed)continue;
+    selected.push(slip);
+    slip.legs.forEach(l=>{
+      const n=l.name.toLowerCase();
+      playerUsageCount.set(n,(playerUsageCount.get(n)||0)+1);
+    });
   }
-  return selected.slice(0,MAX_SLIPS);
+  return selected;
 }
 
 function getSmartSlips(){
