@@ -788,20 +788,25 @@ function generateSlips(legs,legCount){
   gen(0,[],new Set(),new Map());
   slips.sort((a,b)=>b.score-a.score);
 
-  const MAX_SLIPS=8,PLAYER_USAGE_LIMIT=2;
-  const selected=[],playerUsageCount=new Map();
-  for(const slip of slips){
+  // Player diversity: try strictest cap first, relax only as needed to hit 8 slips.
+  const MAX_SLIPS=8;
+  let selected=[];
+  for(let cap=2;cap<=MAX_SLIPS;cap++){
+    selected=[];
+    const playerUsageCount=new Map();
+    for(const slip of slips){
+      if(selected.length>=MAX_SLIPS)break;
+      const overUsed=slip.legs.some(l=>(playerUsageCount.get(l.name.toLowerCase())||0)>=cap);
+      if(overUsed)continue;
+      selected.push(slip);
+      slip.legs.forEach(l=>{
+        const n=l.name.toLowerCase();
+        playerUsageCount.set(n,(playerUsageCount.get(n)||0)+1);
+      });
+    }
     if(selected.length>=MAX_SLIPS)break;
-    const overUsed=slip.legs.some(l=>(playerUsageCount.get(l.name.toLowerCase())||0)>=PLAYER_USAGE_LIMIT);
-    if(overUsed)continue;
-    selected.push(slip);
-    slip.legs.forEach(l=>{
-      const n=l.name.toLowerCase();
-      playerUsageCount.set(n,(playerUsageCount.get(n)||0)+1);
-    });
   }
-  return selected;
-}
+  return selected.slice(0,MAX_SLIPS);
 
 function getSmartSlips(){
   const legs=getConvictionLegs();
