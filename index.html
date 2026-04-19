@@ -788,27 +788,25 @@ function generateSlips(legs,legCount){
   gen(0,[],new Set(),new Map());
   slips.sort((a,b)=>b.score-a.score);
 
-  // Player diversity pass: no player in more than 4 of 8 final slips
-  const MAX_SLIPS=8,MAX_APPEARANCES=4;
-  const selected=[],playerCount=new Map();
-  for(const slip of slips){
-    if(selected.length>=MAX_SLIPS)break;
-    const wouldExceed=slip.legs.some(l=>(playerCount.get(l.name.toLowerCase())||0)>=MAX_APPEARANCES);
-    if(wouldExceed)continue;
-    selected.push(slip);
-    slip.legs.forEach(l=>{
-      const n=l.name.toLowerCase();
-      playerCount.set(n,(playerCount.get(n)||0)+1);
-    });
-  }
-  // Fallback: if fewer than 8 diverse slips, fill with highest-score remaining
-  if(selected.length<MAX_SLIPS){
+  // Player diversity pass: start strict (cap=3), relax only if needed to hit 8 slips
+  const MAX_SLIPS=8;
+  let selected=[];
+  for(let cap=3;cap<=MAX_SLIPS;cap++){
+    selected=[];
+    const playerCount=new Map();
     for(const slip of slips){
       if(selected.length>=MAX_SLIPS)break;
-      if(!selected.includes(slip))selected.push(slip);
+      const wouldExceed=slip.legs.some(l=>(playerCount.get(l.name.toLowerCase())||0)>=cap);
+      if(wouldExceed)continue;
+      selected.push(slip);
+      slip.legs.forEach(l=>{
+        const n=l.name.toLowerCase();
+        playerCount.set(n,(playerCount.get(n)||0)+1);
+      });
     }
+    if(selected.length>=MAX_SLIPS)break;
   }
-  return selected;
+  return selected.slice(0,MAX_SLIPS);
 }
 
 function getSmartSlips(){
