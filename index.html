@@ -769,8 +769,8 @@ function generateSlips(legs,legCount){
       slips.push({legs:current.slice(),score,avgEdge,avgHitRate,teams,signalCount:signals,legCount});
       return;
     }
-    for(let i=start;i<legs.length&&slips.length<maxIter;i++){
-      const leg=legs[i];
+    for(let i=start;i<pool.length&&slips.length<maxIter;i++){
+      const leg=pool[i];
       if(usedPlayers.has(leg.name.toLowerCase()))continue;
       const tc=teamCounts.get(leg.team)||0;
       if(tc>=1)continue;
