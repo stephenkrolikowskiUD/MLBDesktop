@@ -773,7 +773,7 @@ function generateSlips(legs,legCount){
       const leg=legs[i];
       if(usedPlayers.has(leg.name.toLowerCase()))continue;
       const tc=teamCounts.get(leg.team)||0;
-      if(tc>=2)continue;
+      if(tc>=1)continue;
 
       usedPlayers.add(leg.name.toLowerCase());
       teamCounts.set(leg.team,(tc||0)+1);
