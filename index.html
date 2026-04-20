@@ -416,8 +416,8 @@ td.push{color:#9ca3af;font-weight:700}
 <div id="app"><div class="loading"><div style="font-size:32px;animation:bounce .8s ease-in-out infinite">⚾</div><div style="color:#6b8f7b;font-size:14px">Loading dashboard...</div></div></div>
 <script>
 const SHEET_ID="1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ";
-const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","DK_FP","H+R+RBI"];
-const P_METRICS=["IP","SO","ER","H","HR","BB","DK_FP","PC","W","L"];
+const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","UD_FP","H+R+RBI"];
+const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
 
 let st={
@@ -451,15 +451,14 @@ function cleanRows(rows){
 
 function normalizeKeys(rows){
   if(!rows||!rows.length)return rows;
-  const firstKeys=Object.keys(rows[0]);
-  const hasSpaceKeys=firstKeys.some(k=>k.includes(' '));
-  if(!hasSpaceKeys)return rows;
-  console.log("🔧 Normalizing dirty column names:",firstKeys.slice(0,3).map(k=>k.slice(0,30)+"...").join(" | "));
   return rows.map(row=>{
     const clean={};
     for(const[k,v]of Object.entries(row)){
-      const baseKey=k.split(' ')[0];
-      clean[baseKey]=v;
+      const trimmed=String(k||'')
+        .replace(/^\uFEFF/,'')
+        .replace(/[\u200B-\u200D\uFEFF]/g,'')
+        .trim();
+      clean[trimmed]=v;
     }
     return clean;
   });
@@ -482,7 +481,7 @@ const fetchSheet=(name)=>new Promise((res,rej)=>{
 });
 
 const toNum=v=>parseFloat(v)||0;
-const barColor=(v,l)=>!l?"#4ade80":v>l?"#22c55e":"#ef4444";
+const barColor=(v,l)=>!l?"#4ade80":v>l?"#22c55e":v===l?"#9ca3af":"#ef4444";
 const avgColor=(v,l)=>!l?"#4ade80":v>=l?"#4ade80":"#f97316";
 const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
 const fmtOdds=v=>{if(!v&&v!==0)return"—";v=parseInt(v);return v>0?`+${v}`:`${v}`};
@@ -696,11 +695,13 @@ function getBestBets(){
 
 // ═══ SMART SLIP GENERATOR ═══
 function getConvictionLegs(){
-  const SLIP_WORTHY=new Set(["H","HR","RBI","R","TB","SB","BB","H+R+RBI","H+R","R+RBI","P_SO","DK_FP"]); const bets=getBestBets().filter(b=>b.edge>0).filter(b=>{   if(!SLIP_WORTHY.has(b.metric))return false;   if(b.lean==="UNDER"&&parseFloat(b.dkLine)<=0.5)return false;   return true; });
+  const SLIP_WORTHY=new Set(["H","HR","RBI","R","TB","SB","BB","H+R+RBI","H+R","R+RBI","P_SO","UD_FP"]); const bets=getBestBets().filter(b=>b.edge>0).filter(b=>{   if(!SLIP_WORTHY.has(b.metric))return false;   if(b.lean==="UNDER"&&parseFloat(b.dkLine)<=0.5)return false;   return true; });
   if(!bets.length)return[];
 
+  const allDates=[...new Set(st.picks.map(p=>p.DATE||p.date).filter(Boolean))].sort();
+  const latestDate=allDates.length?allDates[allDates.length-1]:"";
   const aiMap=new Map();
-  st.picks.forEach(pk=>{if(pk.player)aiMap.set(pk.player.toLowerCase(),pk)});
+  st.picks.filter(pk=>(pk.DATE||pk.date||"")===latestDate).forEach(pk=>{if(pk.player)aiMap.set(pk.player.toLowerCase(),pk)});
   const streakMap=new Map();
   try{
     const streaks=getStreaks();
@@ -713,6 +714,7 @@ function getConvictionLegs(){
     const evScore=Math.min(b.edge*40,10);
     let aiScore=0;
     const aiPick=aiMap.get(nl);
+    let aiConflictLevel="",aiDisagreementText="";
     if(aiPick){
         const conf=(aiPick.confidence||"").toUpperCase();
         const aiLean=(aiPick.lean||"").toUpperCase();
@@ -720,12 +722,17 @@ function getConvictionLegs(){
         const betMetric=b.metric.toUpperCase();
         const aiComps=COMBO_STATS[aiMetric]||[aiMetric];
         const betComps=COMBO_STATS[betMetric]||[betMetric];
-        const metricsRelated=betComps.every(c=>aiComps.includes(c));
-        if(metricsRelated && aiLean && aiLean!==b.lean)continue;
-        if(conf==="SMASH")aiScore=4;
-        else if(conf==="STRONG")aiScore=2.5;
-        else aiScore=1;
-        if(metricsRelated)aiScore+=2;
+        const metricsRelated=betComps.some(c=>aiComps.includes(c))||aiComps.some(c=>betComps.includes(c));
+        if(metricsRelated && aiLean && aiLean!==b.lean){
+          aiConflictLevel=aiMetric===betMetric?"strong":"soft";
+          aiDisagreementText=aiMetric===betMetric?`AI says ${aiLean} ${aiMetric}`:`AI leans ${aiLean} ${aiMetric}`;
+          aiScore-=conf==="SMASH"?2.5:conf==="STRONG"?1.5:0.75;
+        }else{
+          if(conf==="SMASH")aiScore=4;
+          else if(conf==="STRONG")aiScore=2.5;
+          else aiScore=1;
+          if(metricsRelated)aiScore+=2;
+        }
       }
     let streakScore=0;
     const logCol=propToLogCol(b.metric);
@@ -742,13 +749,15 @@ function getConvictionLegs(){
     const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
 
     let signals=[];
-    if(aiPick){const c=(aiPick.confidence||"").toUpperCase();signals.push(c==="SMASH"?"🤖 SMASH":c==="STRONG"?"🤖 STRONG":"🤖 AI")}
+    if(aiPick && !aiConflictLevel){const c=(aiPick.confidence||"").toUpperCase();signals.push(c==="SMASH"?"🤖 SMASH":c==="STRONG"?"🤖 STRONG":"🤖 AI")}
+    if(aiConflictLevel==="strong")signals.push("⚠️ AI conflict");
+    else if(aiConflictLevel==="soft")signals.push("⚠️ AI cross-check");
     if(streak)signals.push(`🔥 ${streak.streak}G streak`);
     if(b.edge>=0.15)signals.push("💎 Elite EV");
     else if(b.edge>=0.08)signals.push("📈 Strong EV");
     if(b.hitRate>=0.8)signals.push(`✅ ${(b.hitRate*100).toFixed(0)}% hit`);
 
-    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:!!aiPick,hasStreak:!!streak});
+    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:!!aiPick&&!aiConflictLevel,hasAIConflict:!!aiConflictLevel,aiConflictLevel,aiDisagreementText,hasStreak:!!streak});
   }
   legs.sort((a,b)=>b.conviction-a.conviction);
   return legs;
@@ -773,7 +782,7 @@ function generateSlips(legs,legCount){
       const leg=pool[i];
       if(usedPlayers.has(leg.name.toLowerCase()))continue;
       const tc=teamCounts.get(leg.team)||0;
-      if(tc>=1)continue;
+      if(tc>=2)continue;
 
       usedPlayers.add(leg.name.toLowerCase());
       teamCounts.set(leg.team,(tc||0)+1);
@@ -976,7 +985,6 @@ function getDueBoard(){
     // Pitcher "due" — strikeout pitcher in a slump, ace with bad recent ERA
     const pStats=[
       {key:"SO",label:"Strikeouts",higher:true},
-      {key:"DK_FP",label:"Fantasy Pts",higher:true},
       {key:"UD_FP",label:"UD Fantasy",higher:true},
     ];
 
@@ -1174,16 +1182,16 @@ function getDraftBoard(){
     if(!logs.length)continue;const most=logs[0]||{};
     const sH=toNum(most.Seas_H),sHR=toNum(most.Seas_HR),s2B=toNum(most.Seas_2B);
     const sTB=toNum(most.Seas_TB),sRBI=toNum(most.Seas_RBI),sR=toNum(most.Seas_R);
-    const sSB=toNum(most.Seas_SB),sBB=toNum(most.Seas_BB);
+    const sSB=toNum(most.Seas_SB),sBB=toNum(most.Seas_BB),sHBP=toNum(most.Seas_HBP);
     const s3B=Math.max(0,(sTB-sH-s2B-3*sHR)/2)||0;
     const s1B=Math.max(0,sH-s2B-s3B-sHR)||0;
-    const projUD=toNum(most.Seas_UD_FP)||(s1B*3+s2B*6+s3B*8+sHR*10+sBB*3+sRBI*2+sR*2+sSB*4)||0;
+    const projUD=toNum(most.Seas_UD_FP)||(s1B*3+s2B*6+s3B*8+sHR*10+sBB*3+sHBP*3+sRBI*2+sR*2+sSB*4)||0;
     const l7H=toNum(most.L7_H),l7HR=toNum(most.L7_HR),l72B=toNum(most.L7_2B);
     const l7TB=toNum(most.L7_TB),l7RBI=toNum(most.L7_RBI),l7R=toNum(most.L7_R);
-    const l7SB=toNum(most.L7_SB),l7BB=toNum(most.L7_BB);
+    const l7SB=toNum(most.L7_SB),l7BB=toNum(most.L7_BB),l7HBP=toNum(most.L7_HBP);
     const l73B=Math.max(0,(l7TB-l7H-l72B-3*l7HR)/2)||0;
     const l71B=Math.max(0,l7H-l72B-l73B-l7HR)||0;
-    const l7UD=toNum(most.L7_UD_FP)||(l71B*3+l72B*6+l73B*8+l7HR*10+l7BB*3+l7RBI*2+l7R*2+l7SB*4)||0;
+    const l7UD=toNum(most.L7_UD_FP)||(l71B*3+l72B*6+l73B*8+l7HR*10+l7BB*3+l7HBP*3+l7RBI*2+l7R*2+l7SB*4)||0;
     const ai=aiMap.get(name.toLowerCase()),isSmash=ai&&(ai.confidence||"").toUpperCase()==="SMASH";
     let pos="FLEX";const posRaw=(p.position||"").toUpperCase();
     if(posRaw.includes("C")||posRaw.includes("1B")||posRaw.includes("2B")||posRaw.includes("3B")||posRaw.includes("SS"))pos="IF";
@@ -1196,10 +1204,10 @@ function getDraftBoard(){
     if(!logs.length)continue;const most=logs[0]||{};
     const sSO=toNum(most.Seas_SO),sER=toNum(most.Seas_ER),sW=toNum(most.Seas_W),sIP=toNum(most.Seas_IP);
     const qsRate=logs.length>0?logs.filter(g=>toNum(g.IP)>=6&&toNum(g.ER)<=3).length/logs.length:0;
-    const projUD=toNum(most.Seas_UD_FP)||(sW*2+qsRate*3+sSO+sIP+sER*-1)||0;
+    const projUD=toNum(most.Seas_UD_FP)||(sW*5+qsRate*5+sSO*3+sIP*3+sER*-3)||0;
     const l3SO=toNum(most.L3_SO),l3ER=toNum(most.L3_ER),l3W=toNum(most.L3_W),l3IP=toNum(most.L3_IP);
     const l3QS=logs.slice(0,3).filter(g=>toNum(g.IP)>=6&&toNum(g.ER)<=3).length/Math.min(3,logs.length);
-    const l7UD=toNum(most.L7_UD_FP)||(l3W*2+l3QS*3+l3SO+l3IP+l3ER*-1)||0;
+    const l7UD=toNum(most.L7_UD_FP)||(l3W*5+l3QS*5+l3SO*3+l3IP*3+l3ER*-3)||0;
     const ai=aiMap.get(name.toLowerCase()),isSmash=ai&&(ai.confidence||"").toUpperCase()==="SMASH";
     board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P"});
   }
@@ -1247,18 +1255,18 @@ function render(){
   const sT={};let statStrip="";
   if(isP){
     ["IP","SO","ER","H","HR","BB","W","L","PC","R"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
-    sT.DK_FP=allLogs.reduce((a,g)=>a+toNum(g.DK_FP),0).toFixed(1);
+    sT.UD_FP=allLogs.reduce((a,g)=>a+toNum(g.UD_FP),0).toFixed(1);
     const outs=allLogs.reduce((a,g)=>{const p=(g.IP||"").toString().split(".");return a+(parseInt(p[0])||0)*3+(parseInt(p[1])||0)},0);
     const rIP=outs/3;sT.IP=rIP.toFixed(1);
     sT.ERA=rIP>0?((sT.ER*9)/rIP).toFixed(2):"0.00";
     sT.WHIP=rIP>0?(((sT.H||0)+(sT.BB||0))/rIP).toFixed(2):"0.00";
     sT.K9=rIP>0?((sT.SO*9)/rIP).toFixed(1):"0.0";
-    statStrip=["W","L","ERA","WHIP","SO","K9","IP","DK_FP"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${sT[s]}</div></div>`).join("");
+    statStrip=["W","L","ERA","WHIP","SO","K9","IP","UD_FP"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${sT[s]}</div></div>`).join("");
   }else{
     ["H","HR","RBI","R","SB","BB","TB","SO","AB"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
     sT.AVG=sT.AB>0?(sT.H/sT.AB).toFixed(3):".000";
-    sT.DK_FP=allLogs.reduce((a,g)=>a+toNum(g.DK_FP),0).toFixed(1);
-    statStrip=["H","HR","RBI","R","SB","BB","TB","DK_FP","AVG"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${s==="AVG"?sT.AVG:s==="DK_FP"?sT.DK_FP:sT[s]}</div></div>`).join("");
+    sT.UD_FP=allLogs.reduce((a,g)=>a+toNum(g.UD_FP),0).toFixed(1);
+    statStrip=["H","HR","RBI","R","SB","BB","TB","UD_FP","AVG"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${s==="AVG"?sT.AVG:s==="UD_FP"?sT.UD_FP:sT[s]}</div></div>`).join("");
   }
 
   const oppP=pT.opp_pitcher_name||"TBD",oppH=pT.opp_pitcher_hand||"?";
@@ -1296,9 +1304,9 @@ function render(){
   const opps=[...new Set(allLogs.map(g=>g.opp_abbr).filter(Boolean))].sort();
   const oppOpts=`<option value="">All Opponents</option>`+opps.map(o=>`<option value="${o}" ${oppFilter===o?"selected":""}>${o}</option>`).join("");
   const fLogs=oppFilter?allLogs.filter(g=>g.opp_abbr===oppFilter):allLogs;
-  const logCols=isP?["IP","H","ER","HR","SO","BB","PC","W","L","DK_FP"]:["AB","H","HR","RBI","R","SB","BB","SO","TB","DK_FP"];
+  const logCols=isP?["IP","H","ER","HR","SO","BB","PC","W","L","UD_FP"]:["AB","H","HR","RBI","R","SB","BB","SO","TB","UD_FP"];
   const tHeaders=logCols.map(c=>`<th class="${c===metric?"hl":""}">${c}</th>`).join("");
-  const tRows=fLogs.map(g=>{const cells=logCols.map(c=>{const v=toNum(g[c]);let cls=c===metric?"hl":"";if(c===metric&&lineNum){cls=v>lineNum?"hit":v===lineNum?"push":"miss"}return`<td class="${cls}">${c==="DK_FP"?v.toFixed(1):v}</td>`}).join("");return`<tr><td>${(g.game_date||"").slice(5)}</td><td>${g.opp_abbr||"—"}</td><td>${g.home_away||"—"}</td>${cells}</tr>`}).join("");
+  const tRows=fLogs.map(g=>{const cells=logCols.map(c=>{const v=toNum(g[c]);let cls=c===metric?"hl":"";if(c===metric&&lineNum){cls=v>lineNum?"hit":v===lineNum?"push":"miss"}return`<td class="${cls}">${c==="UD_FP"?v.toFixed(1):v}</td>`}).join("");return`<tr><td>${(g.game_date||"").slice(5)}</td><td>${g.opp_abbr||"—"}</td><td>${g.home_away||"—"}</td>${cells}</tr>`}).join("");
 
   // === PICKS TAB ===
   picksHTML="";
@@ -1348,11 +1356,12 @@ function render(){
       const payouts={"3":"6x","4":"10x","5":"20x"};
       const topLeg=legs[0];
       const aiCount=legs.filter(l=>l.hasAI).length;
+      const conflictCount=legs.filter(l=>l.hasAIConflict).length;
       const streakCount=legs.filter(l=>l.hasStreak).length;
 
-      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#86efac">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
+      picksHTML=`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#fca5a5">${conflictCount}</div><div class="bs-lbl">AI CONFLICTS</div></div><div class="bs-card"><div class="bs-val" style="color:#86efac">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
       picksHTML+=`<div class="slip-controls"><span style="color:#6b8f7b;font-size:11px">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team.</div>`;
+      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team. AI disagreements show inline on the leg.</div>`;
 
       if(!slips.length){picksHTML+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
       else{
@@ -1373,7 +1382,10 @@ function render(){
               const leanCls=l.lean==="OVER"?"over":"under";
               return`<div class="slip-leg">
                 <span class="slip-leg-team">${esc(l.team)}</span>
-                <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${esc(l.name)}</span>
+                <div style="flex:1;min-width:0">
+                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${esc(l.name)}</span>
+                  ${l.aiDisagreementText?`<div style="font-size:9px;color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
+                </div>
                 <div class="slip-leg-prop">
                   <span class="slip-leg-metric">${l.metric}</span>
                   <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
@@ -1581,7 +1593,7 @@ function render(){
     if(!board.length){picksHTML=`<div class="empty" style="padding:40px">No draft data available. Run the engine first.</div>`}
     else{
       picksHTML=`<div style="padding:12px 16px 4px;color:#4ade80;font-size:13px;font-weight:700">⚾ Draft Cheat Sheet</div>
-      <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×2 QS×3 K×1 IP×1 ER×-1</div>
+      <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
       <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
       <div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
       picksHTML+=`<div class="cards-grid draft-board">`;
