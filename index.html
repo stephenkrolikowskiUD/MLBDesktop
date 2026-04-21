@@ -557,8 +557,8 @@ function normalizeKeys(rows){
 }
 
 const fetchSheet=(name)=>new Promise((res,rej)=>{
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}`;
-  fetch(url)
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}&cacheBust=${Date.now()}`;
+  fetch(url,{cache:"no-store"})
   .then(r=>{
     if(!r.ok){console.error(`❌ Sheet fetch failed: ${name} (${r.status})`);throw new Error(`Failed: ${name}`)}
     return r.text()
