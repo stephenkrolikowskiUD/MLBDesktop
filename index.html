@@ -11,7 +11,12 @@ body{background:#0f291a;color:#fff;font-family:system-ui,-apple-system,sans-seri
 select,input{background:#1a3d2a;color:#fff;border:1px solid #2d5a3d;border-radius:8px;padding:8px 10px;font-size:14px;width:100%}
 input::placeholder{color:#6b8f7b}
 .header{background:#163024;padding:12px 16px;border-bottom:1px solid #2d5a3d;position:sticky;top:0;z-index:10}
+.header-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
 .header-title{color:#4ade80;font-weight:700;font-size:13px;margin-bottom:8px}
+.refresh-btn{background:#173522;border:1px solid #2d5a3d;color:#d1fae5;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;transition:.18s}
+.refresh-btn:hover{background:#1d442a}
+.player-link{color:inherit;text-decoration:underline dotted rgba(255,255,255,.35);cursor:pointer}
+.player-link:hover{opacity:.85}
 .row{display:flex;gap:8px;margin-top:8px}
 .row select,.row input{flex:1}
 .section{padding:14px 16px 0}
@@ -1002,6 +1007,7 @@ function streakToDash(name,metric,line){
   else st.line="";
   st.activeTab="dashboard";render();
 }
+function playerLink(name,metric="",line="",label=""){const n=cleanName(label||name||"");return `<span class="player-link" onclick="event.stopPropagation();streakToDash('${esc(name)}','${esc(metric)}','${esc(line)}')">${esc(n)}</span>`}
 
 // ═══ STREAKS ═══
 function getStreakHeat(s){if(s>=10)return{l:"INFERNO",c:"#ef4444",cls:"inferno"};if(s>=5)return{l:"ON FIRE",c:"#ff6b35",cls:"fire"};if(s>=3)return{l:"HOT",c:"#ffaa00",cls:"hot"};return{l:"WARM",c:"#ffd966",cls:"warm"}}
@@ -1272,7 +1278,7 @@ function renderConvergenceHTML(){
     <div class="bs-card"><div class="bs-val" style="color:#22c55e">${board.filter(p=>p.sourceCount>=3).length}</div><div class="bs-lbl">3+ MATCHES</div></div>
   </div>
   <div class="cards-grid">
-    ${board.map((p,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:pointer;border-color:${i===0?"#4ade80":"#2d5a3d"}" onclick="streakToDash('${esc(p.name)}')"><div class="bet-left"><div class="bet-name">${i===0?"🏆 ":""}${esc(p.name)}</div><div class="bet-meta">${esc(p.team||"")} ${p.opp?`vs ${esc(p.opp)}`:""}</div>${p.detail?`<div class="bet-prop"><span class="prop-metric" style="font-size:10px">Lead</span><span style="color:#d1fae5;font-size:11px">${esc(p.detail)}</span></div>`:""}<div class="draft-tags" style="margin-top:6px">${p.sourceList.map(s=>`<span class="draft-tag" style="background:#173522;color:${s==="AI"?"#4ade80":s==="Best Bets"?"#86efac":s==="Streaks"?"#ffaa00":s==="Due"?"#38bdf8":"#ef4444"}">${esc(s)}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${p.sourceCount}x</div><div class="bet-sub">signals</div></div></div>`).join("")}
+    ${board.map((p,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:pointer;border-color:${i===0?"#4ade80":"#2d5a3d"}" onclick="streakToDash('${esc(p.name)}')"><div class="bet-left"><div class="bet-name">${i===0?"🏆 ":""}${playerLink(p.name)}</div><div class="bet-meta">${esc(p.team||"")} ${p.opp?`vs ${esc(p.opp)}`:""}</div>${p.detail?`<div class="bet-prop"><span class="prop-metric" style="font-size:10px">Lead</span><span style="color:#d1fae5;font-size:11px">${esc(p.detail)}</span></div>`:""}<div class="draft-tags" style="margin-top:6px">${p.sourceList.map(s=>`<span class="draft-tag" style="background:#173522;color:${s==="AI"?"#4ade80":s==="Best Bets"?"#86efac":s==="Streaks"?"#ffaa00":s==="Due"?"#38bdf8":"#ef4444"}">${esc(s)}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${p.sourceCount}x</div><div class="bet-sub">signals</div></div></div>`).join("")}
   </div>`;
 }
 
@@ -1604,7 +1610,7 @@ function render(){
         const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
         return`<div class="bet-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
           <div class="bet-left">
-            <div class="bet-name">${b.isP?`⚾ `:""}${esc(b.name)}</div>
+            <div class="bet-name">${b.isP?`⚾ `:""}${playerLink(b.name,b.metric,b.dkLine)}</div>
             <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
             <div class="bet-prop">
               <span class="prop-metric" style="font-size:10px">${b.metric}</span>
@@ -1659,7 +1665,7 @@ function render(){
               return`<div class="slip-leg">
                 <span class="slip-leg-team">${esc(l.team)}</span>
                 <div style="flex:1;min-width:0">
-                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?`⚾ `:""}${esc(l.name)}</span>
+                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?`⚾ `:""}${playerLink(l.name,l.metric,l.dkLine)}</span>
                   ${l.aiDisagreementText?`<div style="font-size:9px;color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
                 </div>
                 <div class="slip-leg-prop">
@@ -1697,7 +1703,7 @@ function render(){
         const riskHTML=hasLineupRisk?`<div class="lineup-risk-badge">⚠️ LINEUP RISK</div><div class="lineup-risk-text">${esc(injCtx)}</div>`:"";
         let rHTML="";
         if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${pk.ACTUAL_STAT}</span>`:""}</div>`}
-        return`<div class="pick-card ${cls}${hasLineupRisk?" lineup-risk":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${riskHTML}${rHTML}</div>`;
+        return`<div class="pick-card ${cls}${hasLineupRisk?" lineup-risk":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${playerLink(pk.player,pk.prop_type||"",pk.line||"")}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${riskHTML}${rHTML}</div>`;
       }).join("");
       picksHTML+=`</div>`;
     }
@@ -1715,7 +1721,7 @@ function render(){
         const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
         return`<div class="dinger-card ${isTop?"top3":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','HR','${d.dkLine||""}')">
           <div class="dinger-left">
-            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${esc(d.name)}</span></div>
+            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"HR",d.dkLine||"")}</span></div>
             <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
             <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
           </div>
@@ -1731,7 +1737,7 @@ function render(){
       const combos=getDingerCombos(db,3);
       if(combos.length){
         picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg Dinger Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos.slice(0,8).map((c,i)=>`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${c.score.toFixed(0)}</span><div class="combo-teams">${c.teams.join(" · ")}</div></div>`).join("");
+        picksHTML+=combos.slice(0,8).map((c,i)=>`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,"HR",p.dkLine||"")).join(" + ")}</span><span class="combo-score">${c.score.toFixed(0)}</span><div class="combo-teams">${c.teams.join(" · ")}</div></div>`).join("");
         picksHTML+=`</div></div>`;
       }
     }
@@ -1748,7 +1754,7 @@ function render(){
         const odds=s.overOdds?fmtOdds(s.overOdds):"";
         return`<div class="streak-card ${heat.cls}" onclick="streakToDash('${esc(s.player)}')">
           <div class="streak-left">
-            <div><span class="streak-emoji">${s.emoji}</span><span class="streak-name">${esc(s.player)}</span><span class="streak-label">${s.label}</span></div>
+            <div><span class="streak-emoji">${s.emoji}</span><span class="streak-name">${playerLink(s.player,s.stat,s.dkLine||"")}</span><span class="streak-label">${s.label}</span></div>
             <div class="streak-meta">${esc(s.team)} vs ${s.propType==="pitch"?esc(s.opp):esc(s.pitcher)+" ("+s.hand+"HP)"} · ${s.desc}</div>
             <div class="streak-chart">${miniChart(s.recentVals,s.threshold)}</div>
             ${s.dkLine?`<div class="streak-prop">DK ${s.stat} ${s.dkLine} ${odds?" O:"+odds:""} · Avg during: ${s.avgDuring}</div>`:`<div class="streak-prop">Avg during streak: ${s.avgDuring} · Season: ${s.seasAvg}</div>`}
@@ -1783,7 +1789,7 @@ function render(){
 
         return`<div class="due-card ${isTop?"top":""} ${d.type==="pitch"?"pitcher":""}" onclick="streakToDash('${esc(d.name)}')">
           <div class="due-left">
-            <div><span style="font-size:14px;margin-right:4px">🧊</span><span class="due-name">${esc(d.name)}</span><span class="due-label">${d.stat}</span></div>
+            <div><span style="font-size:14px;margin-right:4px">🧊</span><span class="due-name">${playerLink(d.name,d.stat,d.propTag?.line||"")}</span><span class="due-label">${d.stat}</span></div>
             <div class="due-meta">${esc(d.team)} vs ${d.type==="pitch"?esc(d.opp):esc(d.pitcher)+" ("+d.hand+"HP)"} · ${esc(d.venue)}</div>
             <div class="due-meta">Season: ${d.seasAvg}/g → L7: ${d.l7Avg}/g</div>
             <div class="due-chart">${dueMiniChart(d.recentVals,parseFloat(d.seasAvg))}</div>
@@ -1822,7 +1828,7 @@ function render(){
         const isTop=i<3;
         return`<div class="due-card ${isTop?"top":""}" onclick="streakToDash('${esc(d.name)}')">
           <div class="due-left">
-            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${esc(d.name)}</span></div>
+            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${playerLink(d.name,pStat,d.dkLine||"")}</span></div>
             <div class="due-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)</div>
             <div class="due-tags">
               <span class="due-tag" style="background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d">${hrPct}% hit rate</span>
@@ -1845,7 +1851,7 @@ function render(){
         picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 2-Leg ${pStat} Parlays</div><div class="combo-grid">`;
         picksHTML+=combos2.map((c,i)=>{
           const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
+          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,pStat,p.dkLine||"")).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
         }).join("");
         picksHTML+=`</div></div>`;
       }
@@ -1855,7 +1861,7 @@ function render(){
         picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg ${pStat} Parlays</div><div class="combo-grid">`;
         picksHTML+=combos3.map((c,i)=>{
           const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
+          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,pStat,p.dkLine||"")).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
         }).join("");
         picksHTML+=`</div></div>`;
       }
@@ -1892,14 +1898,14 @@ function render(){
         picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
         <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
           <div class="draft-rank" style="color:${isDrafted?"#2d5a3d":tier.color}">${i+1}</div>
-          <div class="draft-main"><div class="draft-name">${esc(p.name)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;font-size:10px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">📊</span></div><div class="draft-meta">${metaLine}</div>${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+          <div class="draft-main"><div class="draft-name">${playerLink(p.name)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;font-size:10px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">📊</span></div><div class="draft-meta">${metaLine}</div>${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
           <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"#2d5a3d":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">UD FP</div>${l7v!==projv?`<div style="font-size:9px;color:${l7v>projv?"#22c55e":"#ef4444"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
         </div>`;
       });
       picksHTML+=`</div>`;
       if(stacks.length){
         picksHTML+=`<div style="padding:14px 16px 4px;color:#4ade80;font-size:12px;font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:#6b8f7b;font-size:10px">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
-        picksHTML+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${esc(s.players[0].name)} + ${esc(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"#fbbf2422":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"#fbbf24":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
+        picksHTML+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${playerLink(s.players[0].name)} + ${playerLink(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"#fbbf2422":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"#fbbf24":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
         picksHTML+=`</div>`;
       }
     }
@@ -1918,7 +1924,7 @@ function render(){
       const hrPct=hr?`${(hr.rate*100).toFixed(0)}%`:"—";
       const edge=hr&&oIP!==null?hr.rate-oIP:null;
       const edgeStr=edge!==null?`<span class="ev-badge ${edge>0.08?"ev-pos":edge>0?"ev-neutral":"ev-neg"}">${edge>0?"+":""}${(edge*100).toFixed(0)}%</span>`:"—";
-      return`<tr style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
+      return`<tr style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
   }
 
   // === LOOKUP ===
@@ -1957,7 +1963,7 @@ function render(){
   const showCtrl=activeTab==="dashboard"||activeTab==="gamelog";
   app.innerHTML=`
   <div class="header">
-    <div class="header-title">⚾ MLB DFS Dashboard</div>
+    <div class="header-top"><div class="header-title">⚾ MLB DFS Dashboard</div><button class="refresh-btn" id="refreshBtn">↻ Refresh</button></div>
     <div class="top-nav">
       <button class="tab-btn ${activeTab==="dashboard"?"active":""}" onclick="switchTab('dashboard')">📊 Dash</button>
       <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">📋 Log</button>
@@ -2055,6 +2061,7 @@ function render(){
 
   const ms=document.getElementById("metricSel");if(ms)ms.onchange=e=>{st.metric=e.target.value;render()};
   const li=document.getElementById("lineInput");if(li)li.onchange=e=>{st.line=e.target.value;render()};
+  document.getElementById("refreshBtn")?.addEventListener("click",loadAllData);
   const of=document.getElementById("oppFilter");if(of)of.onchange=e=>{st.oppFilter=e.target.value;render()};
   const lkS=document.getElementById("lkSearch");if(lkS)lkS.oninput=e=>{clearTimeout(window._lkT);window._lkT=setTimeout(()=>searchLkPlayers(e.target.value),300)};
   const vts=document.getElementById("vsTeamSel");if(vts)vts.onchange=e=>{st.lkVsTeamId=e.target.value?parseInt(e.target.value):null;fetchLkVsTeam(st.lkPlayer.id,st.lkVsTeamId)};
