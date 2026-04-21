@@ -1427,6 +1427,67 @@ function getDraftBoard(){
   });
 }
 
+function getMlbPitcherEra(name){
+  const key=normalizePlayerName(name);
+  const row=(st.pTonight||[]).find(p=>normalizePlayerName(p.player_name)===key);
+  return row?toNum(row.Seas_ERA||row.L7_ERA||row.L3_ERA):0;
+}
+
+function getDraftStacks(){
+  return getMemo("draftStacks",()=>{
+    const board=getDraftBoard().filter(p=>!p.isPitcher);
+    const byName=new Map(board.map(p=>[normalizePlayerName(p.name),p]));
+    const byTeam=new Map();
+    for(const row of st.tonight||[]){
+      const key=normalizePlayerName(row.player_name);
+      if(!key||!byName.has(key))continue;
+      const team=row.team_abbr||"";
+      if(!byTeam.has(team))byTeam.set(team,[]);
+      byTeam.get(team).push(row);
+    }
+    const pairs=[];const seen=new Set();
+    for(const [team,rows] of byTeam.entries()){
+      for(let i=0;i<rows.length;i++){
+        for(let j=i+1;j<rows.length;j++){
+          const ra=rows[i],rb=rows[j];
+          const a=byName.get(normalizePlayerName(ra.player_name));
+          const b=byName.get(normalizePlayerName(rb.player_name));
+          if(!a||!b)continue;
+          const key=[normalizePlayerName(a.name),normalizePlayerName(b.name)].sort().join("|");
+          if(seen.has(key))continue;
+          seen.add(key);
+          const era=getMlbPitcherEra(ra.opp_pitcher_name||rb.opp_pitcher_name);
+          const venue=ra.venue_tonight||rb.venue_tonight||"";
+          const coors=/coors/i.test(venue)||["LAD","COL"].includes(team);
+          const weakPitcher=era>=4.5;
+          const proj=toNum(a.projUD)+toNum(b.projUD);
+          const score=proj+(weakPitcher?4:0)+(coors?5:0)+(toNum(a.l7UD)>toNum(a.projUD)?1:0)+(toNum(b.l7UD)>toNum(b.projUD)?1:0);
+          const tags=[];
+          if(coors)tags.push("⚡ HIGH TOTAL");
+          if(weakPitcher)tags.push("🎯 STACK TARGET");
+          if(team===ra.team_abbr&&team===rb.team_abbr)tags.push("🔗 CORRELATED");
+          pairs.push({players:[a,b],score,combinedProj:proj.toFixed(1),tags,team,opp:a.opp,pitcher:ra.opp_pitcher_name||"TBD",era,venue});
+        }
+      }
+    }
+    return pairs.sort((a,b)=>b.score-a.score).slice(0,10);
+  });
+}
+
+function getDraftStackTagMap(){
+  return getMemo("draftStackTags",()=>{
+    const map=new Map();
+    getDraftStacks().forEach(stack=>{
+      stack.players.forEach(p=>{
+        const key=normalizePlayerName(p.name);
+        if(!map.has(key))map.set(key,new Set());
+        stack.tags.forEach(tag=>map.get(key).add(tag));
+      });
+    });
+    return map;
+  });
+}
+
 function render(){
   var picksHTML="";
   const focus=saveFocus();
@@ -1800,6 +1861,8 @@ function render(){
   }else if(st.picksView==="draft"){
     const board=getDraftBoard();
     const available=board.filter(p=>!st.drafted.has(p.name));
+    const stacks=getDraftStacks().slice(0,5);
+    const stackTags=getDraftStackTagMap();
     const draftedCount=st.drafted.size;
     function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"#4ade80"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"#3b82f6"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"#4ade80"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"#3b82f6"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"#86efac"};return{label:"TIER 5 — Dart Throw",cls:"",color:"#6b8f7b"}}
     function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
@@ -1821,6 +1884,7 @@ function render(){
         const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
         if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">📈 HOT</span>`);
         if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">📉 COLD</span>`);
+        (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"#fbbf24":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
         const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
         const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}`;
         picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
@@ -1831,6 +1895,11 @@ function render(){
         </div>`;
       });
       picksHTML+=`</div>`;
+      if(stacks.length){
+        picksHTML+=`<div style="padding:14px 16px 4px;color:#4ade80;font-size:12px;font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:#6b8f7b;font-size:10px">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
+        picksHTML+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${esc(s.players[0].name)} + ${esc(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"#fbbf2422":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"#fbbf24":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
+        picksHTML+=`</div>`;
+      }
     }
   }else{
     const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
