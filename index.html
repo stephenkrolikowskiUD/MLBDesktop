@@ -1,2088 +1,1326 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
-<title>MLB DFS Dashboard</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#0f291a;color:#fff;font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding-bottom:60px}
-select,input{background:#1a3d2a;color:#fff;border:1px solid #2d5a3d;border-radius:8px;padding:8px 10px;font-size:14px;width:100%}
-input::placeholder{color:#6b8f7b}
-.header{background:#163024;padding:12px 16px;border-bottom:1px solid #2d5a3d;position:sticky;top:0;z-index:10}
-.header-title{color:#4ade80;font-weight:700;font-size:13px;margin-bottom:8px}
-.row{display:flex;gap:8px;margin-top:8px}
-.row select,.row input{flex:1}
-.section{padding:14px 16px 0}
-.label{color:#86efac;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.card{background:#163024;border-radius:10px;padding:12px 14px}
-.card-title{color:#4ade80;font-weight:700;font-size:13px;margin-bottom:8px}
-.stats-strip{background:#163024;padding:10px 16px;border-bottom:1px solid #1a3d2a;overflow-x:auto}
-.stats-strip-inner{display:flex;gap:16px;min-width:max-content}
-.stat-item{text-align:center;min-width:40px}
-.stat-label{color:#86efac;font-size:9px;margin-bottom:2px;font-weight:600}
-.stat-val{color:#4ade80;font-weight:700;font-size:13px}
-.bar-chart{display:flex;align-items:flex-end;gap:3px;height:90px}
-.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center}
-.bar-val{font-size:7px;color:#e5e7eb;margin-bottom:1px;font-weight:600}
-.bar{width:100%;border-radius:3px 3px 0 0;transition:height .3s,background .3s}
-.bar-date{font-size:7px;color:#86efac;margin-top:2px}
-.line-indicator{border-top:1px dashed #4ade80;margin-top:2px;padding-top:2px;font-size:9px;color:#4ade80}
-.avg-cards{display:flex;gap:8px}
-.avg-card{flex:1;background:#163024;border-radius:8px;padding:10px 4px;text-align:center}
-.avg-label{color:#86efac;font-size:9px;margin-bottom:4px}
-.avg-val{font-weight:700;font-size:15px}
-.split-row{display:flex;gap:8px}
-.split-card{flex:1;background:#163024;border-radius:10px;padding:12px}
-.split-title{color:#e5e7eb;font-size:10px;font-weight:600;margin-bottom:8px;display:block}
-.mini-bars-container{position:relative;height:70px;display:flex;gap:6px;align-items:flex-end}
-.mini-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
-.mini-bar{width:100%;border-radius:3px 3px 0 0;flex-shrink:0}
-.mini-bar-label{font-size:8px;color:#86efac;margin-top:2px}
-.mini-bar-val{font-size:8px;color:#fff;font-weight:600;margin-top:1px}
-.matchup-card{background:#163024;border-radius:10px;padding:12px 14px}
-.matchup-header{color:#4ade80;font-weight:700;font-size:14px;margin-bottom:6px}
-.matchup-sub{color:#86efac;font-size:11px;margin-bottom:8px}
-.matchup-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.matchup-stat{text-align:center}
-.matchup-stat .val{font-weight:700;font-size:14px;color:#fff}
-.matchup-stat .lbl{font-size:9px;color:#86efac}
-.weather-card{background:#163024;border-radius:10px;padding:12px 14px}
-.weather-row{display:flex;justify-content:space-between;margin-bottom:4px}
-.weather-key{color:#86efac;font-size:12px}
-.weather-val{color:#fff;font-size:12px;font-weight:600}
-.hit-row{display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid #2d5a3d}
-.hit-key{color:#86efac;font-size:12px}
-.hit-val{color:#fff;font-size:12px;font-weight:600}
-.timestamp{text-align:center;padding:16px;color:#4a7a5a;font-size:10px}
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px}
-@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-.error{padding:24px;color:#ef4444;font-size:14px}
-.no-data{color:#6b8f7b;font-size:11px}
-.tab-bar{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:#163024;border-top:1px solid #2d5a3d;display:flex;z-index:20}
-.tab-btn{flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:600;color:#6b8f7b;cursor:pointer;border:none;background:none}
-.tab-btn.active{color:#4ade80;border-top:2px solid #4ade80}
-.page{display:none}
-.page.active{display:block}
-.log-controls{padding:12px 16px}
-.log-table-wrap{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 180px);padding:0 16px 80px}
-table{width:100%;border-collapse:collapse;font-size:11px;min-width:360px}
-thead{position:sticky;top:0;z-index:5}
-th{background:#163024;color:#4ade80;font-weight:700;padding:6px 4px;text-align:center;border-bottom:1px solid #2d5a3d;white-space:nowrap}
-th.hl{background:#1a3d2a}
-td{padding:5px 4px;text-align:center;color:#e5e7eb;border-bottom:1px solid #1a3d2a;white-space:nowrap}
-td.hl{color:#4ade80;font-weight:700}
-td.hit{color:#22c55e;font-weight:700}
-td.miss{color:#ef4444;font-weight:700}
-td.push{color:#9ca3af;font-weight:700}
-.early-banner{background:#1a3d2a;border:1px solid #2d5a3d;border-radius:10px;padding:14px;margin:14px 16px 0;text-align:center}
-.early-banner .icon{font-size:20px;margin-bottom:4px}
-.early-banner .msg{color:#86efac;font-size:12px;font-weight:600}
-.early-banner .sub{color:#6b8f7b;font-size:11px;margin-top:4px}
-.prop-card{background:#163024;border:1px solid #2d5a3d;border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
-.prop-left{display:flex;align-items:center;gap:10px}
-.prop-metric{background:#1a3d2a;border:1px solid #2d5a3d;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;color:#4ade80;min-width:32px;text-align:center}
-.prop-line{font-size:16px;font-weight:700;color:#fff}
-.prop-right{text-align:right}
-.prop-odds{font-size:11px;font-weight:600}
-.prop-over{color:#22c55e}
-.prop-under{color:#ef4444}
-.pick-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 10px;border-left:3px solid #2d5a3d;transition:transform .15s,box-shadow .15s}
-.pick-card.smash{border-left-color:#22c55e;background:#16302a}
-.pick-card.strong{border-left-color:#3b82f6}
-.pick-rank{display:inline-block;background:#1a3d2a;color:#4ade80;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:6px}
-.pick-player{font-weight:700;font-size:14px}
-.pick-matchup{color:#86efac;font-size:11px;margin-top:2px}
-.pick-prop{display:flex;align-items:center;gap:8px;margin-top:8px}
-.pick-type{background:#1a3d2a;border:1px solid #2d5a3d;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:#4ade80}
-.pick-lean{font-size:14px;font-weight:700}
-.pick-lean.over{color:#22c55e}
-.pick-lean.under{color:#ef4444}
-.pick-conf{font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;margin-left:auto}
-.pick-conf.smash{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
-.pick-conf.strong{background:#3b82f622;color:#3b82f6;border:1px solid #3b82f644}
-.pick-conf.lean{background:#f5972622;color:#f59726;border:1px solid #f5972644}
-.pick-rationale{color:#9ca3af;font-size:11px;margin-top:6px;font-style:italic} .pick-card.lineup-risk{border-left-color:#fbbf24;background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:#fbbf24;background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:#fbbf24;background:#2a2418} .lineup-risk-badge{display:inline-block;background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2444;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:#fbbf24;font-size:11px;margin-top:4px;font-weight:600}
-.pick-result{display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #2d5a3d}
-.result-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
-.result-hit{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
-.result-miss{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
-.result-push{background:#9ca3af22;color:#9ca3af;border:1px solid #9ca3af44}
-.result-actual{color:#86efac;font-size:11px}
-.props-filter{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
-.pf-btn{padding:6px 12px;font-size:11px;font-weight:600;color:#6b8f7b;background:#1a3d2a;border:1px solid #2d5a3d;border-radius:16px;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.pf-btn.active{color:#4ade80;background:#24503a;border-color:#4ade80}
-.props-tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:50vh;padding:0 16px 16px}
-.props-tbl-wrap table{min-width:420px}
-.odds-over{color:#22c55e;font-weight:600}
-.odds-under{color:#ef4444;font-weight:600}
-.odds-even{color:#f59726;font-weight:600}
-.search-wrap{position:relative}
-.suggestions{position:absolute;top:100%;left:0;right:0;background:#1a3d2a;border:1px solid #2d5a3d;border-top:none;border-radius:0 0 8px 8px;max-height:220px;overflow-y:auto;z-index:20;display:none}
-.sug-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #24503a;font-size:13px}
-.sug-item:hover,.sug-item:active{background:#24503a}
-.sug-name{font-weight:600;color:#fff}
-.sug-meta{color:#6b8f7b;font-size:11px;margin-top:2px}
-.profile{display:flex;align-items:center;gap:14px;padding:14px 16px}
-.profile-info h2{font-size:18px;font-weight:700}
-.profile-info p{font-size:12px;color:#86efac;margin-top:2px}
-.profile-img{width:64px;height:64px;border-radius:50%;background:#1a3d2a;overflow:hidden}
-.profile-img img{width:100%;height:100%}
-.sub-tabs{display:flex;gap:4px;padding:8px 16px;overflow-x:auto}
-.sub-tab{padding:8px 14px;font-size:12px;font-weight:600;color:#6b8f7b;background:#1a3d2a;border:1px solid #2d5a3d;border-radius:20px;cursor:pointer;white-space:nowrap;flex-shrink:0}
-.sub-tab.active{color:#4ade80;background:#24503a;border-color:#4ade80}
-.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 16px 8px}
-.stat-box{background:#1a3d2a;border-radius:8px;padding:8px 4px;text-align:center}
-.stat-box .val{font-weight:700;font-size:16px;color:#4ade80}
-.stat-box .lbl{font-size:9px;color:#86efac;margin-top:2px}
-.lk-tbl-wrap{overflow-x:auto;padding:0 16px 16px}
-.lk-section{padding:14px 16px 0}
-.empty{color:#6b8f7b;font-size:12px;padding:20px;text-align:center}
-.loading-sm{color:#6b8f7b;font-size:12px;padding:20px;text-align:center}
-.picks-summary{display:flex;gap:8px;padding:0 16px 8px}
-.ps-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
-.ps-val{font-size:18px;font-weight:800;color:#4ade80}
-.ps-lbl{font-size:9px;color:#86efac;margin-top:2px}
-.dinger-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #f59726;display:flex;align-items:center;justify-content:space-between;transition:transform .15s,box-shadow .15s}
-.dinger-card.top3{border-left-color:#ef4444;background:#1a2024}
-.dinger-left{flex:1}
-.dinger-rank{display:inline-block;background:#1a3d2a;color:#f59726;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;margin-right:6px;min-width:20px;text-align:center}
-.dinger-card.top3 .dinger-rank{color:#ef4444;background:#2a1a1a}
-.dinger-name{font-weight:700;font-size:14px}
-.dinger-meta{color:#86efac;font-size:11px;margin-top:2px}
-.dinger-right{text-align:right;min-width:80px}
-.dinger-rate{font-size:16px;font-weight:800;color:#f59726}
-.dinger-card.top3 .dinger-rate{color:#ef4444}
-.dinger-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.dinger-odds{font-size:11px;font-weight:600;color:#86efac;margin-top:2px}
-.dinger-header{padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center}
-.dinger-title{color:#f59726;font-size:13px;font-weight:700}
-.dinger-desc{color:#6b8f7b;font-size:10px;padding:0 16px 8px}
-.combo-section{padding:12px 16px 0}
-.combo-title{color:#4ade80;font-size:12px;font-weight:700;margin-bottom:8px}
-.combo-card{background:#163024;border-radius:10px;padding:10px 14px;margin-bottom:6px;border-left:3px solid #f59726}
-.combo-card.best{border-left-color:#ef4444;background:#1a2024}
-.combo-rank{display:inline-block;background:#1a3d2a;color:#f59726;font-size:9px;font-weight:800;padding:2px 5px;border-radius:4px;margin-right:4px}
-.combo-card.best .combo-rank{color:#ef4444;background:#2a1a1a}
-.combo-players{font-weight:700;font-size:13px;display:inline}
-.combo-teams{color:#86efac;font-size:10px;margin-top:2px}
-.combo-score{float:right;font-size:12px;font-weight:700;color:#f59726}
-.combo-card.best .combo-score{color:#ef4444}
-/* ── Streaks ── */
-.streak-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #ffd966;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:transform .15s,box-shadow .15s}
-.streak-card.fire{border-left-color:#ff6b35}.streak-card.inferno{border-left-color:#ef4444}.streak-card.hot{border-left-color:#ffaa00}
-.streak-left{flex:1}
-.streak-emoji{font-size:14px;margin-right:4px}
-.streak-name{font-weight:700;font-size:14px}
-.streak-label{font-size:10px;font-weight:600;color:#ffaa00;margin-left:6px}
-.streak-meta{color:#86efac;font-size:11px;margin-top:2px}
-.streak-right{text-align:right;min-width:55px}
-.streak-count{font-size:22px;font-weight:800;color:#ffaa00}
-.streak-card.fire .streak-count{color:#ff6b35}.streak-card.inferno .streak-count{color:#ef4444}
-.streak-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.streak-chart{display:flex;gap:2px;align-items:flex-end;height:28px;margin-top:6px}
-.streak-chart-bar{width:8px;border-radius:2px 2px 0 0;min-height:3px}
-.streak-prop{font-size:10px;color:#86efac;margin-top:4px}
-.streak-filters{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
-/* ── Draft ── */
-.draft-card{background:#163024;border-radius:10px;padding:10px 14px;margin:0 16px 6px;border-left:3px solid #2d5a3d;display:flex;align-items:center;gap:10px;cursor:pointer;transition:transform .15s,box-shadow .15s,opacity .15s}
-.draft-card:active{transform:scale(.98)}
-.draft-card.drafted{opacity:.3;text-decoration:line-through}
-.draft-card.smash{border-left-color:#22c55e}
-.draft-card.tier1{border-left-color:#4ade80}
-.draft-card.tier2{border-left-color:#3b82f6}
-.draft-card.tier3{border-left-color:#8b5cf6}
-.draft-card.pitcher{border-left-color:#06b6d4}
-.draft-rank{font-size:16px;font-weight:800;min-width:24px;text-align:center}
-.draft-main{flex:1;min-width:0}
-.draft-name{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.draft-meta{color:#86efac;font-size:10px;margin-top:2px}
-.draft-fp{text-align:right;min-width:50px}
-.draft-fp-val{font-size:18px;font-weight:800}
-.draft-fp-lbl{font-size:8px;color:#6b8f7b}
-.draft-pos{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:6px}
-.draft-pos-p{background:#06b6d422;color:#06b6d4;border:1px solid #06b6d444}
-.draft-pos-if{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
-.draft-pos-of{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
-.draft-pos-flex{background:#8b5cf622;color:#8b5cf6;border:1px solid #8b5cf644}
-.draft-tag{font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px;margin-right:4px;display:inline-block;margin-top:3px}
-.draft-tags{margin-top:2px}
-.draft-tier-label{padding:8px 16px 4px;font-size:11px;font-weight:700}
-.draft-controls{display:flex;justify-content:space-between;align-items:center;padding:6px 16px}
-.draft-reset{background:#1a3d2a;border:1px solid #2d5a3d;color:#6b8f7b;font-size:10px;padding:4px 10px;border-radius:6px;cursor:pointer}
-.draft-count{color:#6b8f7b;font-size:10px}
-/* ═══ +EV Badges & Best Bets ═══ */
-.ev-badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px}
-.ev-pos{background:#22c55e22;color:#22c55e;border:1px solid #22c55e44}
-.ev-neg{background:#ef444422;color:#ef4444;border:1px solid #ef444444}
-.ev-neutral{background:#f5972622;color:#f59726;border:1px solid #f5972644}
-.ev-big{font-size:10px;padding:3px 8px}
-.bet-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #22c55e;display:flex;align-items:center;justify-content:space-between;transition:transform .15s,box-shadow .15s}
-.bet-card.elite{border-left-color:#ef4444;background:#1a2024}
-.bet-card.strong{border-left-color:#4ade80}
-.bet-card.mid{border-left-color:#f59726}
-.bet-left{flex:1}
-.bet-name{font-weight:700;font-size:14px}
-.bet-meta{color:#86efac;font-size:11px;margin-top:2px}
-.bet-prop{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
-.bet-right{text-align:right;min-width:70px}
-.bet-edge{font-size:20px;font-weight:800}
-.bet-edge.pos{color:#22c55e}
-.bet-edge.neg{color:#ef4444}
-.bet-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.bet-bar{height:4px;border-radius:2px;margin-top:6px;background:#1a3d2a;overflow:hidden}
-.bet-bar-fill{height:100%;border-radius:2px}
-.bet-summary{display:flex;gap:8px;padding:0 16px 8px}
-.bs-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
-.bs-val{font-size:18px;font-weight:800;color:#22c55e}
-.bs-lbl{font-size:9px;color:#86efac;margin-top:2px}
-/* ═══ Smart Slips ═══ */
-.slip-section{padding:12px 16px 0}
-.slip-tier{color:#4ade80;font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
-.slip-tier .payout{font-size:11px;color:#86efac;font-weight:600}
-.slip-card{background:#163024;border-radius:10px;padding:14px;margin:0 16px 10px;border-left:3px solid #4ade80;transition:transform .15s,box-shadow .15s}
-.slip-card.best{border-left-color:#22c55e;background:#16302a}
-.slip-card.aggressive{border-left-color:#f59726}
-.slip-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.slip-rank{font-size:11px;font-weight:700;color:#4ade80;background:#1a3d2a;padding:2px 8px;border-radius:4px}
-.slip-score{font-size:13px;font-weight:800;color:#4ade80}
-.slip-legs{display:flex;flex-direction:column;gap:6px}
-.slip-leg{display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1a3d2a;border-radius:6px}
-.slip-leg-name{font-weight:600;font-size:12px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.slip-leg-prop{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.slip-leg-metric{font-size:10px;font-weight:700;color:#4ade80;background:#0f291a;padding:2px 5px;border-radius:3px}
-.slip-leg-lean{font-size:11px;font-weight:700}
-.slip-leg-lean.over{color:#22c55e}
-.slip-leg-lean.under{color:#ef4444}
-.slip-leg-edge{font-size:9px;font-weight:600;color:#86efac}
-.slip-leg-team{font-size:9px;color:#6b8f7b;min-width:28px;text-align:center}
-.slip-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.slip-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px}
-.slip-meta{color:#6b8f7b;font-size:10px;margin-top:6px;display:flex;justify-content:space-between}
-.slip-controls{display:flex;gap:8px;padding:8px 16px;align-items:center;flex-wrap:wrap}
-.slip-controls .pf-btn{font-size:11px}
-/* ═══ They're Due ═══ */
-.due-card{background:#163024;border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid #38bdf8;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:transform .15s,box-shadow .15s}
-.due-card.top{border-left-color:#818cf8;background:#161e30}
-.due-card.pitcher{border-left-color:#06b6d4}
-.due-left{flex:1}
-.due-name{font-weight:700;font-size:14px}
-.due-label{font-size:10px;font-weight:600;color:#38bdf8;margin-left:6px}
-.due-meta{color:#86efac;font-size:11px;margin-top:2px}
-.due-right{text-align:right;min-width:65px}
-.due-score{font-size:20px;font-weight:800;color:#38bdf8}
-.due-card.top .due-score{color:#818cf8}
-.due-sub{font-size:9px;color:#6b8f7b;margin-top:1px}
-.due-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-.due-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d}
-.due-tag.matchup{background:#1a3d2a;color:#4ade80;border-color:#2d5a3d}
-.due-tag.cold{background:#2a1a2a;color:#f0abfc;border-color:#5a2d5a}
-.due-tag.prop{background:#2a2a1a;color:#fde68a;border-color:#5a5a2d}
-.due-chart{display:flex;gap:2px;align-items:flex-end;height:28px;margin-top:6px}
-.due-chart-bar{width:8px;border-radius:2px 2px 0 0;min-height:3px}
-.due-prop{font-size:10px;color:#86efac;margin-top:4px}
-.due-filters{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
+"""
+🏒 NHL DFS ENGINE v1.2
+Architecture: NHL API + Odds API + Gemini → Google Sheets → GitHub Pages HTML
+Run in Google Colab. Same pattern as NBA v8.5 and MLB v1.3.0.
 
-/* ═══ DESKTOP TOP NAV (hidden on mobile) ═══ */
-.top-nav{display:none}
-.header-controls{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.mode-toggle{display:flex;gap:8px}
-.mode-btn{flex:1;padding:6px;text-align:center;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;border:1px solid #2d5a3d}
-.ctrl-row{display:flex;gap:8px}
-.dash-grid{}
-.dash-bottom{padding:0 16px}
-.dash-props .prop-card{margin-bottom:6px}
+v1.2 changes from v1.1:
+  - Gemini SDK migrated from google-generativeai → google-genai (v1.1 used deprecated SDK)
+  - API keys now pulled from Colab userdata (no more hardcoded placeholders)
+  - Cleaned up dead code in props fetch
+  - More robust JSON parsing with truncation salvage (matching NBA/MLB pattern)
 
-/* ═══ Custom Scrollbars ═══ */
-::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-track{background:#0f291a}
-::-webkit-scrollbar-thumb{background:#2d5a3d;border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:#3d7a5d}
-::-webkit-scrollbar-corner{background:#0f291a}
-*{scrollbar-width:thin;scrollbar-color:#2d5a3d #0f291a}
+Sheets written:
+  Tonights_Skaters, Skater_Game_Logs, Home_Away_Splits,
+  Tonights_Goalies, Goalie_Game_Logs, Goalie_Home_Away,
+  DK_Player_Props, Daily_Picks
+"""
 
-/* ═══ TABLET+ (768px) ═══ */
-@media(min-width:768px){
-  body{max-width:1400px;padding-bottom:0}
-  .tab-bar{display:none}
-  /* Desktop hover states */
-  .draft-card:hover:not(.drafted){transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .streak-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .dinger-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .pick-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .combo-card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.2)}
-  .prop-card:hover{background:#1a3d2a}
-  .avg-card:hover{border-color:#4ade80 !important;transition:border-color .15s}
-  .sub-tab:hover:not(.active){background:#1a3d2a;color:#86efac}
-  .pf-btn:hover:not(.active){background:#1a3d2a;color:#86efac}
-  .sug-item:hover{background:#2d5a3d}
-  .bet-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25);transition:transform .15s,box-shadow .15s}
-  .bet-card{margin:0 0 8px}
-  .slip-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
-  .slip-card{margin:0 0 10px}
-  .due-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.25)}
-  .due-card{margin:0 0 8px}
-  .top-nav{display:flex;gap:2px;align-items:center}
-  .top-nav .tab-btn{padding:8px 16px;font-size:13px;border-radius:8px;border:none;background:none;color:#6b8f7b;cursor:pointer;font-weight:600;white-space:nowrap}
-  .top-nav .tab-btn:hover{background:#1a3d2a}
-  .top-nav .tab-btn.active{color:#4ade80;background:#1a3d2a}
-  .header{padding:12px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px}
-  .header-title{font-size:18px;margin-bottom:0;margin-right:auto}
-  .header-controls{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px}
-  .header-controls .mode-toggle{display:flex;gap:6px}
-  .header-controls .mode-btn{padding:7px 14px;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;white-space:nowrap;border:1px solid #2d5a3d}
-  .header-controls .search-wrap{flex:1;max-width:300px}
-  .header-controls .ctrl-row{display:flex;gap:8px;min-width:200px}
-  .header-controls .ctrl-row select,.header-controls .ctrl-row input{width:auto;min-width:90px}
-  .section{padding:16px 24px 0}
-  .stats-strip{padding:12px 24px}
-  .stats-strip-inner{gap:28px}
-  .stat-item{min-width:55px}
-  .stat-val{font-size:15px}
-  .stat-label{font-size:10px}
-  .bar-chart{height:130px;gap:5px}
-  .bar-val{font-size:9px}
-  .bar-date{font-size:9px}
-  .avg-card{padding:14px 10px}
-  .avg-val{font-size:18px}
-  .avg-label{font-size:11px}
-  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;padding:0 24px}
-  .dash-grid>.section{padding:16px 0 0}
-  .dash-full{grid-column:1/-1}
-  .dash-bottom{padding:0 24px}
-  .dash-bottom .section{padding:16px 0 0}
-  .dash-props .prop-card{display:inline-flex;width:calc(33.3% - 6px);margin-right:6px;margin-bottom:6px;vertical-align:top}
-  .dash-props .label{margin-bottom:10px}
-  table{font-size:13px}
-  th,td{padding:8px 6px}
-  .log-table-wrap{padding:0 24px 24px;max-height:calc(100vh - 140px)}
-  .log-controls{padding:12px 24px;max-width:300px}
-  .pick-card,.dinger-card,.streak-card,.draft-card{margin:0 0 8px}
-  .cards-wrap{padding:0 24px}
-  .picks-summary{padding:0 24px 12px}
-  .bet-summary{padding:0 24px 12px}
-  .sub-tabs{padding:8px 24px}
-  .combo-section{padding:12px 24px 0}
-  .dinger-header{padding:12px 24px 4px}
-  .dinger-desc{padding:0 24px 8px}
-  .stat-grid{margin:0 24px 8px}
-  .props-filter{padding:8px 24px}
-  .props-tbl-wrap{padding:0 24px 16px;max-height:65vh}
-  .profile{padding:16px 24px;gap:20px}
-  .profile-info h2{font-size:22px}
-  .lk-section{padding:14px 24px 0}
-  .lk-tbl-wrap{padding:0 24px 16px}
-  .draft-controls{padding:6px 24px}
-  .draft-tier-label{padding:8px 24px 4px}
-  .streak-filters{padding:8px 24px}
-  .due-filters{padding:8px 24px}
-  .early-banner{margin:14px 24px 0}
-  .timestamp{padding:20px 24px}
-  .empty{padding:40px 24px}
-  .matchup-card{padding:16px 18px}
-  .matchup-header{font-size:16px}
-  .weather-card{padding:16px 18px}
-  .split-card{padding:16px}
-  .card{padding:16px 18px}
-}
+# Install cell — run this first, then restart runtime
+# !pip install google-genai gspread google-auth requests pandas
 
-/* ═══ DESKTOP (1024px+) ═══ */
-@media(min-width:1024px){
-  .header-controls{margin-top:0;width:auto;flex:1;justify-content:flex-end}
-  .cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .cards-grid .draft-tier-label{grid-column:1/-1}
-  .combo-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-  .matchup-stats{grid-template-columns:repeat(4,1fr);gap:10px}
-  .matchup-stat .val{font-size:16px}
-  .split-row{gap:16px}
-  .profile-img{width:80px;height:80px}
-  .stat-grid{grid-template-columns:repeat(4,1fr);gap:10px}
-  .stat-box .val{font-size:18px}
-}
+import requests, json, time, re, math, unicodedata
+from datetime import datetime, date, timedelta
+from collections import defaultdict
+import pandas as pd
 
-/* ═══ WIDE DESKTOP (1400px+) ═══ */
-@media(min-width:1400px){
-  .cards-grid{grid-template-columns:repeat(3,1fr)}
-  .header{padding:12px 32px}
-  .section{padding:16px 32px 0}
-  .dash-grid{padding:0 32px;gap:0 28px}
-  .dash-bottom{padding:0 32px}
-  .dash-props .prop-card{width:calc(25% - 6px)}
-}
-</style>
-</head>
-<body>
-<div id="app"><div class="loading"><div style="font-size:32px;animation:bounce .8s ease-in-out infinite">⚾</div><div style="color:#6b8f7b;font-size:14px">Loading dashboard...</div></div></div>
-<script>
-const SHEET_ID="1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ";
-const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","UD_FP","H+R+RBI"];
-const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
-const MLB_API="https://statsapi.mlb.com/api/v1";
+# ═══════════════════════════════════════════════
+# 🔑 API KEYS — Loaded from Colab userdata (or prompted)
+# ═══════════════════════════════════════════════
+from google.colab import userdata
+import getpass
 
-let st={
-  tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
-  pTonight:[],pGameLogs:[],pSplits:[],
-  picks:[],props:[],
-  mode:"batter",
-  player:"",metric:"H",line:"",activeTab:"dashboard",oppFilter:"",
-  playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
-  loading:true,error:null,loadedAt:null,latestPickDate:"",pickGuard:null,
-  picksView:"picks",propsMetric:"ALL",propsSearch:"",
-  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",parlayStat:"HR",
-  vsSP:[],
-  lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
-  lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
-  lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
-  lkVsTeamId:null,lkLoading:{},lkTeamList:[],
-  dataVersion:0
-};
+try:
+    ODDS_API_KEY = userdata.get('ODDS_API_KEY')
+    print("🔐 Loaded Odds API key!")
+except Exception:
+    ODDS_API_KEY = getpass.getpass('🔑 Paste your Odds API Key: ')
 
-let derived={
-  version:-1,
-  batterLogsByName:new Map(),
-  pitcherLogsByName:new Map(),
-  propsByName:new Map(),
-  tonightByName:new Map(),
-  pTonightByName:new Map(),
-  latestPickDate:"",
-  picksByNameLatest:new Map(),
-  memo:new Map()
-};
+try:
+    GEMINI_API_KEY = userdata.get('GEMINI_API_KEY')
+    print("🔐 Loaded Gemini API key!")
+except Exception:
+    print("⚠️ No Gemini API key found — AI picks will be skipped.")
+    GEMINI_API_KEY = None
 
-function resetDerived(){
-  derived={
-    version:-1,
-    batterLogsByName:new Map(),
-    pitcherLogsByName:new Map(),
-    propsByName:new Map(),
-    tonightByName:new Map(),
-    pTonightByName:new Map(),
-    latestPickDate:"",
-    picksByNameLatest:new Map(),
-    memo:new Map()
-  };
-}
+SHEET_ID = "1OpER7aRmMFWyxMONdg_LqiyQ47cA3dWRSR8UEQH8FIM"
+TODAY = date.today().isoformat()  # YYYY-MM-DD
 
-function indexRowsByName(rows,nameKey){
-  const map=new Map();
-  for(const row of rows||[]){
-    const key=normalizePlayerName(row?.[nameKey]);
-    if(!key)continue;
-    if(!map.has(key))map.set(key,[]);
-    map.get(key).push(row);
-  }
-  return map;
-}
+# NHL API base
+NHL_API = "https://api-web.nhle.com/v1"
+NHL_STATS = "https://api.nhle.com/stats/rest/en"
 
-function ensureDerived(){
-  if(derived.version===st.dataVersion)return;
-  resetDerived();
-  derived.version=st.dataVersion;
-  derived.batterLogsByName=indexRowsByName(st.gameLogs,"player_name");
-  derived.pitcherLogsByName=indexRowsByName(st.pGameLogs,"player_name");
-  for(const logs of derived.batterLogsByName.values())logs.sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-  for(const logs of derived.pitcherLogsByName.values())logs.sort((a,b)=>(b.game_date||"").localeCompare(a.game_date||""));
-  derived.propsByName=indexRowsByName(st.props,"PLAYER_NAME");
-  for(const row of st.tonight||[]){
-    const key=normalizePlayerName(row?.player_name);
-    if(key&&!derived.tonightByName.has(key))derived.tonightByName.set(key,row);
-  }
-  for(const row of st.pTonight||[]){
-    const key=normalizePlayerName(row?.player_name);
-    if(key&&!derived.pTonightByName.has(key))derived.pTonightByName.set(key,row);
-  }
-  const allDates=[...new Set((st.picks||[]).map(p=>normalizeDate(p.DATE||p.date)).filter(Boolean))].sort();
-  derived.latestPickDate=allDates.length?allDates[allDates.length-1]:"";
-  for(const p of st.picks||[]){
-    const key=normalizePlayerName(p?.player);
-    if(!key)continue;
-    if(normalizeDate(p.DATE||p.date)===derived.latestPickDate && !derived.picksByNameLatest.has(key)){
-      derived.picksByNameLatest.set(key,p);
+# Odds API
+ODDS_BASE = "https://api.the-odds-api.com/v4"
+SPORT_KEY = "icehockey_nhl"
+
+def get_nhl_season_id(now=None):
+    now = now or datetime.now()
+    start_year = now.year if now.month >= 7 else now.year - 1
+    return f"{start_year}{start_year + 1}"
+
+def get_nhl_game_type(now=None):
+    now = now or datetime.now()
+    season_id = get_nhl_season_id(now)
+    season_end_year = int(season_id[4:])
+    # 2025-26 regular season ends April 16, 2026 and playoffs begin April 18, 2026.
+    # We use April 18 of the season-end year as the playoff cutoff instead of flipping all of April.
+    playoff_start_cutoff = date(season_end_year, 4, 18)
+    return 3 if now.date() >= playoff_start_cutoff else 2
+
+CURRENT_SEASON = get_nhl_season_id()
+# Game type: 2=regular season, 3=playoffs
+GAME_TYPE = get_nhl_game_type()
+
+print(f"🏒 NHL Engine v1.2 — {TODAY}")
+print(f"   Season: {CURRENT_SEASON}, Game Type: {'Playoffs' if GAME_TYPE==3 else 'Regular Season'}")
+
+# ═══════════════════════════════════════════════
+# 📊 GOOGLE SHEETS AUTH
+# ═══════════════════════════════════════════════
+import gspread
+from google.colab import auth
+from google.auth import default
+
+auth.authenticate_user()
+creds, _ = default()
+gc = gspread.authorize(creds)
+wb = gc.open_by_key(SHEET_ID)
+print("✅ Google Sheets connected")
+
+def clean_cell(val):
+    """Clean values for Sheets API — must be at module level for gspread"""
+    if val is None:
+        return ""
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return ""
+        return round(val, 4)
+    return val
+
+def upload_sheet(name, rows):
+    """Upload data to a named sheet tab (overwrite)"""
+    if not rows:
+        print(f"  ⚠️ No data for {name}, skipping")
+        return
+    try:
+        ws = wb.worksheet(name)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = wb.add_worksheet(title=name, rows=max(len(rows)+1, 100), cols=40)
+    headers = list(rows[0].keys())
+    clean_rows = [[clean_cell(r.get(h, "")) for h in headers] for r in rows]
+    ws.clear()
+    ws.update([headers] + clean_rows)
+    print(f"  ✅ {name}: {len(rows)} rows, {len(headers)} cols")
+    time.sleep(1)
+
+def normalize_date(val):
+    """Convert any date format to ISO for consistent comparison.
+    Handles: '2026-04-14', '4/14/2026', '04/14/2026'"""
+    if not val:
+        return ""
+    val = str(val).strip()
+    if re.match(r'^\d{4}-\d{2}-\d{2}', val):
+        return val[:10]  # already ISO, trim any time portion
+    for fmt in ('%m/%d/%Y', '%m/%d/%y'):
+        try:
+            return datetime.strptime(val, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return val
+
+def to_num(val, default=0):
+    if val in (None, ""):
+        return default
+    try:
+        num = float(val)
+        return default if math.isnan(num) or math.isinf(num) else num
+    except Exception:
+        return default
+
+def load_existing_logs(sheet_name, numeric_fields):
+    try:
+        ws = wb.worksheet(sheet_name)
+        rows = ws.get_all_records()
+    except Exception:
+        return []
+    cleaned = []
+    for row in rows:
+        rec = dict(row)
+        if "game_date" in rec:
+            rec["game_date"] = normalize_date(rec.get("game_date"))
+        for field in numeric_fields:
+            if field in rec:
+                rec[field] = to_num(rec.get(field), 0)
+        cleaned.append(rec)
+    return cleaned
+
+def latest_game_date(rows):
+    dates = [normalize_date(r.get("game_date")) for r in rows if normalize_date(r.get("game_date"))]
+    return max(dates) if dates else ""
+
+def normalize_player_name(name):
+    text = unicodedata.normalize('NFKD', str(name or ''))
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    text = re.sub(r"[’'`\.]", "", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+def normalize_prop_metric(metric):
+    return re.sub(r"\s+", "", str(metric or "").strip().upper())
+
+def normalize_confidence(val):
+    conf = str(val or "").strip().upper()
+    return conf if conf in {"SMASH", "STRONG", "LEAN"} else "LEAN"
+
+def append_upload(sheet_name, df):
+    try:
+        try:
+            ws = wb.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = wb.add_worksheet(title=sheet_name, rows=5000, cols=30)
+            ws.update([df.columns.tolist()])
+
+        existing = ws.get_all_values()
+        cleaned = [[clean_cell(v) for v in row] for row in df.values.tolist()]
+
+        if len(existing) <= 1:
+            ws.update([df.columns.tolist()] + cleaned)
+        else:
+            # ── DATE DEDUP: replace today's rows if they already exist ──
+            headers = existing[0]
+            date_col_idx = next((i for i, h in enumerate(headers) if h.upper() == 'DATE'), None)
+
+            if date_col_idx is not None:
+                df_date_col = next((c for c in df.columns if c.upper() == 'DATE'), None)
+                if df_date_col:
+                    today_iso = normalize_date(str(df[df_date_col].iloc[0]))
+                    rows_to_delete = []
+                    for i, row in enumerate(existing[1:], start=2):
+                        if date_col_idx < len(row) and normalize_date(row[date_col_idx]) == today_iso:
+                            rows_to_delete.append(i)
+                    if rows_to_delete:
+                        for row_idx in reversed(rows_to_delete):
+                            ws.delete_rows(row_idx)
+                        print(f"🔄 Replaced {len(rows_to_delete)} existing rows for date {today_iso} in '{sheet_name}'")
+
+            ws.append_rows(cleaned, value_input_option='RAW')
+
+        print(f"✅ Appended {len(df)} rows to '{sheet_name}'")
+    except Exception as e:
+        print(f"❌ FAILED append '{sheet_name}': {e}")
+
+# ═══════════════════════════════════════════════
+# 🏒 NHL API HELPERS
+# ═══════════════════════════════════════════════
+def nhl_get(url):
+    """Fetch from NHL API with retries"""
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=15)
+            if r.status_code == 200:
+                return r.json()
+            print(f"  ⚠️ NHL API {r.status_code}: {url[:80]}")
+        except Exception as e:
+            print(f"  ⚠️ NHL API error (attempt {attempt+1}): {e}")
+        time.sleep(1)
+    return None
+
+# ═══════════════════════════════════════════════
+# 📅 STEP 1: TONIGHT'S SCHEDULE
+# ═══════════════════════════════════════════════
+print(f"\n📅 Fetching schedule for {TODAY}...")
+schedule_data = nhl_get(f"{NHL_API}/schedule/{TODAY}")
+games = []
+if schedule_data:
+    for day in schedule_data.get("gameWeek", []):
+        if day.get("date") == TODAY:
+            games = day.get("games", [])
+            break
+
+if not games:
+    print("❌ No NHL games today!")
+    # Still try — might be a schedule format issue
+    # Try alternate endpoint
+    sched2 = nhl_get(f"{NHL_API}/score/{TODAY}")
+    if sched2:
+        games = sched2.get("games", [])
+
+print(f"  Found {len(games)} games tonight")
+for g in games:
+    away = g.get("awayTeam", {}).get("abbrev", "?")
+    home = g.get("homeTeam", {}).get("abbrev", "?")
+    print(f"    {away} @ {home}")
+
+# Build team pairs
+game_pairs = []
+team_opponents = {}  # team_abbr -> opp_abbr
+team_home_away = {}  # team_abbr -> "Home"/"Away"
+team_game_totals = {}
+team_spreads = {}
+team_moneylines = {}
+starter_goalies = {}
+
+for g in games:
+    away_abbr = g.get("awayTeam", {}).get("abbrev", "")
+    home_abbr = g.get("homeTeam", {}).get("abbrev", "")
+    venue = g.get("venue", {}).get("default", "")
+    game_pairs.append({"away": away_abbr, "home": home_abbr, "venue": venue, "game_id": g.get("id")})
+    team_opponents[away_abbr] = home_abbr
+    team_opponents[home_abbr] = away_abbr
+    team_home_away[away_abbr] = "Away"
+    team_home_away[home_abbr] = "Home"
+
+def norm_name(name):
+    return re.sub(r'[^a-z0-9]+', '', str(name or '').lower())
+
+def extract_goalie_candidate(raw_value, status):
+    if not raw_value:
+        return None
+    candidate = raw_value[0] if isinstance(raw_value, list) and raw_value else raw_value
+    if isinstance(candidate, str):
+        name = candidate.strip()
+        return {"player_name": name, "id": None, "status": status} if name else None
+    if not isinstance(candidate, dict):
+        return None
+    name = (
+        candidate.get("fullName") or
+        candidate.get("name") if isinstance(candidate.get("name"), str) else None or
+        candidate.get("goalieName") or
+        candidate.get("name", {}).get("default") or
+        candidate.get("default") or
+        candidate.get("player", {}).get("fullName") or
+        candidate.get("player", {}).get("name", {}).get("default") or
+        candidate.get("playerName", {}).get("default") or
+        (
+            candidate.get("firstName", {}).get("default", "") + " " +
+            candidate.get("lastName", {}).get("default", "")
+        ) if isinstance(candidate.get("firstName"), dict) or isinstance(candidate.get("lastName"), dict) else "" or
+        f"{candidate.get('firstName', '')} {candidate.get('lastName', '')}".strip()
+    ).strip()
+    if not name:
+        return None
+    return {
+        "player_name": name,
+        "id": candidate.get("id") or candidate.get("playerId") or candidate.get("goalieId") or candidate.get("player", {}).get("id"),
+        "status": status,
     }
-  }
-}
 
-function getMemo(key,build){
-  ensureDerived();
-  const memoKey=`${st.dataVersion}:${key}`;
-  if(derived.memo.has(memoKey))return derived.memo.get(memoKey);
-  const value=build();
-  derived.memo.set(memoKey,value);
-  return value;
-}
-
-function getPlayerLogs(name,isP){
-  ensureDerived();
-  const key=normalizePlayerName(name);
-  return (isP?derived.pitcherLogsByName:derived.batterLogsByName).get(key)||[];
-}
-
-function getTonightPlayerRow(name,isP){
-  ensureDerived();
-  const key=normalizePlayerName(name);
-  return (isP?derived.pTonightByName:derived.tonightByName).get(key)||null;
-}
-
-function cleanRows(rows){
-  if(!rows||!rows.length)return rows;
-  return rows.map(row=>{
-    const clean={};
-    for(const[k,v]of Object.entries(row)){
-      const ck=k.replace(/^\uFEFF/,'').replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
-      clean[ck]=v;
+def get_game_goalie_map(game):
+    goalie_map = {}
+    team_field_map = {
+        game.get("awayTeam", {}).get("abbrev", ""): game.get("awayTeam", {}),
+        game.get("homeTeam", {}).get("abbrev", ""): game.get("homeTeam", {}),
     }
-    return clean;
-  });
-}
+    for abbr, team_blob in team_field_map.items():
+        if not abbr:
+            continue
+        for field_name, status in [
+            ("startingGoalie", "confirmed"),
+            ("starterGoalie", "confirmed"),
+            ("startingGoalies", "confirmed"),
+            ("goalie", "confirmed"),
+            ("probableGoalie", "probable"),
+            ("projectedGoalie", "projected"),
+            ("goalies", "projected"),
+        ]:
+            candidate = extract_goalie_candidate(team_blob.get(field_name), status)
+            if candidate:
+                goalie_map[abbr] = candidate
+                break
+    return goalie_map
 
-function normalizeKeys(rows){
-  if(!rows||!rows.length)return rows;
-  return rows.map(row=>{
-    const clean={};
-    for(const[k,v]of Object.entries(row)){
-      const trimmed=String(k||'')
-        .replace(/^\uFEFF/,'')
-        .replace(/[\u200B-\u200D\uFEFF]/g,'')
-        .trim();
-      clean[trimmed]=v;
-    }
-    return clean;
-  });
-}
+tonight_teams = set(team_opponents.keys())
+print(f"  Teams playing: {', '.join(sorted(tonight_teams))}")
 
-const fetchSheet=(name)=>new Promise((res,rej)=>{
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(name)}`;
-  fetch(url)
-  .then(r=>{
-    if(!r.ok){console.error(`❌ Sheet fetch failed: ${name} (${r.status})`);throw new Error(`Failed: ${name}`)}
-    return r.text()
-  })
-  .then(text=>{
-    Papa.parse(text,{header:true,skipEmptyLines:true,dynamicTyping:true,complete:r=>{
-      console.log(`✅ ${name}: ${r.data.length} rows, cols: ${r.meta.fields?.slice(0,5).join(', ')}...`);
-      res(r.data);
-    },error:e=>{console.error(`❌ Parse error: ${name}`,e);rej(e)}});
-  })
-  .catch(e=>{console.error(`❌ Fetch error: ${name}`,e);rej(e)});
-});
+# ═══════════════════════════════════════════════
+# 👥 STEP 2: ROSTERS — Get player IDs for tonight's teams
+# ═══════════════════════════════════════════════
+print("\n👥 Fetching rosters...")
+all_skaters = []   # {id, name, team, pos, ...}
+all_goalies = []
+goalies_by_team = defaultdict(list)
 
-const toNum=v=>parseFloat(v)||0;
-const barColor=(v,l)=>!l?"#4ade80":v>l?"#22c55e":v===l?"#9ca3af":"#ef4444";
-const avgColor=(v,l)=>!l?"#4ade80":v>=l?"#4ade80":"#f97316";
-const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
-const fmtOdds=v=>{if(!v&&v!==0)return"—";v=parseInt(v);return v>0?`+${v}`:`${v}`};
-function cleanName(v){return String(v||"").trim()}
-function normalizeDate(val){
-  const s=String(val||"").trim();
-  if(!s)return"";
-  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
-  if(/^\d{4}\/\d{2}\/\d{2}$/.test(s))return s.replace(/\//g,"-");
-  const mdy=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(mdy){const[,m,d,y]=mdy;return`${y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;}
-  const parsed=new Date(s);
-  if(!Number.isNaN(parsed.getTime()))return`${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,"0")}-${String(parsed.getDate()).padStart(2,"0")}`;
-  return s;
-}
-function normalizePlayerName(name){
-  return cleanName(name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’'`\.]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
-}
-function normalizePropMetric(metric){
-  const m=String(metric||"").trim().toUpperCase().replace(/\s+/g,"");
-  return m==="BATTER_SO"?"SO":m;
-}
-function normalizeLeanText(lean){
-  const l=String(lean||"").trim().toUpperCase();
-  return l==="FADE"?"UNDER":l;
-}
-function normalizeConfidence(conf){
-  const v=cleanName(conf).toUpperCase();
-  return v==="SMASH"||v==="STRONG"||v==="LEAN"?v:"LEAN";
-}
-function aiAgreesWithBet(aiPick,betLikeObject){
-  if(!aiPick||!betLikeObject)return false;
-  return normalizePlayerName(aiPick.player||aiPick.PLAYER||aiPick.Player||aiPick.PLAYER_NAME)===normalizePlayerName(betLikeObject.name||betLikeObject.player)
-    && normalizePropMetric(aiPick.prop_type)===normalizePropMetric(betLikeObject.metric||betLikeObject.prop_type)
-    && normalizeLeanText(aiPick.lean)===normalizeLeanText(betLikeObject.lean);
-}
-function easternTodayISO(){return new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'})}
-function getPickGuard(latestDate,picksCount){
-  const tonightCount=st.mode==="pitcher"?st.pTonight.length:st.tonight.length;
-  if(!tonightCount)return null;
-  const today=easternTodayISO();
-  if(!picksCount){
-    return st.props.length
-      ?{level:"warn",text:"Engine issue — AI picks are missing or incomplete for tonight's slate."}
-      :{level:"info",text:"No AI picks for tonight yet. Props may still be loading."};
-  }
-  if(latestDate&&latestDate!==today)return{level:"warn",text:`Showing stale AI picks from ${latestDate}. Engine may be incomplete.`};
-  if(picksCount<3&&st.props.length>=12)return{level:"warn",text:`AI picks look incomplete for tonight (${picksCount} loaded).`};
-  return null;
-}
-function renderPickGuard(guard){
-  if(!guard)return"";
-  const border=guard.level==="warn"?"#f59e0b":"#6b8f7b";
-  const text=guard.level==="warn"?"#fcd34d":"#d1fae5";
-  return `<div class="section" style="margin-bottom:12px"><div class="card" style="border-left:3px solid ${border}"><div style="font-size:11px;color:${text};font-weight:600">${esc(guard.text)}</div></div></div>`;
-}
-
-const COMBO_STATS={
-  "H+R+RBI":["H","R","RBI"],
-  "H+R":["H","R"],
-  "R+RBI":["R","RBI"],
-  "H+RBI":["H","RBI"],
-  "1B+2B":["1B","2B"],
-  "BB+H":["BB","H"],
-};
-
-function getMetricVal(g,m){
-  if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(g[k]),0);
-  return toNum(g[m]);
-}
-function getRollingVal(row,prefix,m){
-  if(COMBO_STATS[m])return COMBO_STATS[m].reduce((s,k)=>s+toNum(row[`${prefix}${k}`]),0);
-  return toNum(row[`${prefix}${m}`]);
-}
-
-function hasLogs(name,isP){return getPlayerLogs(name,isP).length>0}
-function getProps(name){if(!name||!st.props.length)return[];ensureDerived();return derived.propsByName.get(normalizePlayerName(name))||[]}
-function getLatestPickDate(){ensureDerived();return derived.latestPickDate}
-function getPick(name){if(!name||!st.picks.length)return null;ensureDerived();return derived.picksByNameLatest.get(normalizePlayerName(name))||null}
-
-function firstValidPlayer(arr){
-  if(!arr||!arr.length)return "";
-  for(let i=0;i<Math.min(arr.length,30);i++){
-    const row=arr[i];if(!row)continue;
-    const n=row.player_name;
-    if(n&&String(n).trim().length>1)return String(n).trim();
-  }
-  const first=arr[0];if(!first)return "";
-  const key=Object.keys(first).find(k=>k.replace(/[^a-zA-Z_]/g,'').toLowerCase()==="player_name"||k.includes("player_name"));
-  if(key){
-    for(let i=0;i<Math.min(arr.length,30);i++){
-      const v=arr[i]?.[key];
-      if(v&&String(v).trim().length>1)return String(v).trim();
-    }
-  }
-  console.warn("⚠️ Could not find player_name. Keys:",Object.keys(first).slice(0,5));
-  return "";
-}
-
-let _restoring=false;
-function saveFocus(){const el=document.activeElement;if(el&&el.id)return{id:el.id,pos:el.selectionStart,val:el.value};return null}
-function restoreFocus(f){if(!f)return;const el=document.getElementById(f.id);if(el){_restoring=true;el.focus();if(f.val!==undefined)el.value=f.val;if(el.setSelectionRange&&f.pos!==undefined)try{el.setSelectionRange(f.pos,f.pos)}catch(e){}_restoring=false}}
-
-let useProxy=false;
-async function mlbFetch(url){
-  try{const r=await fetch(url);if(!r.ok)throw new Error(r.status);return r.json()}
-  catch(e){if(!useProxy){useProxy=true;return(await fetch("https://corsproxy.io/?"+encodeURIComponent(url))).json()}throw e}
-}
-
-function switchTab(t){st.activeTab=t;render()}
-function switchMode(m){
-  st.mode=m;
-  st.metric=m==="pitcher"?"SO":"H";
-  st.line="";st.oppFilter="";st.playerSearch="";st.playerSuggestions=[];st.showPlayerSugs=false;
-  const src=m==="pitcher"?st.pTonight:st.tonight;
-  st.player=firstValidPlayer(src);
-  console.log(`Mode → ${m}, default player: "${st.player}", source has ${src.length} entries`);
-  render();
-}
-function switchPicksView(v){st.picksView=v;render()}
-function setPropsMetric(m){st.propsMetric=m;render()}
-function setDueFilter(f){st.dueFilter=f;render()}
-function setParlayStat(s){st.parlayStat=s;render()}
-
-function getDingerCombos(board,legs){
-  if(board.length<legs)return[];
-  const combos=[];
-  function gen(start,current){
-    if(current.length===legs){
-      const teams=current.map(d=>d.team);
-      if(new Set(teams).size===legs){
-        const score=current.reduce((s,d)=>s+d.score,0);
-        combos.push({players:current.slice(),score,teams});
-      }
-      return;
-    }
-    for(let i=start;i<board.length&&combos.length<500;i++){
-      current.push(board[i]);
-      gen(i+1,current);
-      current.pop();
-    }
-  }
-  gen(0,[]);
-  combos.sort((a,b)=>b.score-a.score);
-  return combos.slice(0,10);
-}
-
-function getDingerBoard(){
-  return getMemo("dingerBoard",()=>{
-  const rows=[];
-  for(const p of st.tonight){
-    const name=p.player_name;if(!name)continue;
-    const seasHR=toNum(p.Seas_HR);
-    const l7HR=toNum(p.L7_HR);
-    const l14HR=toNum(p.L14_HR);
-    const pLogs=getPlayerLogs(name,false);
-    if(!pLogs.length)continue;
-    const totalAB=pLogs.reduce((s,g)=>s+toNum(g.AB),0);
-    if(totalAB===0)continue;
-    const seasHRtotal=pLogs.reduce((s,g)=>s+toNum(g.HR),0);
-    const hrRate=totalAB>0?seasHRtotal/totalAB:0;
-    const gamesPlayed=pLogs.length;
-    const hrPerGame=gamesPlayed>0?seasHRtotal/gamesPlayed:0;
-    const hrProp=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)==="HR");
-    const dkLine=hrProp?hrProp.DK_LINE:null;
-    const overOdds=hrProp?parseInt(hrProp.OVER_ODDS)||null:null;
-    let score=0;
-    score+=hrRate*100;
-    score+=l7HR*15;
-    score+=l14HR*8;
-    score+=seasHR*5;
-    score+=hrPerGame*20;
-    if(overOdds&&overOdds<0)score+=10;
-    if(overOdds&&overOdds>0&&overOdds<=200)score+=5;
-    rows.push({
-      name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",
-      hand:p.opp_pitcher_hand||"?",venue:p.venue_tonight||"",
-      seasHR:seasHRtotal,totalAB,hrRate,hrPerGame,gamesPlayed,
-      l7HR,l14HR,seasAvgHR:seasHR,
-      dkLine,overOdds,score
-    });
-  }
-  rows.sort((a,b)=>b.score-a.score);
-  return rows.slice(0,30);
-  });
-}
-
-// ═══ +EV ENGINE ═══
-function impliedProb(odds){
-  if(!odds&&odds!==0)return null;
-  const o=parseInt(odds);if(isNaN(o))return null;
-  return o<0?Math.abs(o)/(Math.abs(o)+100):100/(o+100);
-}
-
-function getHitRate(name,metric,line,isP){
-  const logs=getPlayerLogs(name,isP);
-  if(logs.length<3)return null;
-  const ln=parseFloat(line);if(isNaN(ln))return null;
-  const combo=COMBO_STATS[metric];
-  let over=0,under=0,push=0;
-  for(const g of logs){
-    const val=combo?combo.reduce((s,k)=>s+toNum(g[k]),0):toNum(g[metric]);
-    if(val>ln)over++;
-    else if(val<ln)under++;
-    else push++;
-  }
-  const nonPush=over+under;
-  return{
-    overRate:nonPush?over/nonPush:0,
-    underRate:nonPush?under/nonPush:0,
-    pushRate:logs.length?push/logs.length:0,
-    over,under,push,nonPush,total:logs.length
-  };
-}
-
-function propToLogCol(metric){
-  if(COMBO_STATS[metric])return metric;
-  const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
-  return map[metric]||metric;
-}
-
-function isPitcherProp(metric){return(metric||"").startsWith("P_")}
-
-function getBestBets(){
-  return getMemo("bestBets",()=>{
-  if(!st.props.length)return[];
-  const bets=[];
-  for(const p of st.props){
-    const name=p.PLAYER_NAME;if(!name)continue;
-    const metric=p.METRIC;
-    const line=parseFloat(p.DK_LINE);if(isNaN(line))continue;
-    const overOdds=parseInt(p.OVER_ODDS);
-    const underOdds=parseInt(p.UNDER_ODDS);
-    if(isNaN(overOdds)&&isNaN(underOdds))continue;
-
-    const logCol=propToLogCol(metric);
-    const isP=isPitcherProp(metric);
-    const hr=getHitRate(name,logCol,line,isP);
-    if(!hr||hr.total<3||!hr.nonPush)continue;
-
-    const overIP=impliedProb(overOdds);
-    const underIP=impliedProb(underOdds);
-
-    let overEdge=null,underEdge=null;
-    if(overIP!==null)overEdge=hr.overRate-overIP;
-    if(underIP!==null)underEdge=hr.underRate-underIP;
-
-    let lean,edge,odds,ip,hitRate;
-    if(overEdge!==null&&underEdge!==null){
-      if(overEdge>=underEdge){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.overRate}
-      else{lean="UNDER";edge=underEdge;odds=underOdds;ip=underIP;hitRate=hr.underRate}
-    }else if(overEdge!==null){lean="OVER";edge=overEdge;odds=overOdds;ip=overIP;hitRate=hr.overRate}
-    else{lean="UNDER";edge=underEdge;odds=underOdds;ip=underIP;hitRate=hr.underRate}
-
-    if(edge===null)continue;
-
-    const pT=getTonightPlayerRow(name,false)||getTonightPlayerRow(name,true)||{};
-
-    bets.push({
-      name,metric,line,lean,edge,odds,
-      impliedProb:ip,hitRate,
-      hits:lean==="OVER"?hr.over:hr.under,
-      total:hr.nonPush,
-      team:pT.team_abbr||"",
-      opp:pT.opp_abbr_tonight||"",
-      pitcher:pT.opp_pitcher_name||"",
-      hand:pT.opp_pitcher_hand||"",
-      dkLine:p.DK_LINE,
-      overOdds:p.OVER_ODDS,
-      underOdds:p.UNDER_ODDS,
-      isP
-    });
-  }
-  bets.sort((a,b)=>b.edge-a.edge);
-  return bets;
-  });
-}
-
-// ═══ SMART SLIP GENERATOR ═══
-function getConvictionLegs(){
-  const SLIP_WORTHY=new Set(["H","HR","RBI","R","TB","SB","BB","H+R+RBI","H+R","R+RBI","P_SO","UD_FP"]); const bets=getBestBets().filter(b=>b.edge>0).filter(b=>{   if(!SLIP_WORTHY.has(b.metric))return false;   if(b.lean==="UNDER"&&parseFloat(b.dkLine)<=0.5)return false;   return true; });
-  if(!bets.length)return[];
-
-  const latestDate=getLatestPickDate();
-  const aiMap=new Map();
-  st.picks.filter(pk=>normalizeDate(pk.DATE||pk.date)===latestDate).forEach(pk=>{if(pk.player)aiMap.set(normalizePlayerName(pk.player),pk)});
-  const streakMap=new Map();
-  try{
-    const streaks=getStreaks();
-    streaks.forEach(s=>{const k=`${normalizePlayerName(s.player)}|${normalizePropMetric(s.stat)}`;streakMap.set(k,s)});
-  }catch(e){}
-
-  const legs=[];
-  for(const b of bets){
-    const nl=normalizePlayerName(b.name);
-    const evScore=Math.min(b.edge*40,10);
-    let aiScore=0;
-    const aiPick=aiMap.get(nl);
-    let aiConflictLevel="",aiDisagreementText="";
-    if(aiPick){
-        const conf=normalizeConfidence(aiPick.confidence);
-        const aiLean=normalizeLeanText(aiPick.lean);
-        const aiMetric=normalizePropMetric(aiPick.prop_type);
-        const betMetric=normalizePropMetric(b.metric);
-        const aiComps=COMBO_STATS[aiMetric]||[aiMetric];
-        const betComps=COMBO_STATS[betMetric]||[betMetric];
-        const metricsRelated=betComps.some(c=>aiComps.includes(c))||aiComps.some(c=>betComps.includes(c));
-        if(metricsRelated && aiLean && aiLean!==b.lean){
-          aiConflictLevel=aiMetric===betMetric?"strong":"soft";
-          aiDisagreementText=aiMetric===betMetric?`AI says ${aiLean} ${aiMetric}`:`AI leans ${aiLean} ${aiMetric}`;
-          aiScore-=conf==="SMASH"?2.5:conf==="STRONG"?1.5:0.75;
-        }else if(aiAgreesWithBet(aiPick,b)){
-          aiScore=conf==="SMASH"?6:4;
+for team in sorted(tonight_teams):
+    roster = nhl_get(f"{NHL_API}/roster/{team}/current")
+    if not roster:
+        print(f"  ⚠️ No roster for {team}")
+        continue
+    for group in ["forwards", "defensemen"]:
+        for p in roster.get(group, []):
+            all_skaters.append({
+                "id": p.get("id"),
+                "player_name": f"{p.get('firstName',{}).get('default','')} {p.get('lastName',{}).get('default','')}".strip(),
+                "team_abbr": team,
+                "position": p.get("positionCode", ""),
+                "sweater": p.get("sweaterNumber", ""),
+            })
+    for p in roster.get("goalies", []):
+        goalie_row = {
+            "id": p.get("id"),
+            "player_name": f"{p.get('firstName',{}).get('default','')} {p.get('lastName',{}).get('default','')}".strip(),
+            "team_abbr": team,
+            "position": "G",
         }
-      }
-    let streakScore=0;
-    const logCol=propToLogCol(b.metric);
-    const sk=`${nl}|${normalizePropMetric(logCol)}`;
-    const streak=streakMap.get(sk);
-    if(streak){
-      if(streak.streak>=7)streakScore=3;
-      else if(streak.streak>=5)streakScore=2;
-      else if(streak.streak>=3)streakScore=1;
-    }
-    const reliabilityScore=Math.min(b.total/10,2);
-    const hrScore=b.hitRate>=0.8?2:b.hitRate>=0.65?1:0;
+        all_goalies.append(goalie_row)
+        goalies_by_team[team].append(goalie_row)
+    time.sleep(0.3)
 
-    const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
+print(f"  {len(all_skaters)} skaters, {len(all_goalies)} goalies across {len(tonight_teams)} teams")
 
-    let signals=[];
-    if(aiAgreesWithBet(aiPick,b)){const c=normalizeConfidence(aiPick.confidence);signals.push(c==="SMASH"?"🤖 SMASH":c==="STRONG"?"🤖 STRONG":"🤖 AI")}
-    if(aiConflictLevel==="strong")signals.push("⚠️ AI conflict");
-    else if(aiConflictLevel==="soft")signals.push("⚠️ AI cross-check");
-    if(streak)signals.push(`🔥 ${streak.streak}G streak`);
-    if(b.edge>=0.15)signals.push("💎 Elite EV");
-    else if(b.edge>=0.08)signals.push("📈 Strong EV");
-    if(b.hitRate>=0.8)signals.push(`✅ ${(b.hitRate*100).toFixed(0)}% hit`);
+print("\n🥅 Resolving starter/probable goalies...")
+for gp in game_pairs:
+    game = next((g for g in games if g.get("id") == gp.get("game_id")), None)
+    if not game:
+        continue
+    goalie_map = get_game_goalie_map(game)
+    if len(goalie_map) < 2 and gp.get("game_id"):
+        boxscore = nhl_get(f"{NHL_API}/gamecenter/{gp['game_id']}/boxscore")
+        if boxscore:
+            boxscore_goalie_map = get_game_goalie_map(boxscore)
+            for team_abbr, goalie_info in boxscore_goalie_map.items():
+                goalie_map.setdefault(team_abbr, goalie_info)
+    for team_abbr, goalie_info in goalie_map.items():
+        starter_goalies[team_abbr] = goalie_info
 
-    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:aiAgreesWithBet(aiPick,b),hasAIConflict:!!aiConflictLevel,aiConflictLevel,aiDisagreementText,hasStreak:!!streak});
-  }
-  legs.sort((a,b)=>b.conviction-a.conviction);
-  return legs;
+fallback_goalie_count = 0
+for team_abbr in tonight_teams:
+    if team_abbr not in starter_goalies:
+        roster_goalies = goalies_by_team.get(team_abbr, [])
+        if roster_goalies:
+            starter_goalies[team_abbr] = {
+                "player_name": roster_goalies[0]["player_name"],
+                "id": roster_goalies[0]["id"],
+                "status": "roster",
+            }
+            fallback_goalie_count += 1
+
+starter_count = sum(1 for info in starter_goalies.values() if info.get("status") == "confirmed")
+probable_count = sum(1 for info in starter_goalies.values() if info.get("status") == "probable")
+projected_count = sum(1 for info in starter_goalies.values() if info.get("status") == "projected")
+print(f"  ✅ Goalie signals: {starter_count} confirmed, {probable_count} probable, {projected_count} projected, {fallback_goalie_count} roster fallback")
+
+# ═══════════════════════════════════════════════
+# 📈 STEP 2.5: TEAM ADVANCED STATS (GA/G, PK%)
+# ═══════════════════════════════════════════════
+print("\n📈 Fetching team advanced stats...")
+team_stats = {}
+
+NHL_NAME_TO_ABBR = {
+    "Anaheim Ducks":"ANA","Arizona Coyotes":"ARI","Boston Bruins":"BOS","Buffalo Sabres":"BUF",
+    "Calgary Flames":"CGY","Carolina Hurricanes":"CAR","Chicago Blackhawks":"CHI","Colorado Avalanche":"COL",
+    "Columbus Blue Jackets":"CBJ","Dallas Stars":"DAL","Detroit Red Wings":"DET","Edmonton Oilers":"EDM",
+    "Florida Panthers":"FLA","Los Angeles Kings":"LAK","Minnesota Wild":"MIN","Montréal Canadiens":"MTL",
+    "Montreal Canadiens":"MTL","Nashville Predators":"NSH","New Jersey Devils":"NJD","New York Islanders":"NYI",
+    "New York Rangers":"NYR","Ottawa Senators":"OTT","Philadelphia Flyers":"PHI","Pittsburgh Penguins":"PIT",
+    "San Jose Sharks":"SJS","Seattle Kraken":"SEA","St. Louis Blues":"STL","Tampa Bay Lightning":"TBL",
+    "Toronto Maple Leafs":"TOR","Utah Hockey Club":"UTA","Utah HC":"UTA","Utah Mammoth":"UTA","Vancouver Canucks":"VAN","Vegas Golden Knights":"VGK",
+    "Washington Capitals":"WSH","Winnipeg Jets":"WPG",
 }
 
-function generateSlips(legs,legCount){
-  if(legs.length<legCount)return[];
-  const slips=[];
-  const maxIter=legCount<=3?500:300;
+try:
+    # Always get regular season stats (reliable), supplement with playoff if available
+    data = nhl_get(f"{NHL_STATS}/team/summary?cayenneExp=seasonId={CURRENT_SEASON}%20and%20gameTypeId=2")
+    if data:
+        for t in data.get("data", []):
+            full_name = t.get("teamFullName", "")
+            abbr = NHL_NAME_TO_ABBR.get(full_name, "")
+            if abbr not in tonight_teams:
+                continue
+            team_stats[abbr] = {
+                "GA_PG": round(t.get("goalsAgainstPerGame", 0), 2),
+                "PP_PCT": round(t.get("powerPlayPct", 0) * 100, 1),
+                "PK_PCT": round(t.get("penaltyKillPct", 0) * 100, 1),
+            }
+    print(f"  ✅ Team stats for {len(team_stats)} teams")
+except Exception as e:
+    print(f"  ⚠️ Team stats error: {e}")
 
-  function gen(start,current,usedPlayers,teamCounts){
-    if(current.length===legCount){
-      const score=current.reduce((s,l)=>s+l.conviction,0);
-      const avgEdge=current.reduce((s,l)=>s+l.edge,0)/legCount;
-      const avgHitRate=current.reduce((s,l)=>s+l.hitRate,0)/legCount;
-      const teams=[...new Set(current.map(l=>l.team))];
-      const signals=current.reduce((s,l)=>s+l.signals.length,0);
-      slips.push({legs:current.slice(),score,avgEdge,avgHitRate,teams,signalCount:signals,legCount});
-      return;
-    }
-    for(let i=start;i<pool.length&&slips.length<maxIter;i++){
-      const leg=pool[i];
-      if(usedPlayers.has(leg.name.toLowerCase()))continue;
-      const tc=teamCounts.get(leg.team)||0;
-      if(tc>=2)continue;
+# ═══════════════════════════════════════════════
+# ═══════════════════════════════════════════════
+# 📊 STEP 3: SKATER GAME LOGS + ROLLING AVERAGES
+# ═══════════════════════════════════════════════
+print("\n📊 Fetching skater game logs...")
+print(f"  Pulling logs for {len(all_skaters)} skaters...")
 
-      usedPlayers.add(leg.name.toLowerCase());
-      teamCounts.set(leg.team,(tc||0)+1);
-      current.push(leg);
-      gen(i+1,current,usedPlayers,teamCounts);
-      current.pop();
-      usedPlayers.delete(leg.name.toLowerCase());
-      teamCounts.set(leg.team,tc);
-    }
-  }
-  const pool=legs.slice(0,legCount<=3?15:legCount<=4?18:20);
-  gen(0,[],new Set(),new Map());
-  slips.sort((a,b)=>b.score-a.score);
+SKATER_STATS = ["G", "A", "PTS", "SOG", "BLK", "HITS", "PPP", "PIM", "TOI", "plusMinus"]
 
-  // Player diversity: try strictest cap first, relax only as needed to hit 8 slips.
-  const MAX_SLIPS=8;
-  let selected=[];
-  for(let cap=2;cap<=MAX_SLIPS;cap++){
-    selected=[];
-    const playerUsageCount=new Map();
-    for(const slip of slips){
-      if(selected.length>=MAX_SLIPS)break;
-      const overUsed=slip.legs.some(l=>(playerUsageCount.get(l.name.toLowerCase())||0)>=cap);
-      if(overUsed)continue;
-      selected.push(slip);
-      slip.legs.forEach(l=>{
-        const n=l.name.toLowerCase();
-        playerUsageCount.set(n,(playerUsageCount.get(n)||0)+1);
-      });
-    }
-    if(selected.length>=MAX_SLIPS)break;
-  }
-  return selected.slice(0,MAX_SLIPS);
+existing_skater_logs = load_existing_logs(
+    "Skater_Game_Logs",
+    ["G", "A", "PTS", "SOG", "BLK", "HITS", "PPP", "PIM", "plusMinus", "DK_FP", "UD_FP"]
+)
+latest_skater_date = latest_game_date(existing_skater_logs)
+latest_skater_date_by_pid = {}
+for row in existing_skater_logs:
+    pid_key = str(row.get("player_id", ""))
+    game_date = normalize_date(row.get("game_date", ""))
+    if pid_key and game_date and (pid_key not in latest_skater_date_by_pid or game_date > latest_skater_date_by_pid[pid_key]):
+        latest_skater_date_by_pid[pid_key] = game_date
+if latest_skater_date:
+    print(f"  ♻️ Seeding from Skater_Game_Logs through {latest_skater_date} ({len(existing_skater_logs)} existing rows)")
+else:
+    print("  🆕 No existing Skater_Game_Logs seed found — full skater fetch")
+
+# Phase A: fetch raw game logs per skater (BLK/HITS filled later from boxscore)
+skater_raw = {}  # {player_id: [row, row, ...]}
+new_skater_rows = 0
+for i, sk in enumerate(all_skaters, start=1):
+    pid = sk["id"]
+    player_latest_skater_date = latest_skater_date_by_pid.get(str(pid), "")
+    reg_data = nhl_get(f"{NHL_API}/player/{pid}/game-log/{CURRENT_SEASON}/2")
+    reg_logs = reg_data.get("gameLog", []) if reg_data else []
+    playoff_logs = []
+    if GAME_TYPE == 3:
+        po_data = nhl_get(f"{NHL_API}/player/{pid}/game-log/{CURRENT_SEASON}/3")
+        playoff_logs = po_data.get("gameLog", []) if po_data else []
+    logs = playoff_logs + reg_logs  # playoff games first
+    if not logs:
+        continue
+    parsed = []
+    for g in logs:
+        game_date = normalize_date(g.get("gameDate", ""))
+        if player_latest_skater_date and game_date and game_date <= player_latest_skater_date:
+            continue
+        parsed.append({
+            "player_id": pid,
+            "gameId": g.get("gameId") or g.get("id"),
+            "player_name": sk["player_name"],
+            "team_abbr": sk["team_abbr"],
+            "game_date": game_date,
+            "opp_abbr": g.get("opponentAbbrev", ""),
+            "home_away": "Home" if g.get("homeRoadFlag") == "H" else "Away",
+            "G": g.get("goals", 0),
+            "A": g.get("assists", 0),
+            "PTS": g.get("points", 0),
+            "SOG": g.get("shots", 0),
+            "BLK": 0,   # filled in Phase B
+            "HITS": 0,  # filled in Phase B
+            "PPP": g.get("powerPlayPoints", 0) if "powerPlayPoints" in g else (g.get("powerPlayGoals", 0) + g.get("powerPlayAssists", 0) if "powerPlayGoals" in g else 0),
+            "TOI": g.get("toi", "0:00"),
+            "plusMinus": g.get("plusMinus", 0),
+        })
+    if parsed:
+        skater_raw[pid] = parsed
+        new_skater_rows += len(parsed)
+    time.sleep(0.15)
+    if i % 25 == 0 or i == len(all_skaters):
+        print(f"  ... {i}/{len(all_skaters)} skater logs processed")
+
+print(f"  ✅ Fetched {new_skater_rows} new skater game logs across {len(skater_raw)} skaters")
+
+# Phase B: fetch boxscores once per unique game, build BLK/HITS lookup
+print("\n🥊 Fetching boxscores for BLK/HITS enrichment...")
+unique_game_ids = {r["gameId"] for rows in skater_raw.values() for r in rows if r["gameId"]}
+print(f"  {len(unique_game_ids)} unique games to fetch")
+
+bs_lookup = {}  # {(gameId, playerId): {"BLK": int, "HITS": int}}
+bs_fetched = 0
+bs_failed = 0
+for gid in unique_game_ids:
+    bs = nhl_get(f"{NHL_API}/gamecenter/{gid}/boxscore")
+    if not bs:
+        bs_failed += 1
+        continue
+    stats = bs.get("playerByGameStats", {})
+    for team_key in ("homeTeam", "awayTeam"):
+        team = stats.get(team_key, {}) or {}
+        for group in ("forwards", "defense"):
+            for p in team.get(group, []) or []:
+                ppid = p.get("playerId")
+                if not ppid:
+                    continue
+                bs_lookup[(gid, ppid)] = {
+                    "BLK": p.get("blockedShots", 0) or 0,
+                    "HITS": p.get("hits", 0) or 0,
+                }
+    bs_fetched += 1
+    if bs_fetched % 50 == 0:
+        print(f"  ... {bs_fetched}/{len(unique_game_ids)} boxscores fetched")
+    time.sleep(0.1)
+print(f"  ✅ {bs_fetched} boxscores fetched, {bs_failed} failed, {len(bs_lookup)} player-game entries")
+
+# Phase C: enrich BLK/HITS, compute DK_FP, compute rolling averages, build skater_tonight
+print("\n📊 Computing rolling averages with enriched stats...")
+combined_skater_logs = list(existing_skater_logs)
+existing_skater_keys = {
+    (
+        str(r.get("player_id", "")),
+        str(r.get("gameId", "")),
+        normalize_date(r.get("game_date", "")),
+        str(r.get("opp_abbr", "")),
+        str(r.get("home_away", "")),
+    )
+    for r in existing_skater_logs
 }
+skater_tonight = []
 
-function getSmartSlips(){
-  return getMemo("smartSlips",()=>{
-  const legs=getConvictionLegs();
-  if(!legs.length)return{legs:[],slips3:[],slips4:[],slips5:[]};
-  return{
-    legs,
-    slips3:generateSlips(legs,3),
-    slips4:generateSlips(legs,4),
-    slips5:generateSlips(legs,5)
-  };
-  });
+def avg(lst, key, n):
+    sl = lst[:n]
+    return round(sum(r.get(key, 0) for r in sl) / len(sl), 3) if sl else 0
+
+for sk in all_skaters:
+    pid = sk["id"]
+    parsed_new = skater_raw.get(pid, [])
+
+    # Enrich BLK/HITS from boxscore, recompute DK_FP with real BLK
+    for row in parsed_new:
+        key = (row["gameId"], pid)
+        if key in bs_lookup:
+            row["BLK"] = bs_lookup[key]["BLK"]
+            row["HITS"] = bs_lookup[key]["HITS"]
+        row["DK_FP"] = round(row["G"]*8.5 + row["A"]*5 + row["SOG"]*1.5 + row["BLK"]*1.3, 1)
+        row["UD_FP"] = round(row["G"]*6 + row["A"]*4 + row["PPP"]*0.5 + row["SOG"]*1 + row["HITS"]*0.5 + row["BLK"]*1, 1)
+        row_key = (
+            str(row.get("player_id", "")),
+            str(row.get("gameId", "")),
+            normalize_date(row.get("game_date", "")),
+            str(row.get("opp_abbr", "")),
+            str(row.get("home_away", "")),
+        )
+        if row_key not in existing_skater_keys:
+            combined_skater_logs.append(row)
+            existing_skater_keys.add(row_key)
+
+skater_logs_by_player = defaultdict(list)
+for row in combined_skater_logs:
+    pid_key = str(row.get("player_id", ""))
+    if pid_key:
+        skater_logs_by_player[pid_key].append(row)
+
+skater_logs = []
+for pid_key, rows in skater_logs_by_player.items():
+    rows.sort(key=lambda x: normalize_date(x["game_date"]), reverse=True)
+    skater_logs.extend(rows)
+
+for sk in all_skaters:
+    pid = sk["id"]
+    parsed = skater_logs_by_player.get(str(pid))
+    if not parsed:
+        continue
+
+    most = parsed[0].copy()
+    for stat in ["G", "A", "PTS", "SOG", "BLK", "HITS", "PPP", "PIM", "DK_FP", "UD_FP"]:
+        most[f"Seas_{stat}"] = avg(parsed, stat, len(parsed))
+        most[f"L5_{stat}"]   = avg(parsed, stat, 5)
+        most[f"L3_{stat}"]   = avg(parsed, stat, 3)
+
+    most["opp_abbr_tonight"] = team_opponents.get(sk["team_abbr"], "")
+    most["home_away_tonight"] = team_home_away.get(sk["team_abbr"], "")
+    most["position"] = sk["position"]
+    most["LAST_UPDATED"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    opp = team_opponents.get(sk["team_abbr"], "")
+    starter_info = starter_goalies.get(opp, {})
+    if starter_info:
+        most["opp_goalie_name"] = starter_info.get("player_name", "TBD")
+        most["opp_goalie_status"] = starter_info.get("status", "")
+    else:
+        opp_goalies = [g for g in all_goalies if g["team_abbr"] == opp]
+        most["opp_goalie_name"] = opp_goalies[0]["player_name"] if opp_goalies else "TBD"
+        most["opp_goalie_status"] = "roster"
+
+    opp_stats = team_stats.get(opp, {})
+    most["OPP_GA_PG"] = opp_stats.get("GA_PG", 0)
+    most["OPP_PK_PCT"] = opp_stats.get("PK_PCT", 0)
+    most["OPP_PP_PCT"] = opp_stats.get("PP_PCT", 0)
+    most["GAME_TOTAL"] = team_game_totals.get(sk["team_abbr"], 0)
+    most["SPREAD"] = team_spreads.get(sk["team_abbr"], "")
+
+    skater_tonight.append(most)
+
+print(f"  ✅ {len(skater_tonight)} skaters with logs, {len(skater_logs)} combined game log rows")
+
+# ═══════════════════════════════════════════════
+# 🧱 STEP 4: GOALIE GAME LOGS + ROLLING AVERAGES
+# ═══════════════════════════════════════════════
+print("\n🧱 Fetching goalie game logs...")
+print(f"  Pulling logs for {len(all_goalies)} goalies...")
+existing_goalie_logs = load_existing_logs(
+    "Goalie_Game_Logs",
+    ["W", "L", "SV", "GA", "SA", "SV_PCT", "SO", "DK_FP", "UD_FP"]
+)
+latest_goalie_date = latest_game_date(existing_goalie_logs)
+latest_goalie_date_by_name = {}
+for row in existing_goalie_logs:
+    name_key = normalize_player_name(row.get("player_name", ""))
+    game_date = normalize_date(row.get("game_date", ""))
+    if name_key and game_date and (name_key not in latest_goalie_date_by_name or game_date > latest_goalie_date_by_name[name_key]):
+        latest_goalie_date_by_name[name_key] = game_date
+if latest_goalie_date:
+    print(f"  ♻️ Seeding from Goalie_Game_Logs through {latest_goalie_date} ({len(existing_goalie_logs)} existing rows)")
+else:
+    print("  🆕 No existing Goalie_Game_Logs seed found — full goalie fetch")
+
+combined_goalie_logs = list(existing_goalie_logs)
+existing_goalie_keys = {
+    (
+        normalize_player_name(r.get("player_name", "")),
+        normalize_date(r.get("game_date", "")),
+        str(r.get("opp_abbr", "")),
+        str(r.get("home_away", "")),
+    )
+    for r in existing_goalie_logs
 }
+goalie_tonight = []
+new_goalie_rows = 0
 
-function pickDashPlayer(name){
-  st.player=name;st.oppFilter="";
-  console.log("Selected:",name);
-  render();
-}
-
-function setStreakFilter(f){st.streakFilter=f;render()}
-function setSlipLegs(n){st.slipLegs=n;render()}
-function toggleDrafted(name){if(st.drafted.has(name))st.drafted.delete(name);else st.drafted.add(name);render()}
-function resetDrafted(){st.drafted.clear();render()}
-function streakToDash(name,metric,line){
-  const b=st.tonight.find(t=>normalizePlayerName(t.player_name)===normalizePlayerName(name));
-  const p=st.pTonight.find(t=>normalizePlayerName(t.player_name)===normalizePlayerName(name));
-  if(b){st.mode="batter";st.metric=metric||"H";st.player=b.player_name}
-  else if(p){st.mode="pitcher";st.metric=metric||"SO";st.player=p.player_name}
-  if(line!==undefined&&line!=="")st.line=String(line);
-  else st.line="";
-  st.activeTab="dashboard";render();
-}
-
-// ═══ STREAKS ═══
-function getStreakHeat(s){if(s>=10)return{l:"INFERNO",c:"#ef4444",cls:"inferno"};if(s>=5)return{l:"ON FIRE",c:"#ff6b35",cls:"fire"};if(s>=3)return{l:"HOT",c:"#ffaa00",cls:"hot"};return{l:"WARM",c:"#ffd966",cls:"warm"}}
-function miniChart(vals,thr){const mx=Math.max(...vals,thr+1);return vals.slice().reverse().map(v=>{const h=Math.max(3,(v/mx)*26);return`<div class="streak-chart-bar" style="height:${h}px;background:${v>=thr?'#22c55e':'#ef4444'};opacity:.85"></div>`}).join("")}
-
-function getStreaks(){
-  return getMemo("streaks",()=>{
-  const streaks=[];
-  const BAT=[{key:"H",threshold:1,label:"Hit Streak",emoji:"🔥",desc:"games w/ a hit"},{key:"HR",threshold:1,label:"HR Streak",emoji:"💣",desc:"games w/ a HR"},{key:"H",threshold:2,label:"Multi-Hit",emoji:"🔥🔥",desc:"games w/ 2+ hits"},{key:"RBI",threshold:1,label:"RBI Streak",emoji:"💰",desc:"games w/ an RBI"},{key:"TB",threshold:3,label:"Power Surge",emoji:"⚡",desc:"games w/ 3+ TB"},{key:"R",threshold:1,label:"Runs Streak",emoji:"🏃",desc:"games scoring a run"},{key:"SB",threshold:1,label:"SB Streak",emoji:"💨",desc:"games w/ a steal"}];
-  const tonightNames=new Set(st.tonight.map(p=>p.player_name).filter(Boolean));
-  for(const sType of BAT){for(const name of tonightNames){
-    const logs=getPlayerLogs(name,false);
-    if(logs.length<3)continue;let streak=0;
-    for(const g of logs){if(toNum(g[sType.key])>=sType.threshold)streak++;else break}
-    if(streak<3)continue;
-    const pT=getTonightPlayerRow(name,false)||{};
-    const recentVals=logs.slice(0,7).map(g=>toNum(g[sType.key]));
-    const avgDuring=(logs.slice(0,streak).reduce((s,g)=>s+toNum(g[sType.key]),0)/streak)||0;
-    const seasAvg=toNum(logs[0][`Seas_${sType.key}`]);
-    const prop=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)===normalizePropMetric(sType.key));
-    streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"bat",desc:sType.desc,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
-  }}
-  const PITCH=[{key:"SO",threshold:6,label:"K Streak",emoji:"🔥",desc:"starts w/ 6+ K"},{key:"SO",threshold:8,label:"Elite K",emoji:"⚡",desc:"starts w/ 8+ K"},{key:"ER",threshold:2,label:"Lockdown",emoji:"🔒",compare:"lte",desc:"starts w/ ≤2 ER"},{key:"W",threshold:1,label:"Win Streak",emoji:"👑",desc:"consecutive wins"}];
-  const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
-  for(const sType of PITCH){for(const name of pNames){
-    const logs=getPlayerLogs(name,true);
-    if(logs.length<2)continue;let streak=0;const isLte=sType.compare==="lte";
-    for(const g of logs){const v=toNum(g[sType.key]);if(isLte?v<=sType.threshold:v>=sType.threshold)streak++;else break}
-    if(streak<2)continue;
-    const pT=getTonightPlayerRow(name,true)||{};
-    const recentVals=logs.slice(0,7).map(g=>toNum(g[sType.key]));
-    const avgDuring=(logs.slice(0,streak).reduce((s,g)=>s+toNum(g[sType.key]),0)/streak)||0;
-    const seasAvg=toNum(logs[0][`Seas_${sType.key}`])||toNum(logs[0][`L7_${sType.key}`]);
-    const prop=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)===normalizePropMetric(sType.key));
-    streaks.push({player:name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",pitcher:"",hand:"",venue:pT.venue_tonight||"",stat:sType.key,threshold:sType.threshold,streak,label:sType.label,emoji:sType.emoji,propType:"pitch",desc:sType.desc,isLte,avgDuring:avgDuring.toFixed(2),seasAvg:seasAvg.toFixed(2),recentVals,dkLine:prop?prop.DK_LINE:null,overOdds:prop?parseInt(prop.OVER_ODDS)||null:null});
-  }}
-  const best={};for(const s of streaks){const k=`${s.player}|${s.stat}`;if(!best[k]||s.streak>best[k].streak||(s.streak===best[k].streak&&s.threshold>best[k].threshold))best[k]=s}
-  const result=Object.values(best);result.sort((a,b)=>b.streak-a.streak);
-  return result;
-  });
-}
-
-// ═══ THEY'RE DUE ENGINE ═══
-function getDueBoard(){
-  return getMemo("dueBoard",()=>{
-  const due=[];
-  // --- BATTERS ---
-  const batStats=["H","HR","RBI","R","TB","SB","BB"];
-  const tonightNames=new Set(st.tonight.map(p=>p.player_name).filter(Boolean));
-  for(const name of tonightNames){
-    const logs=getPlayerLogs(name,false);
-    if(logs.length<7)continue; // need enough data
-    const pT=getTonightPlayerRow(name,false)||{};
-    const most=logs[0]||{};
-
-    for(const stat of batStats){
-      const seasAvg=toNum(most[`Seas_${stat}`]);
-      const l7Avg=toNum(most[`L7_${stat}`]);
-      if(seasAvg<=0)continue;
-
-      // Cold gap: how far below season average is L7?
-      const coldGap=(seasAvg-l7Avg)/seasAvg;
-      if(coldGap<0.25)continue; // need at least 25% below season avg
-
-      // Drought: consecutive games below season avg for this stat
-      let drought=0;
-      for(const g of logs){
-        if(toNum(g[stat])<seasAvg)drought++;
-        else break;
-      }
-      if(drought<2)continue;
-
-      // Matchup score
-      let matchupScore=0;
-      let matchupTags=[];
-      // Handedness split advantage
-      const hand=pT.opp_pitcher_hand||"R";
-      const vsAvg=toNum(pT.vs_OPP_AVG);
-      const vsOps=toNum(pT.vs_OPP_OPS);
-      if(vsAvg>=0.280){matchupScore+=3;matchupTags.push(`vs ${hand}HP: ${vsAvg.toFixed(3)}`)}
-      else if(vsAvg>=0.250){matchupScore+=1.5;matchupTags.push(`vs ${hand}HP: ${vsAvg.toFixed(3)}`)}
-      if(vsOps>=0.850)matchupScore+=2;
-      else if(vsOps>=0.750)matchupScore+=1;
-
-      // Opposing pitcher quality (check if starter is in our pitcher logs)
-      const oppPitcher=pT.opp_pitcher_name||"";
-      if(oppPitcher&&oppPitcher!=="TBD"){
-        const pLogs=getPlayerLogs(oppPitcher,true);
-        if(pLogs.length>0){
-          const pMost=pLogs[0];
-          const era=toNum(pMost.Seas_ERA);
-          const whip=toNum(pMost.Seas_WHIP);
-          if(era>=4.50){matchupScore+=3;matchupTags.push(`vs ${oppPitcher} (${era.toFixed(2)} ERA)`)}
-          else if(era>=4.00){matchupScore+=1.5;matchupTags.push(`vs ${oppPitcher} (${era.toFixed(2)} ERA)`)}
-          if(whip>=1.40)matchupScore+=1.5;
-          else if(whip>=1.25)matchupScore+=0.5;
+for i, gk in enumerate(all_goalies, start=1):
+    starter_info = starter_goalies.get(gk["team_abbr"])
+    if starter_info:
+        starter_id = starter_info.get("id")
+        starter_name = starter_info.get("player_name", "")
+        if starter_id and gk["id"] != starter_id:
+            continue
+        if not starter_id and starter_name and norm_name(gk["player_name"]) != norm_name(starter_name):
+            continue
+    pid = gk["id"]
+    goalie_latest_date = latest_goalie_date_by_name.get(normalize_player_name(gk["player_name"]), "")
+    reg_data = nhl_get(f"{NHL_API}/player/{pid}/game-log/{CURRENT_SEASON}/2")
+    reg_logs = reg_data.get("gameLog", []) if reg_data else []
+    playoff_logs = []
+    if GAME_TYPE == 3:
+        po_data = nhl_get(f"{NHL_API}/player/{pid}/game-log/{CURRENT_SEASON}/3")
+        playoff_logs = po_data.get("gameLog", []) if po_data else []
+    logs = playoff_logs + reg_logs
+    if not logs:
+        continue
+    parsed = []
+    for g in logs:
+        game_date = normalize_date(g.get("gameDate", ""))
+        if goalie_latest_date and game_date and game_date <= goalie_latest_date:
+            continue
+        sa = g.get("shotsAgainst", 0)
+        ga = g.get("goalsAgainst", 0)
+        sv = sa - ga if sa else 0
+        svp = round(sv / sa, 3) if sa > 0 else 0
+        row = {
+            "player_id": pid,
+            "player_name": gk["player_name"],
+            "team_abbr": gk["team_abbr"],
+            "game_date": game_date,
+            "opp_abbr": g.get("opponentAbbrev", ""),
+            "home_away": "Home" if g.get("homeRoadFlag") == "H" else "Away",
+            "W": 1 if g.get("decision") == "W" else 0,
+            "L": 1 if g.get("decision") == "L" else 0,
+            "SV": sv,
+            "GA": ga,
+            "SA": sa,
+            "SV_PCT": svp,
+            "SO": 1 if ga == 0 else 0,
+            "TOI": g.get("toi", "0:00"),
+            "DK_FP": round(sv * 0.7 + (6 if g.get("decision") == "W" else 0) + ga * -3 + (5 if ga == 0 else 0), 1),
+            "UD_FP": round(sv * 0.6 + (6 if g.get("decision") == "W" else 0) + ga * -3, 1),
         }
-      }
+        parsed.append(row)
+    for row in parsed:
+        row_key = (
+            normalize_player_name(row.get("player_name", "")),
+            normalize_date(row.get("game_date", "")),
+            str(row.get("opp_abbr", "")),
+            str(row.get("home_away", "")),
+        )
+        if row_key not in existing_goalie_keys:
+            combined_goalie_logs.append(row)
+            existing_goalie_keys.add(row_key)
+            new_goalie_rows += 1
 
-      // Venue boost (Coors)
-      const venue=pT.venue_tonight||"";
-      if(venue.includes("Coors")){matchupScore+=2;matchupTags.push("🏔️ Coors")}
+goalie_logs_by_name = defaultdict(list)
+for row in combined_goalie_logs:
+    goalie_logs_by_name[normalize_player_name(row.get("player_name", ""))].append(row)
 
-      // DK prop overlay
-      const prop=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)===normalizePropMetric(stat));
-      let propTag=null;
-      if(prop){propTag={line:prop.DK_LINE,overOdds:parseInt(prop.OVER_ODDS)||null}}
+goalie_logs = []
+for name_key, rows in goalie_logs_by_name.items():
+    rows.sort(key=lambda x: normalize_date(x["game_date"]), reverse=True)
+    goalie_logs.extend(rows)
 
-      // Total score: cold gap importance + drought length + matchup quality
-      const coldScore=coldGap*15; // 0-15 range (25%-100% below)
-      const droughtScore=Math.min(drought*1.5,10);
-      const totalScore=coldScore+droughtScore+matchupScore;
+print(f"  ✅ Fetched {new_goalie_rows} new goalie game logs")
 
-      if(totalScore<5)continue; // minimum threshold
+for i, gk in enumerate(all_goalies, start=1):
+    starter_info = starter_goalies.get(gk["team_abbr"])
+    if starter_info:
+        starter_id = starter_info.get("id")
+        starter_name = starter_info.get("player_name", "")
+        if starter_id and gk["id"] != starter_id:
+            continue
+        if not starter_id and starter_name and norm_name(gk["player_name"]) != norm_name(starter_name):
+            continue
+    parsed = goalie_logs_by_name.get(normalize_player_name(gk["player_name"]))
+    if not parsed:
+        continue
 
-      const recentVals=logs.slice(0,7).map(g=>toNum(g[stat]));
+    def avg(lst, key, n):
+        sl = lst[:n]
+        return round(sum(r.get(key, 0) for r in sl) / len(sl), 3) if sl else 0
 
-      due.push({
-        name,team:pT.team_abbr||"",opp:pT.opp_abbr_tonight||"",
-        pitcher:pT.opp_pitcher_name||"TBD",hand:pT.opp_pitcher_hand||"?",
-        venue,stat,type:"bat",
-        seasAvg:seasAvg.toFixed(2),l7Avg:l7Avg.toFixed(2),
-        coldGap:(coldGap*100).toFixed(0),
-        drought,matchupScore,matchupTags,
-        propTag,recentVals,totalScore
-      });
-    }
-  }
+    most = parsed[0].copy()
+    for stat in ["W", "SV", "GA", "SA", "SV_PCT", "SO", "DK_FP", "UD_FP"]:
+        most[f"Seas_{stat}"] = avg(parsed, stat, len(parsed))
+        most[f"L5_{stat}"] = avg(parsed, stat, 5)
+        most[f"L3_{stat}"] = avg(parsed, stat, 3)
 
-  // --- PITCHERS ---
-  const pNames=new Set(st.pTonight.map(p=>p.player_name).filter(Boolean));
-  for(const name of pNames){
-    const logs=getPlayerLogs(name,true);
-    if(logs.length<3)continue;
-    const pT=getTonightPlayerRow(name,true)||{};
-    const most=logs[0]||{};
+    most["opp_abbr_tonight"] = team_opponents.get(gk["team_abbr"], "")
+    most["home_away_tonight"] = team_home_away.get(gk["team_abbr"], "")
+    most["starter_status"] = starter_goalies.get(gk["team_abbr"], {}).get("status", "roster")
+    most["LAST_UPDATED"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    goalie_tonight.append(most)
+    if i % 5 == 0 or i == len(all_goalies):
+        print(f"  ... {i}/{len(all_goalies)} goalie logs processed")
 
-    // Pitcher "due" — strikeout pitcher in a slump, ace with bad recent ERA
-    const pStats=[
-      {key:"SO",label:"Strikeouts",higher:true},
-      {key:"UD_FP",label:"UD Fantasy",higher:true},
-    ];
+print(f"  ✅ {len(goalie_tonight)} goalies with logs, {len(goalie_logs)} combined log rows")
 
-    for(const ps of pStats){
-      const seasAvg=toNum(most[`Seas_${ps.key}`]);
-      const l3Avg=toNum(most[`L3_${ps.key}`]);
-      if(seasAvg<=0)continue;
+# ═══════════════════════════════════════════════
+# 🏠 STEP 5: HOME/AWAY SPLITS
+# ═══════════════════════════════════════════════
+print("\n🏠 Computing home/away splits...")
+skater_splits = []
+for name in set(r["player_name"] for r in skater_logs):
+    plogs = [r for r in skater_logs if r["player_name"] == name]
+    home = [r for r in plogs if r["home_away"] == "Home"]
+    away = [r for r in plogs if r["home_away"] == "Away"]
+    if not home and not away:
+        continue
+    sp = {"player_name": name, "Home_GAMES": len(home), "Away_GAMES": len(away)}
+    for stat in ["G", "A", "PTS", "SOG", "BLK", "HITS", "PPP", "DK_FP"]:
+        sp[f"{stat}_Home"] = round(sum(r[stat] for r in home) / len(home), 3) if home else 0
+        sp[f"{stat}_Away"] = round(sum(r[stat] for r in away) / len(away), 3) if away else 0
+    skater_splits.append(sp)
 
-      const coldGap=(seasAvg-l3Avg)/seasAvg;
-      if(coldGap<0.20)continue;
+goalie_splits = []
+for name in set(r["player_name"] for r in goalie_logs):
+    plogs = [r for r in goalie_logs if r["player_name"] == name]
+    home = [r for r in plogs if r["home_away"] == "Home"]
+    away = [r for r in plogs if r["home_away"] == "Away"]
+    if not home and not away:
+        continue
+    sp = {"player_name": name, "Home_GAMES": len(home), "Away_GAMES": len(away)}
+    for stat in ["SV", "GA", "SV_PCT", "W", "DK_FP"]:
+        sp[f"{stat}_Home"] = round(sum(r[stat] for r in home) / len(home), 3) if home else 0
+        sp[f"{stat}_Away"] = round(sum(r[stat] for r in away) / len(away), 3) if away else 0
+    goalie_splits.append(sp)
 
-      let drought=0;
-      for(const g of logs){
-        if(toNum(g[ps.key])<seasAvg)drought++;
-        else break;
-      }
-      if(drought<2)continue;
+print(f"  ✅ {len(skater_splits)} skater splits, {len(goalie_splits)} goalie splits")
 
-      // Matchup: opposing team's batting quality (use schedule to find opp)
-      let matchupScore=0;
-      let matchupTags=[];
-      const oppAbbr=pT.opp_abbr_tonight||"";
 
-      // Check opponent team batting average from tonight's batters
-      if(oppAbbr){
-        const oppBatters=st.tonight.filter(b=>b.team_abbr===oppAbbr);
-        if(oppBatters.length>0){
-          const teamSeasAvg=oppBatters.reduce((s,b)=>s+toNum(b.Seas_H),0)/oppBatters.length;
-          if(teamSeasAvg<0.8){matchupScore+=3;matchupTags.push(`vs weak ${oppAbbr} lineup`)}
-          else if(teamSeasAvg<1.0){matchupScore+=1.5;matchupTags.push(`vs avg ${oppAbbr} lineup`)}
-        }
-      }
 
-      // Home/away advantage
-      const ha=pT.home_away_tonight||"";
-      if(ha==="Home"){matchupScore+=1;matchupTags.push("🏠 Home")}
+# ═══════════════════════════════════════════════
+# 💰 STEP 6: ODDS API — SPREADS & TOTALS
+# ═══════════════════════════════════════════════
+print("\n💰 Fetching odds (spreads, totals)...")
+try:
+    odds_r = requests.get(f"{ODDS_BASE}/sports/{SPORT_KEY}/odds", params={
+        "apiKey": ODDS_API_KEY,
+        "regions": "us",
+        "markets": "h2h,spreads,totals",
+        "oddsFormat": "american"
+    }, timeout=15)
+    odds_data = odds_r.json() if odds_r.status_code == 200 else []
+    tonight_team_set = set(team_opponents.keys())
+    # Parse totals, spreads, and moneylines into team lookup dicts
+    for game in odds_data:
+        away = game.get("away_team","")
+        home = game.get("home_team","")
+        away_abbr = NHL_NAME_TO_ABBR.get(away,"")
+        home_abbr = NHL_NAME_TO_ABBR.get(home,"")
+        if tonight_team_set and ({away_abbr, home_abbr} - tonight_team_set):
+            continue
+        if not away_abbr and not home_abbr:
+            continue
+        for bm in game.get("bookmakers",[]):
+            if "draftkings" not in bm.get("key","").lower():
+                continue
+            for mkt in bm.get("markets",[]):
+                if mkt["key"] == "totals":
+                    for o in mkt.get("outcomes",[]):
+                        if o["name"] == "Over":
+                            total = o.get("point",0)
+                            if away_abbr: team_game_totals[away_abbr] = total
+                            if home_abbr: team_game_totals[home_abbr] = total
+                elif mkt["key"] == "h2h":
+                    for o in mkt.get("outcomes",[]):
+                        name = o.get("name","")
+                        ml_abbr = NHL_NAME_TO_ABBR.get(name,"")
+                        if ml_abbr:
+                            team_moneylines[ml_abbr] = o.get("price","")
+                elif mkt["key"] == "spreads":
+                    for o in mkt.get("outcomes",[]):
+                        name = o.get("name","")
+                        spread_abbr = NHL_NAME_TO_ABBR.get(name,"")
+                        if spread_abbr:
+                            team_spreads[spread_abbr] = o.get("point","")
+            break
+    print(f"  📊 Parsed totals for {len(team_game_totals)} teams")
+    # Attach game totals and spreads to skater_tonight (Step 3 ran before odds were fetched)
+    for sk in skater_tonight:
+        abbr = sk.get("team_abbr","")
+        if abbr in team_game_totals:
+            sk["GAME_TOTAL"] = team_game_totals[abbr]
+        if abbr in team_spreads:
+            sk["SPREAD"] = team_spreads[abbr]
+        if abbr in team_moneylines:
+            sk["MONEYLINE"] = team_moneylines[abbr]
+    for gk in goalie_tonight:
+        abbr = gk.get("team_abbr","")
+        if abbr in team_game_totals:
+            gk["GAME_TOTAL"] = team_game_totals[abbr]
+        if abbr in team_spreads:
+            gk["SPREAD"] = team_spreads[abbr]
+        if abbr in team_moneylines:
+            gk["MONEYLINE"] = team_moneylines[abbr]
 
-      const prop=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)==="P_SO");
-      let propTag=null;
-      if(prop){propTag={line:prop.DK_LINE,overOdds:parseInt(prop.OVER_ODDS)||null}}
+    def implied_prob(price):
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            return None
+        if price < 0:
+            return abs(price) / (abs(price) + 100)
+        return 100 / (price + 100)
 
-      const coldScore=coldGap*15;
-      const droughtScore=Math.min(drought*2,10);
-      const totalScore=coldScore+droughtScore+matchupScore;
+    implied_lookup = {}
+    for gp in game_pairs:
+        away_abbr = gp.get("away", "")
+        home_abbr = gp.get("home", "")
+        game_total = team_game_totals.get(away_abbr) or team_game_totals.get(home_abbr)
+        away_ml = team_moneylines.get(away_abbr)
+        home_ml = team_moneylines.get(home_abbr)
+        away_prob = implied_prob(away_ml)
+        home_prob = implied_prob(home_ml)
+        if not game_total or away_prob is None or home_prob is None or away_prob + home_prob == 0:
+            continue
+        total_prob = away_prob + home_prob
+        away_share = away_prob / total_prob
+        home_share = home_prob / total_prob
+        implied_lookup[away_abbr] = round(float(game_total) * away_share, 2)
+        implied_lookup[home_abbr] = round(float(game_total) * home_share, 2)
 
-      if(totalScore<4)continue;
+    for sk in skater_tonight:
+        abbr = sk.get("team_abbr", "")
+        if abbr in implied_lookup:
+            sk["IMPLIED_TOTAL"] = implied_lookup[abbr]
+    for gk in goalie_tonight:
+        abbr = gk.get("team_abbr", "")
+        if abbr in implied_lookup:
+            gk["IMPLIED_TOTAL"] = implied_lookup[abbr]
+except Exception as e:
+    print(f"  ⚠️ Odds error: {e}")
+    odds_data = []
 
-      const recentVals=logs.slice(0,7).map(g=>toNum(g[ps.key]));
+# ═══════════════════════════════════════════════
+# 🎲 STEP 7: ODDS API — PLAYER PROPS
+# ═══════════════════════════════════════════════
+print("\n🎲 Fetching player props...")
+# NHL prop markets — batch into groups of 5 (API limit)
+PROP_MARKETS = [
+    ["player_points", "player_assists", "player_goals", "player_shots_on_goal", "player_blocked_shots"],
+    ["player_power_play_points", "goalie_saves"],
+]
 
-      due.push({
-        name,team:pT.team_abbr||"",opp:oppAbbr,
-        pitcher:"",hand:"",
-        venue:pT.venue_tonight||"",stat:ps.key,type:"pitch",
-        seasAvg:seasAvg.toFixed(2),l7Avg:l3Avg.toFixed(2),
-        coldGap:(coldGap*100).toFixed(0),
-        drought,matchupScore,matchupTags,
-        propTag,recentVals,totalScore
-      });
-    }
-  }
-
-  // Deduplicate: keep best stat per player
-  const best={};
-  for(const d of due){
-    const k=d.name;
-    if(!best[k]||d.totalScore>best[k].totalScore)best[k]=d;
-  }
-  const result=Object.values(best);
-  result.sort((a,b)=>b.totalScore-a.totalScore);
-  return result;
-  });
+MARKET_TO_METRIC = {
+    "player_points": "PTS",
+    "player_goals": "G",
+    "player_assists": "A",
+    "player_shots_on_goal": "SOG",
+    "player_blocked_shots": "BLK",
+    "player_power_play_points": "PPP",
+    "goalie_saves": "SV",
 }
 
-function dueMiniChart(vals,seasAvg){
-  const mx=Math.max(...vals,seasAvg+1);
-  return vals.slice().reverse().map(v=>{
-    const h=Math.max(3,(v/mx)*26);
-    return`<div class="due-chart-bar" style="height:${h}px;background:${v>=seasAvg?'#22c55e':'#38bdf8'};opacity:.85"></div>`;
-  }).join("");
-}
+all_props = []
 
-function getConvergenceBoard(){
-  return getMemo("convergenceBoard",()=>{
-  const board=new Map();
-  const latestDate=getLatestPickDate();
-  const allowed=new Set(st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate).map(p=>normalizePlayerName(p.player)).filter(Boolean));
-  const add=(name,source,boost=0,meta={})=>{
-    if(!name)return;
-    const key=normalizePlayerName(name);
-    if(allowed.size && !allowed.has(key))return;
-    if(!board.has(key))board.set(key,{name,sources:new Set(),score:0,team:meta.team||"",opp:meta.opp||"",detail:""});
-    const row=board.get(key);
-    row.sources.add(source);
-    row.score+=boost;
-    if(!row.team&&meta.team)row.team=meta.team;
-    if(!row.opp&&meta.opp)row.opp=meta.opp;
-    if(!row.detail&&meta.detail)row.detail=meta.detail;
-  };
-  const bestBetMap=new Map();
-  getBestBets().filter(b=>b.edge>0).slice(0,20).forEach(b=>{
-    bestBetMap.set(normalizePlayerName(b.name),b);
-    add(b.name,"Best Bets",2+Math.min(b.edge*20,3),{team:b.team,opp:b.opp,detail:`${b.lean} ${b.metric} ${b.dkLine}`});
-  });
-  st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate).forEach(pk=>{
-    const bestBet=bestBetMap.get(normalizePlayerName(pk.player));
-    if(!aiAgreesWithBet(pk,bestBet))return;
-    const conf=normalizeConfidence(pk.confidence);
-    add(pk.player,"AI",conf==="SMASH"?4:conf==="STRONG"?3:2,{detail:`${pk.lean||""} ${pk.prop_type||""} ${pk.line||""}`.trim()});
-  });
-  getStreaks().slice(0,20).forEach(s=>add(s.player,"Streaks",s.streak>=7?3:s.streak>=5?2.5:2,{team:s.team,opp:s.opp,detail:`${s.streak}G ${s.stat}`}));
-  getDueBoard().slice(0,20).forEach(d=>add(d.name,"Due",1.5+Math.min((d.totalScore||0)/12,2),{team:d.team,opp:d.opp,detail:`Due ${d.stat}`}));
-  getDingerBoard().slice(0,15).forEach(d=>add(d.name,"Dingers",1.5+(d.hrRate||0)*3,{team:d.team,opp:d.opp,detail:`${(d.hrRate*100).toFixed(1)}% HR rate`}));
-  return [...board.values()].map(r=>({...r,sourceCount:r.sources.size,sourceList:[...r.sources]})).filter(r=>r.sourceCount>=2).sort((a,b)=>b.sourceCount-a.sourceCount||b.score-a.score).slice(0,5);
-  });
-}
+# Get events list first
+print("  Fetching events list...")
+try:
+    events_r = requests.get(f"{ODDS_BASE}/sports/{SPORT_KEY}/events", params={"apiKey": ODDS_API_KEY}, timeout=15)
+    events = events_r.json() if events_r.status_code == 200 else []
+except Exception as e:
+    print(f"  ⚠️ Events fetch error: {e}")
+    events = []
 
-function renderConvergenceHTML(){
-  const board=getConvergenceBoard();
-  if(!board.length)return"";
-  const top=board[0];
-  return `<div style="padding:12px 16px 4px">
-    <div style="color:#4ade80;font-size:13px;font-weight:700">🏆 Player of the Day</div>
-    <div style="color:#6b8f7b;font-size:10px;margin-top:2px">Cross-tab convergence from Best Bets, AI, Streaks, Due, and Dingers.</div>
-  </div>
-  <div class="bet-summary">
-    <div class="bs-card"><div class="bs-val" style="color:#4ade80">${top.sourceCount}</div><div class="bs-lbl">TOP SIGNALS</div></div>
-    <div class="bs-card"><div class="bs-val">${board.length}</div><div class="bs-lbl">2+ SURFACES</div></div>
-    <div class="bs-card"><div class="bs-val" style="color:#22c55e">${board.filter(p=>p.sourceCount>=3).length}</div><div class="bs-lbl">3+ MATCHES</div></div>
-  </div>
-  <div class="cards-grid">
-    ${board.map((p,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:pointer;border-color:${i===0?"#4ade80":"#2d5a3d"}" onclick="streakToDash('${esc(p.name)}')"><div class="bet-left"><div class="bet-name">${i===0?"🏆 ":""}${esc(p.name)}</div><div class="bet-meta">${esc(p.team||"")} ${p.opp?`vs ${esc(p.opp)}`:""}</div>${p.detail?`<div class="bet-prop"><span class="prop-metric" style="font-size:10px">Lead</span><span style="color:#d1fae5;font-size:11px">${esc(p.detail)}</span></div>`:""}<div class="draft-tags" style="margin-top:6px">${p.sourceList.map(s=>`<span class="draft-tag" style="background:#173522;color:${s==="AI"?"#4ade80":s==="Best Bets"?"#86efac":s==="Streaks"?"#ffaa00":s==="Due"?"#38bdf8":"#ef4444"}">${esc(s)}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${p.sourceCount}x</div><div class="bet-sub">signals</div></div></div>`).join("")}
-  </div>`;
-}
+today_events = [e for e in events if e.get("commence_time", "")[:10] == TODAY]
+print(f"  {len(today_events)} events today")
 
-// ═══ DRAFT CHEAT SHEET ═══
-// ═══ VS STARTING PITCHER (career) ═══
-function getVsSP(playerName){
-  if(!playerName||!st.vsSP.length)return null;
-  const n=normalizePlayerName(playerName);
-  return st.vsSP.find(v=>normalizePlayerName(v.player_name)===n)||null;
-}
+for event in today_events:
+    eid = event["id"]
+    for batch in PROP_MARKETS:
+        try:
+            r = requests.get(f"{ODDS_BASE}/sports/{SPORT_KEY}/events/{eid}/odds", params={
+                "apiKey": ODDS_API_KEY,
+                "regions": "us",
+                "markets": ",".join(batch),
+                "oddsFormat": "american",
+            }, timeout=15)
+            if r.status_code != 200:
+                continue
+            data = r.json()
+        except Exception as e:
+            print(f"  ⚠️ Props error: {e}")
+            continue
 
-// ═══ STAT PARLAY ENGINE ═══
-function getStatParlayBoard(stat){
-  return getMemo(`statParlay:${stat}`,()=>{
-  const rows=[];
-  const isPS=stat.startsWith("P_");
-  const logCol=propToLogCol(stat);
-  const src=isPS?st.pTonight:st.tonight;
+        for bm in data.get("bookmakers", []):
+            # Prefer DK, fall back to first
+            is_dk = "draftkings" in bm.get("key", "").lower()
+            for mkt in bm.get("markets", []):
+                metric = MARKET_TO_METRIC.get(mkt["key"])
+                if not metric:
+                    continue
+                outcomes = mkt.get("outcomes", [])
+                # Group by player (description field)
+                player_outcomes = defaultdict(dict)
+                for o in outcomes:
+                    pname = o.get("description", "")
+                    if not pname:
+                        continue
+                    if o["name"] == "Over":
+                        player_outcomes[pname]["over_odds"] = o.get("price")
+                        player_outcomes[pname]["line"] = o.get("point")
+                    elif o["name"] == "Under":
+                        player_outcomes[pname]["under_odds"] = o.get("price")
+                        player_outcomes[pname]["line"] = o.get("point")
 
-  for(const p of src){
-    const name=p.player_name;if(!name)continue;
-    const logs=getPlayerLogs(name,isPS);
-    if(logs.length<3)continue;
-    const most=logs[0]||{};
+                for pname, vals in player_outcomes.items():
+                    # Check if already have from DK
+                    existing = [p for p in all_props if p["PLAYER_NAME"] == pname and p["METRIC"] == metric]
+                    if existing and not is_dk:
+                        continue
+                    if existing and is_dk:
+                        all_props.remove(existing[0])
+                    all_props.append({
+                        "PLAYER_NAME": pname,
+                        "METRIC": metric,
+                        "DK_LINE": vals.get("line", ""),
+                        "OVER_ODDS": vals.get("over_odds", ""),
+                        "UNDER_ODDS": vals.get("under_odds", ""),
+                        "BOOK": bm.get("key", ""),
+                    })
+            if is_dk:
+                break  # Got DK, skip other books for this event
+        time.sleep(0.5)
 
-    // Find DK prop for this stat
-    const prop=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)===normalizePropMetric(stat));
-    if(!prop)continue; // need a prop line to parlay
+print(f"  ✅ {len(all_props)} player props fetched")
 
-    const dkLine=parseFloat(prop.DK_LINE);if(isNaN(dkLine))continue;
-    const overOdds=parseInt(prop.OVER_ODDS);
-    const underOdds=parseInt(prop.UNDER_ODDS);
+# ═══════════════════════════════════════════════
+# 🤖 STEP 8: GEMINI AI PICKS (v1.2: new google-genai SDK)
+# ═══════════════════════════════════════════════
+print("\n🤖 Generating Gemini AI picks...")
 
-    // Hit rate over the line
-    const combo=COMBO_STATS[logCol];
-    const hitsOver=combo
-      ?logs.filter(g=>combo.reduce((s,k)=>s+toNum(g[k]),0)>dkLine).length
-      :logs.filter(g=>toNum(g[logCol])>dkLine).length;
-    const hitRate=hitsOver/logs.length;
+daily_picks = []
 
-    // EV edge
-    const overIP=impliedProb(overOdds);
-    const edge=overIP!==null?hitRate-overIP:0;
+if GEMINI_API_KEY and len(games) > 0 and len(skater_tonight) > 0:
+    try:
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        gen_config = types.GenerateContentConfig(temperature=0.7, max_output_tokens=8192)
 
-    // Season and recent averages
-    const seasAvg=getRollingVal(most,"Seas_",logCol);
-    const l7Avg=isPS?getRollingVal(most,"L3_",logCol):getRollingVal(most,"L7_",logCol);
+        fallback_used = "props"
+        print(f"  Total skaters tonight: {len(skater_tonight)}")
+        deduped_map = {}
+        for sk in skater_tonight:
+            name_norm = normalize_player_name(sk.get("player_name"))
+            if not name_norm:
+                continue
+            current = deduped_map.get(name_norm)
+            if current is None or float(sk.get("Seas_UD_FP", 0) or 0) > float(current.get("Seas_UD_FP", 0) or 0):
+                deduped_map[name_norm] = sk
+        deduped_skaters = list(deduped_map.values())
+        print(f"  Skaters after dedupe: {len(deduped_skaters)}")
+        print(f"  Skaters after status filter: {len(deduped_skaters)}")
+        logs_by_player = defaultdict(list)
+        for g in skater_logs:
+            logs_by_player[normalize_player_name(g.get("player_name"))].append(g)
+        skaters_with_logs = [p for p in deduped_skaters if logs_by_player.get(normalize_player_name(p.get("player_name")))]
+        print(f"  Skaters with logs: {len(skaters_with_logs)}")
+        props_by_player = defaultdict(list)
+        for pr in all_props:
+            pname = normalize_player_name(pr.get("PLAYER_NAME"))
+            if pname:
+                props_by_player[pname].append(pr)
+        skaters_with_props = [p for p in skaters_with_logs if props_by_player.get(normalize_player_name(p.get("player_name")))]
+        print(f"  Skaters after props filter: {len(skaters_with_props)}")
+        top_skaters = sorted(skaters_with_props, key=lambda x: x.get("Seas_UD_FP", 0), reverse=True)[:60]
+        if len(top_skaters) < 12 and skaters_with_logs:
+            fallback_used = "top skaters by season fantasy"
+            print("WARNING: Gemini pool empty or too small after props filter, falling back to top skaters by season fantasy points")
+            expanded = sorted(skaters_with_logs, key=lambda x: x.get("Seas_UD_FP", 0), reverse=True)[:60]
+            merged = {normalize_player_name(p.get("player_name")): p for p in top_skaters}
+            for p in expanded:
+                merged.setdefault(normalize_player_name(p.get("player_name")), p)
+            top_skaters = list(merged.values())[:60]
+        if len(top_skaters) < 12 and skaters_with_logs:
+            fallback_used = "tonight skaters with logs"
+            print("WARNING: Gemini pool still too small after top-skater expansion, falling back to tonight skaters with logs")
+            top_skaters = sorted(skaters_with_logs, key=lambda x: x.get("Seas_UD_FP", 0), reverse=True)[:60]
+        if not top_skaters and deduped_skaters:
+            fallback_used = "deduped tonight sheet"
+            print("WARNING: Gemini pool empty after log filtering, falling back to deduped tonight player sheet")
+            top_skaters = sorted(deduped_skaters, key=lambda x: x.get("Seas_UD_FP", 0), reverse=True)[:60]
+        print(f"  Final players sent to Gemini: {len(top_skaters)}")
+        # Build player summaries for Gemini (top 60 skaters by UD_FP)
+        split_lookup = {normalize_player_name(sp["player_name"]): sp for sp in skater_splits}
+        def implied_prob_american(odds):
+            try:
+                odds = float(odds)
+            except (TypeError, ValueError):
+                return None
+            if odds > 0:
+                return 100.0 / (odds + 100.0)
+            if odds < 0:
+                return abs(odds) / (abs(odds) + 100.0)
+            return None
 
-    // Matchup score
-    let matchupScore=0;
-    if(!isPS){
-      const vsAvg=toNum(p.vs_OPP_AVG);
-      if(vsAvg>=0.280)matchupScore+=2;
-      else if(vsAvg>=0.250)matchupScore+=1;
-      // Career vs SP
-      const vsp=getVsSP(name);
-      if(vsp){
-        const cAB=toNum(vsp.AB);const cAVG=toNum(vsp.AVG);
-        if(cAB>=5&&cAVG>=0.300)matchupScore+=2;
-        else if(cAB>=5&&cAVG>=0.250)matchupScore+=1;
-      }
-    }
+        streak_ctx = ""
+        player_streak_map = {}
+        try:
+            streaks = get_streaks()
+            streak_lines = [f"{s['player']} — {s['stat']} streak: {s['streak']} games" for s in streaks if s['streak'] >= 3]
+            streak_ctx = "\n".join(streak_lines) if streak_lines else "No active streaks tonight."
+            for s in streaks:
+                if s.get('streak', 0) >= 3:
+                    player_streak_map.setdefault(normalize_player_name(s['player']), []).append(f"{s['stat']} x{s['streak']}")
+        except:
+            streak_ctx = "Streak data unavailable."
 
-    // Composite score: hit rate is king, edge matters, matchup bonus
-    const score=hitRate*40+Math.max(edge,0)*30+matchupScore*3+(l7Avg>seasAvg?5:0);
+        player_summaries = []
+        valid_player_map = {}
+        for p in top_skaters:
+            pname = p['player_name']
+            pname_norm = normalize_player_name(pname)
+            valid_player_map[pname_norm] = pname
+            props_for_player = props_by_player.get(pname_norm, [])
+            prop_str = ", ".join([f"{pr['METRIC']} {pr['DK_LINE']} (O:{pr['OVER_ODDS']})" for pr in props_for_player]) if props_for_player else "No props"
+            prop_signal_str = ""
+            player_logs = logs_by_player.get(pname_norm, [])
+            signal_lines = []
+            for pr in props_for_player:
+                metric = normalize_prop_metric(pr.get('METRIC'))
+                line_val = pd.to_numeric(pr.get('DK_LINE'), errors='coerce')
+                if metric and pd.notna(line_val) and len(player_logs) >= 3:
+                    vals = [float(g.get(metric, 0) or 0) for g in player_logs if g.get(metric) is not None]
+                    if len(vals) >= 3:
+                        hr = sum(v > line_val for v in vals) / len(vals)
+                        ip = implied_prob_american(pr.get('OVER_ODDS'))
+                        edge = (hr - ip) * 100 if ip is not None else None
+                        sig = f"{metric} {line_val:g} HR={hr*100:.0f}%"
+                        if edge is not None:
+                            sig += f" EV={edge:.0f}%"
+                        signal_lines.append(sig)
+            if signal_lines:
+                prop_signal_str = " | Best prop signals: " + "; ".join(signal_lines[:3])
+            opp_ga = p.get('OPP_GA_PG', 0)
+            opp_pk = p.get('OPP_PK_PCT', 0)
+            gt = p.get('GAME_TOTAL', 0)
+            implied_total = p.get('IMPLIED_TOTAL', '')
+            spread = p.get('SPREAD', '')
+            goalie_status = p.get('opp_goalie_status', '')
+            matchup_str = f"Opp GA/G:{opp_ga} PK%:{opp_pk}"
+            if gt: matchup_str += f" O/U:{gt}"
+            if implied_total not in ('', None): matchup_str += f" ITT:{implied_total}"
+            if spread: matchup_str += f" Spread:{spread}"
+            split_bits = []
+            loc = p.get('home_away_tonight', '')
+            split_row = split_lookup.get(pname_norm, {})
+            if loc in ('Home', 'Away') and split_row:
+                for stat in ["PTS", "SOG", "BLK", "HITS"]:
+                    val = split_row.get(f"{stat}_{loc}")
+                    if val not in (None, ''):
+                        split_bits.append(f"{stat}={val}")
+            split_str = f" | Tonight {loc} split: {' '.join(split_bits[:4])}" if split_bits else ""
+            streak_bits = player_streak_map.get(pname_norm, [])
+            streak_str = f" | Streaks: {', '.join(streak_bits[:3])}" if streak_bits else ""
+            player_summaries.append(
+                f"{pname} ({p['team_abbr']} vs {p.get('opp_abbr_tonight','?')}) | "
+                f"Seas: {p.get('Seas_PTS',0):.2f}P {p.get('Seas_G',0):.2f}G {p.get('Seas_A',0):.2f}A {p.get('Seas_SOG',0):.2f}SOG {p.get('Seas_BLK',0):.2f}BLK {p.get('Seas_HITS',0):.2f}HIT {p.get('Seas_UD_FP',0):.1f}UD_FP | "
+                f"L3: {p.get('L3_PTS',0):.2f}P {p.get('L3_G',0):.2f}G {p.get('L3_SOG',0):.2f}SOG {p.get('L3_BLK',0):.2f}BLK {p.get('L3_HITS',0):.2f}HIT {p.get('L3_UD_FP',0):.1f}UD_FP | "
+                f"vs {p.get('opp_goalie_name','TBD')}{f' ({goalie_status})' if goalie_status else ''} | {matchup_str}{split_str}{streak_str} | Props: {prop_str}{prop_signal_str}"
+            )
+        prompt = f"""You are an NHL props analyst. Today is {TODAY}. NHL {'Playoffs' if GAME_TYPE==3 else 'Regular Season'}.
 
-    rows.push({
-      name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
-      pitcher:p.opp_pitcher_name||p.opp_starter||"TBD",
-      hand:p.opp_pitcher_hand||"?",
-      venue:p.venue_tonight||"",
-      stat,dkLine,overOdds,underOdds,
-      hitRate,hitsOver,total:logs.length,
-      edge,seasAvg,l7Avg,matchupScore,score
-    });
-  }
-  rows.sort((a,b)=>b.score-a.score);
-  return rows;
-  });
-}
+Here are {len(player_summaries)} skaters playing tonight with their season averages, L5/L3 averages, home/away splits, active streaks, prop hit-rate/EV signals, Underdog fantasy points, opponent goalie, and DK prop lines:
 
-function getStatParlayCombos(board,legs){
-  if(board.length<legs)return[];
-  const combos=[];
-  const pool=board.slice(0,legs<=2?12:15);
-  function gen(start,current){
-    if(current.length===legs){
-      const teams=current.map(d=>d.team);
-      const uniqueTeams=new Set(teams);
-      // Max 2 from same team
-      const teamCounts={};
-      for(const t of teams){teamCounts[t]=(teamCounts[t]||0)+1;if(teamCounts[t]>2)return}
-      const score=current.reduce((s,d)=>s+d.score,0);
-      const avgHitRate=current.reduce((s,d)=>s+d.hitRate,0)/legs;
-      const avgEdge=current.reduce((s,d)=>s+d.edge,0)/legs;
-      combos.push({players:current.slice(),score,avgHitRate,avgEdge,teams:[...uniqueTeams]});
-      return;
-    }
-    for(let i=start;i<pool.length&&combos.length<300;i++){
-      // Unique players
-      if(current.some(c=>c.name===pool[i].name))continue;
-      current.push(pool[i]);
-      gen(i+1,current);
-      current.pop();
-    }
-  }
-  gen(0,[]);
-  combos.sort((a,b)=>b.score-a.score);
-  return combos.slice(0,8);
-}
+{chr(10).join(player_summaries)}
 
-function getDraftBoard(){
-  return getMemo("draftBoard",()=>{
-  const board=[];
-  const aiMap=new Map();
-  st.picks.forEach(p=>{if(p.player)aiMap.set(normalizePlayerName(p.player),p)});
-  for(const p of st.tonight){
-    const name=p.player_name;if(!name)continue;
-    const logs=getPlayerLogs(name,false);
-    if(!logs.length)continue;const most=logs[0]||{};
-    const sH=toNum(most.Seas_H),sHR=toNum(most.Seas_HR),s2B=toNum(most.Seas_2B);
-    const sTB=toNum(most.Seas_TB),sRBI=toNum(most.Seas_RBI),sR=toNum(most.Seas_R);
-    const sSB=toNum(most.Seas_SB),sBB=toNum(most.Seas_BB),sHBP=toNum(most.Seas_HBP);
-    const s3B=Math.max(0,(sTB-sH-s2B-3*sHR)/2)||0;
-    const s1B=Math.max(0,sH-s2B-s3B-sHR)||0;
-    const projUD=toNum(most.Seas_UD_FP)||(s1B*3+s2B*6+s3B*8+sHR*10+sBB*3+sHBP*3+sRBI*2+sR*2+sSB*4)||0;
-    const l7H=toNum(most.L7_H),l7HR=toNum(most.L7_HR),l72B=toNum(most.L7_2B);
-    const l7TB=toNum(most.L7_TB),l7RBI=toNum(most.L7_RBI),l7R=toNum(most.L7_R);
-    const l7SB=toNum(most.L7_SB),l7BB=toNum(most.L7_BB),l7HBP=toNum(most.L7_HBP);
-    const l73B=Math.max(0,(l7TB-l7H-l72B-3*l7HR)/2)||0;
-    const l71B=Math.max(0,l7H-l72B-l73B-l7HR)||0;
-    const l7UD=toNum(most.L7_UD_FP)||(l71B*3+l72B*6+l73B*8+l7HR*10+l7BB*3+l7HBP*3+l7RBI*2+l7R*2+l7SB*4)||0;
-    const ai=aiMap.get(normalizePlayerName(name)),isSmash=ai&&normalizeConfidence(ai.confidence)==="SMASH";
-    let pos="FLEX";const posRaw=(p.position||"").toUpperCase();
-    if(posRaw.includes("C")||posRaw.includes("1B")||posRaw.includes("2B")||posRaw.includes("3B")||posRaw.includes("SS"))pos="IF";
-    else if(posRaw.includes("OF")||posRaw.includes("LF")||posRaw.includes("CF")||posRaw.includes("RF"))pos="OF";
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos});
-  }
-  for(const p of st.pTonight){
-    const name=p.player_name;if(!name)continue;
-    const logs=getPlayerLogs(name,true);
-    if(!logs.length)continue;const most=logs[0]||{};
-    const sSO=toNum(most.Seas_SO),sER=toNum(most.Seas_ER),sW=toNum(most.Seas_W),sIP=toNum(most.Seas_IP);
-    const qsRate=logs.length>0?logs.filter(g=>toNum(g.IP)>=6&&toNum(g.ER)<=3).length/logs.length:0;
-    const projUD=toNum(most.Seas_UD_FP)||(sW*5+qsRate*5+sSO*3+sIP*3+sER*-3)||0;
-    const l3SO=toNum(most.L3_SO),l3ER=toNum(most.L3_ER),l3W=toNum(most.L3_W),l3IP=toNum(most.L3_IP);
-    const l3QS=logs.slice(0,3).filter(g=>toNum(g.IP)>=6&&toNum(g.ER)<=3).length/Math.min(3,logs.length);
-    const l7UD=toNum(most.L7_UD_FP)||(l3W*5+l3QS*5+l3SO*3+l3IP*3+l3ER*-3)||0;
-    const ai=aiMap.get(normalizePlayerName(name)),isSmash=ai&&normalizeConfidence(ai.confidence)==="SMASH";
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P"});
-  }
-  board.sort((a,b)=>parseFloat(b.projUD)-parseFloat(a.projUD));
-  return board;
-  });
-}
+ACTIVE PROP STREAKS:
+{streak_ctx}
 
-function render(){
-  var picksHTML="";
-  const focus=saveFocus();
-  const app=document.getElementById("app");
-  if(st.loading){app.innerHTML=`<div class="loading"><div style="font-size:32px;animation:bounce .8s ease-in-out infinite">⚾</div><div style="color:#6b8f7b;font-size:14px">Loading dashboard...</div></div>`;return}
-  if(st.error){app.innerHTML=`<div class="error">⚠️ ${st.error}<br><br><span style="color:#6b8f7b;font-size:12px">Make sure your Google Sheet is set to "Anyone with the link can view"</span></div>`;return}
+RULES:
+- CRITICAL: ONLY pick players from the data above. Do NOT include any player not in the list.
+- Return EXACTLY 12 ranked picks as a JSON array
+- Confidence tiers: SMASH (top 3-4 highest conviction only), STRONG (next 4-5), LEAN (rest)
+- Available prop types: PTS, G, A, SOG, BLK, PPP, HITS
+- Do NOT pick UD_FP or any fantasy-points metric — these are not pickable props
+- Use DK lines when available; otherwise use L5 average. NEVER return null for line.
+- When listed prop signals show strong hit rate and positive EV, give those props more weight.
 
-  const isP=st.mode==="pitcher";
-  const curMetrics=isP?P_METRICS:METRICS;
-  const {player,metric,line,activeTab,oppFilter}=st;
-  const curTonight=isP?st.pTonight:st.tonight;
-  const curLogs=isP?st.pGameLogs:st.gameLogs;
-  const curSplits=isP?st.pSplits:st.splits;
-  const lineNum=parseFloat(line)||0;
+For each pick:
+- rank (1-12)
+- player (exact name from data)
+- team (abbreviation)
+- game (e.g. "TOR @ BOS")
+- line (the DK line number, or your projected number if no prop)
+- lean (OVER or UNDER)
+- confidence (SMASH, STRONG, or LEAN)
+- rationale (1 sentence why, under 15 words)
+- Active prop streaks (3+ games on a prop = strong lean to continue)
+- Hit rate: players hitting a prop 80%+ over L10 = high reliability
+- EV% matters when available from the listed prop signals — positive edge vs the book deserves more weight
+- Factor in opponent defense: high GA/G = leaky defense (good for overs), low PK% = weak penalty kill (boost PPP picks)
+- High game totals (O/U 6.5+) favor offensive props
+- Home/away splits matter — compare tonight's location to the player's split before making a pick
 
-  const pT=getTonightPlayerRow(player,isP)||{};
-  const pHasLogs=hasLogs(player,isP);
-  const allLogs=getPlayerLogs(player,isP);
-  const last10=[...allLogs].reverse().slice(-10);
-  const most=allLogs[0]||{};
+Example format:
+[{{"rank":1,"player":"PLAYER_NAME","team":"TEAM","game":"AWAY @ HOME","prop_type":"SOG","line":4.5,"lean":"OVER","confidence":"SMASH","rationale":"Averaging 5.2 SOG/game vs weak goalie"}}]
 
-  const seasAvg=getRollingVal(most,"Seas_",metric);
-  const midAvg=isP?getRollingVal(most,"L7_",metric):getRollingVal(most,"L30_",metric);
-  const shortAvg=isP?getRollingVal(most,"L3_",metric):getRollingVal(most,"L7_",metric);
-  const lastGame=getMetricVal(most,metric);
-  const midLbl=isP?"L7":"L30",shortLbl=isP?"L3":"L7";
+IMPORTANT: Return ONLY the JSON array. No markdown, no preamble."""
 
-  const hL5=lineNum?allLogs.slice(0,5).filter(g=>getMetricVal(g,metric)>lineNum).length:null;
-  const hL10=lineNum?allLogs.slice(0,10).filter(g=>getMetricVal(g,metric)>lineNum).length:null;
-  const hSeas=lineNum?allLogs.filter(g=>getMetricVal(g,metric)>lineNum).length:null;
-  const sRate=hSeas!==null&&allLogs.length>0?hSeas/allLogs.length:null;
-  const maxLog=Math.max(...last10.map(g=>getMetricVal(g,metric)),lineNum||0,1);
+        print(f"  Fallback used: {fallback_used if top_skaters else 'none'}")
+        if not top_skaters:
+            print("  ⚠️ No usable skater data — skipping Gemini.")
+            raw = ""
+            ai_picks = []
+        else:
+            print("  Calling Gemini API (30-60 seconds)...")
+            response = client.models.generate_content(
+                model='gemini-2.5-flash-lite',
+                contents=prompt,
+                config=gen_config
+            )
+            raw = response.text.strip()
 
-  const metricOpts=curMetrics.map(m=>`<option value="${m}" ${m===metric?"selected":""}>${m}</option>`).join("");
-  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div><div class="bar-date" style="color:#6b8f7b;margin-top:0">${g.opp_abbr?(g.home_away==="Home"?"vs":"@")+g.opp_abbr:""}</div></div>`}).join("");
-  const avgs=[{l:"Season",v:seasAvg},{l:midLbl,v:midAvg},{l:shortLbl,v:shortAvg},{l:"Last",v:lastGame}].map(a=>`<div class="avg-card" style="border:1px solid ${lineNum&&a.v>=lineNum?"#22c55e44":lineNum?"#ef444433":"#2d5a3d"}"><div class="avg-label">${a.l}</div><div class="avg-val" style="color:${avgColor(a.v,lineNum)}">${a.v.toFixed(2)}</div></div>`).join("");
+            # Robust JSON extraction (handles preamble text, truncation, markdown fences)
+            json_match = re.search(r'\[[\s\S]*\]', raw)
+            if json_match:
+                raw = json_match.group(0)
+            elif raw.startswith('```'):
+                raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
+                raw = raw.rsplit('```', 1)[0]
+            raw = raw.strip()
 
-  const sT={};let statStrip="";
-  if(isP){
-    ["IP","SO","ER","H","HR","BB","W","L","PC","R"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
-    sT.UD_FP=allLogs.reduce((a,g)=>a+toNum(g.UD_FP),0).toFixed(1);
-    const outs=allLogs.reduce((a,g)=>{const p=(g.IP||"").toString().split(".");return a+(parseInt(p[0])||0)*3+(parseInt(p[1])||0)},0);
-    const rIP=outs/3;sT.IP=rIP.toFixed(1);
-    sT.ERA=rIP>0?((sT.ER*9)/rIP).toFixed(2):"0.00";
-    sT.WHIP=rIP>0?(((sT.H||0)+(sT.BB||0))/rIP).toFixed(2):"0.00";
-    sT.K9=rIP>0?((sT.SO*9)/rIP).toFixed(1):"0.0";
-    statStrip=["W","L","ERA","WHIP","SO","K9","IP","UD_FP"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${sT[s]}</div></div>`).join("");
-  }else{
-    ["H","HR","RBI","R","SB","BB","TB","SO","AB"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
-    sT.AVG=sT.AB>0?(sT.H/sT.AB).toFixed(3):".000";
-    sT.UD_FP=allLogs.reduce((a,g)=>a+toNum(g.UD_FP),0).toFixed(1);
-    statStrip=["H","HR","RBI","R","SB","BB","TB","UD_FP","AVG"].map(s=>`<div class="stat-item"><div class="stat-label">${s}</div><div class="stat-val">${s==="AVG"?sT.AVG:s==="UD_FP"?sT.UD_FP:sT[s]}</div></div>`).join("");
-  }
+            ai_picks = []
+            try:
+                ai_picks = json.loads(raw)
+            except json.JSONDecodeError:
+                print("  ⚠️ JSON truncated — attempting salvage...")
+                lc = raw.rfind('}')
+                if lc > 0:
+                    ai_picks = json.loads(raw[:lc + 1] + ']')
 
-  const oppP=pT.opp_pitcher_name||"TBD",oppH=pT.opp_pitcher_hand||"?";
-  const vsAvg=toNum(pT.vs_OPP_AVG),vsOps=toNum(pT.vs_OPP_OPS),vsHr=toNum(pT.vs_OPP_HR),vsSo=toNum(pT.vs_OPP_SO);
-  const venue=pT.venue_tonight||"";
-  const wx=st.weather.find(w=>w.venue_name===venue)||{};
+        # Filter hallucinated players
+        print(f"  Gemini picks before post-filter: {len(ai_picks)}")
+        bf = len(ai_picks)
+        dropped_names = []
+        filtered_ai_picks = []
+        for pk in ai_picks:
+            pname_norm = normalize_player_name(pk.get('player'))
+            if pname_norm not in valid_player_map:
+                dropped_names.append(pk.get('player', '?'))
+                continue
+            pk['player'] = valid_player_map[pname_norm]
+            filtered_ai_picks.append(pk)
+        ai_picks = filtered_ai_picks
+        dropped = bf - len(ai_picks)
+        print(f"  Gemini picks after post-filter: {len(ai_picks)}")
+        if dropped > 0:
+            print(f"  🚫 Dropped hallucinated picks: {dropped}")
+            if len(dropped_names) <= 20:
+                for name in dropped_names:
+                    print(f"     - {name}")
+            # Re-rank after filtering
+            for i, pk in enumerate(ai_picks):
+                pk['rank'] = i + 1
+        if ai_picks:
+            for pk in ai_picks:
+                pk['confidence'] = normalize_confidence(pk.get('confidence'))
+            smash_seen = 0
+            max_smash = min(3, max(1, len(ai_picks) // 4 + (1 if len(ai_picks) >= 8 else 0)))
+            for pk in ai_picks:
+                if pk.get('confidence') == 'SMASH':
+                    smash_seen += 1
+                    if smash_seen > max_smash:
+                        pk['confidence'] = 'STRONG'
+        if bf > 0 and not ai_picks:
+            print("  WARNING: All Gemini picks were filtered out because none matched the normalized valid skater pool")
+        print("  Gemini pool summary:")
+        print(f"     total tonight players: {len(skater_tonight)}")
+        print(f"     after dedupe: {len(deduped_skaters)}")
+        print(f"     after status filter: {len(deduped_skaters)}")
+        print(f"     after props filter: {len(skaters_with_props)}")
+        print(f"     fallback used: {fallback_used if top_skaters else 'none'}")
+        print(f"     final sent to Gemini: {len(top_skaters)}")
+        print(f"     picks before post-filter: {bf}")
+        print(f"     picks after post-filter: {len(ai_picks)}")
 
-  const sp=curSplits.find(s=>s.player_name===player)||{};
-  const hV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Home`]),0):toNum(sp[`${metric}_Home`]);
-  const aV=COMBO_STATS[metric]?COMBO_STATS[metric].reduce((s,k)=>s+toNum(sp[`${k}_Away`]),0):toNum(sp[`${metric}_Away`]);
-  const hGames=toNum(sp.Home_GAMES)||toNum(sp['Home_GAMES']);
-  const aGames=toNum(sp.Away_GAMES)||toNum(sp['Away_GAMES']);
-  const hTotal=hGames>0?Math.round(hV*hGames):0;
-  const aTotal=aGames>0?Math.round(aV*aGames):0;
-  let haBars=`<div class="no-data">No data</div>`;
-  if(hV>0||aV>0){const mx=Math.max(hV,aV,.1);haBars=[{l:"Home",v:hV,t:hTotal,g:hGames,c:"#8b5cf6"},{l:"Away",v:aV,t:aTotal,g:aGames,c:"#06b6d4"}].map(b=>`<div class="mini-bar-wrap"><div class="mini-bar" style="height:${Math.max(4,(b.v/mx)*60)}px;background:${b.c}"></div><div class="mini-bar-label">${b.l}</div><div class="mini-bar-val">${b.v.toFixed(2)}/g</div>${b.g?`<div class="mini-bar-val" style="color:#4ade80;font-size:9px">${b.t} in ${b.g}G</div>`:""}</div>`).join("")}
+        print(f"  ✅ {len(ai_picks)} AI picks generated")
+        if ai_picks:
+            top = ai_picks[0]
+            print(f"  🏆 #1: {top.get('player','?')} — {top.get('prop_type','?')} {top.get('lean','?')} {top.get('line','?')} ({top.get('confidence','?')})")
+            smash_ct = sum(1 for pk in ai_picks if pk.get('confidence','').upper() == 'SMASH')
+            print(f"  💪 {smash_ct} SMASH picks | {len(ai_picks) - smash_ct} standard")
 
-  const lastUp=most.LAST_UPDATED||pT.LAST_UPDATED||"—";
-  const earlyBanner=!pHasLogs&&player?`<div class="early-banner"><div class="icon">🌱</div><div class="msg">Early Season — No Game Logs Yet</div><div class="sub">${esc(player)} is on the active roster. Matchup info, props, and Lookup are available.</div></div>`:"";
+        # Format for Daily_Picks sheet
+        for pk in ai_picks:
+            data_source = (
+                "props_validated" if fallback_used == "props" else
+                "expanded_pool" if fallback_used == "top skaters by season fantasy" else
+                "stats_fallback" if fallback_used == "tonight skaters with logs" else
+                "expanded_pool"
+            )
+            daily_picks.append({
+                "DATE": TODAY,
+                "rank": pk.get("rank", ""),
+                "player": pk.get("player", ""),
+                "team": pk.get("team", ""),
+                "game": pk.get("game", ""),
+                "prop_type": pk.get("prop_type", ""),
+                "line": pk.get("line", ""),
+                "lean": pk.get("lean", ""),
+                "confidence": pk.get("confidence", ""),
+                "rationale": pk.get("rationale", ""),
+                "injury_context": pk.get("injury_context", ""),
+                "DATA_SOURCE": data_source,
+                "HIT": "",
+                "ACTUAL_STAT": "",
+                "RESULT": "",
+            })
 
-  const pProps=getProps(player);
-  const pPick=getPick(player);
-  let propsHTML="";
-  if(pProps.length>0){propsHTML=`<div class="section"><div class="label">🎲 DraftKings Props</div>${pProps.map(p=>`<div class="prop-card"><div class="prop-left"><div class="prop-metric">${p.METRIC}</div><div class="prop-line">${p.DK_LINE}</div></div><div class="prop-right"><div class="prop-odds prop-over">O ${fmtOdds(p.OVER_ODDS)}</div><div class="prop-odds prop-under">U ${fmtOdds(p.UNDER_ODDS)}</div></div></div>`).join("")}</div>`}
-  let pickBanner="";
-  if(pPick){
-    const c=pPick.confidence||"",cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";
-    const pInjCtx=(pPick.injury_context||"").toString();
-    const pHasRisk=pInjCtx.toUpperCase().startsWith("LINEUP RISK");
-    const borderColor=pHasRisk?"#fbbf24":(c==="SMASH"?"#22c55e":"#3b82f6");
-    const pRiskHTML=pHasRisk?`<div class="lineup-risk-badge">⚠️ LINEUP RISK</div><div class="lineup-risk-text">${esc(pInjCtx)}</div>`:"";
-    pickBanner=`<div class="section"><div class="card" style="border-left:3px solid ${borderColor}${pHasRisk?";background:#2a2418":""}"><div class="card-title">🤖 AI Pick</div><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="pick-type">${pPick.prop_type||""}</div><div class="pick-lean ${(pPick.lean||"").toLowerCase()}">${pPick.lean||""} ${pPick.line||""}</div><div class="pick-conf ${cls}">${c}</div></div><div class="pick-rationale">${esc(pPick.rationale||"")}</div>${pRiskHTML}</div></div>`;
-  }
+    except json.JSONDecodeError as e:
+        print(f"  ❌ JSON parse failed: {e}")
+        print(f"  Raw: {raw[:500] if 'raw' in dir() else 'n/a'}")
+    except Exception as e:
+        print(f"  ❌ AI Picks failed: {e}")
+else:
+    if not GEMINI_API_KEY:
+        print("  ⚠️ No Gemini API key — skipping.")
+    elif len(games) == 0:
+        print("  ⚠️ No games tonight — skipping.")
+    elif len(skater_tonight) == 0:
+        print("  ⚠️ No skater data — skipping.")
 
-  const opps=[...new Set(allLogs.map(g=>g.opp_abbr).filter(Boolean))].sort();
-  const oppOpts=`<option value="">All Opponents</option>`+opps.map(o=>`<option value="${o}" ${oppFilter===o?"selected":""}>${o}</option>`).join("");
-  const fLogs=oppFilter?allLogs.filter(g=>g.opp_abbr===oppFilter):allLogs;
-  const logCols=isP?["IP","H","ER","HR","SO","BB","PC","W","L","UD_FP"]:["AB","H","HR","RBI","R","SB","BB","SO","TB","UD_FP"];
-  const tHeaders=logCols.map(c=>`<th class="${c===metric?"hl":""}">${c}</th>`).join("");
-  const tRows=fLogs.map(g=>{const cells=logCols.map(c=>{const v=toNum(g[c]);let cls=c===metric?"hl":"";if(c===metric&&lineNum){cls=v>lineNum?"hit":v===lineNum?"push":"miss"}return`<td class="${cls}">${c==="UD_FP"?v.toFixed(1):v}</td>`}).join("");return`<tr><td>${(g.game_date||"").slice(5)}</td><td>${g.opp_abbr||"—"}</td><td>${g.home_away||"—"}</td>${cells}</tr>`}).join("");
+# ═══════════════════════════════════════════════
+# 📤 STEP 9: UPLOAD TO GOOGLE SHEETS
+# ═══════════════════════════════════════════════
+print("\n📤 Uploading to Google Sheets...")
+upload_sheet("Tonights_Skaters", skater_tonight)
+upload_sheet("Skater_Game_Logs", skater_logs)
+upload_sheet("Home_Away_Splits", skater_splits)
+upload_sheet("Tonights_Goalies", goalie_tonight)
+upload_sheet("Goalie_Game_Logs", goalie_logs)
+upload_sheet("Goalie_Home_Away", goalie_splits)
+upload_sheet("DK_Player_Props", all_props)
+if daily_picks:
+    append_upload("Daily_Picks", pd.DataFrame(daily_picks))
 
-  // === PICKS TAB ===
-  const convergenceHTML=renderConvergenceHTML();
-  picksHTML="";
-  if(st.picksView==="bets"){
-    const allBets=getBestBets();
-    const posEV=allBets.filter(b=>b.edge>0);
-    const elite=posEV.filter(b=>b.edge>=0.15);
-    const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
-    if(!allBets.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:#ef4444">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:#6b8f7b">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=posEV.slice(0,40).map((b,i)=>{
-        const edgePct=(b.edge*100).toFixed(1);
-        const hrPct=(b.hitRate*100).toFixed(0);
-        const ipPct=(b.impliedProb*100).toFixed(0);
-        const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
-        const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
-        return`<div class="bet-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
-          <div class="bet-left">
-            <div class="bet-name">${esc(b.name)}</div>
-            <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
-            <div class="bet-prop">
-              <span class="prop-metric" style="font-size:10px">${b.metric}</span>
-              <span class="${leanCls}" style="font-weight:700;font-size:13px">${b.lean} ${b.dkLine}</span>
-              <span style="color:#86efac;font-size:11px">${fmtOdds(b.odds)}</span>
-              <span class="ev-badge ev-pos ev-big">+${edgePct}% EV</span>
-            </div>
-            <div class="bet-bar"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"#ef4444":b.edge>=0.08?"#22c55e":"#f59726"}"></div></div>
-            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:9px;color:#6b8f7b"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
-          </div>
-          <div class="bet-right">
-            <div class="bet-edge pos">+${edgePct}%</div>
-            <div class="bet-sub">edge</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="slips"){
-    const result=getSmartSlips();
-    const {legs}=result;
-    if(!legs.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
-    else{
-      const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
-      const payouts={"3":"6x","4":"10x","5":"20x"};
-      const topLeg=legs[0];
-      const aiCount=legs.filter(l=>l.hasAI).length;
-      const conflictCount=legs.filter(l=>l.hasAIConflict).length;
-      const streakCount=legs.filter(l=>l.hasStreak).length;
-
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:#4ade80">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#fca5a5">${conflictCount}</div><div class="bs-lbl">AI CONFLICTS</div></div><div class="bs-card"><div class="bs-val" style="color:#86efac">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
-      picksHTML+=`<div class="slip-controls"><span style="color:#6b8f7b;font-size:11px">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team. AI disagreements show inline on the leg.</div>`;
-
-      if(!slips.length){picksHTML+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
-      else{
-        picksHTML+=slips.map((slip,si)=>{
-          const isBest=si===0;
-          const isAgg=parseInt(st.slipLegs)>=5;
-          const avgEdgePct=(slip.avgEdge*100).toFixed(1);
-          const avgHRPct=(slip.avgHitRate*100).toFixed(0);
-          const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
-          const uniqueSignals=[...new Set(allSignals)].slice(0,4);
-
-          return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
-            <div class="slip-header">
-              <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
-              <span class="slip-score">${slip.score.toFixed(1)} pts</span>
-            </div>
-            <div class="slip-legs">${slip.legs.map(l=>{
-              const leanCls=l.lean==="OVER"?"over":"under";
-              return`<div class="slip-leg">
-                <span class="slip-leg-team">${esc(l.team)}</span>
-                <div style="flex:1;min-width:0">
-                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${esc(l.name)}</span>
-                  ${l.aiDisagreementText?`<div style="font-size:9px;color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
-                </div>
-                <div class="slip-leg-prop">
-                  <span class="slip-leg-metric">${l.metric}</span>
-                  <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
-                  <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
-                </div>
-              </div>`;
-            }).join("")}</div>
-            ${uniqueSignals.length?`<div class="slip-tags">${uniqueSignals.map(s=>`<span class="slip-tag" style="background:#1a3d2a;color:#86efac;border:1px solid #2d5a3d">${s}</span>`).join("")}</div>`:""}
-            <div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
-          </div>`;
-        }).join("");
-      }
-    }
-  }else if(st.picksView==="picks"){
-    // Only show most recent date's picks
-    const latestDate=getLatestPickDate();
-    const todayPicks=latestDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate):st.picks;
-    const pickGuard=st.pickGuard;
-    if(!todayPicks.length){picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
-    else{
-      const hits=todayPicks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="YES"||h==="TRUE"}).length;
-      const miss=todayPicks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="NO"||h==="FALSE"}).length;
-      const smash=todayPicks.filter(p=>normalizeConfidence(p.confidence)==="SMASH").length;
-      const tracked=hits+miss;
-      picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"#22c55e":"#ef4444"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:#6b8f7b">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=todayPicks.map(pk=>{
-        const c=normalizeConfidence(pk.confidence),cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"";
-        const h=(pk.HIT||"").toString().toUpperCase();
-        const hasR=pk.ACTUAL_STAT!=null&&pk.ACTUAL_STAT!==""&&!isNaN(pk.ACTUAL_STAT);
-        const injCtx=(pk.injury_context||"").toString();
-        const hasLineupRisk=injCtx.toUpperCase().startsWith("LINEUP RISK");
-        const riskHTML=hasLineupRisk?`<div class="lineup-risk-badge">⚠️ LINEUP RISK</div><div class="lineup-risk-text">${esc(injCtx)}</div>`:"";
-        let rHTML="";
-        if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${pk.ACTUAL_STAT}</span>`:""}</div>`}
-        return`<div class="pick-card ${cls}${hasLineupRisk?" lineup-risk":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${esc(pk.player)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${riskHTML}${rHTML}</div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="dingers"){
-    const db=getDingerBoard();
-    if(!db.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">💣 Tonight's Dinger Board</div></div>
-      <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=db.map((d,i)=>{
-        const isTop=i<3;
-        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
-        const ratePct=(d.hrRate*100).toFixed(1);
-        const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
-        return`<div class="dinger-card ${isTop?"top3":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','HR','${d.dkLine||""}')">
-          <div class="dinger-left">
-            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${esc(d.name)}</span></div>
-            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
-            <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
-          </div>
-          <div class="dinger-right">
-            <div class="dinger-rate">${ratePct}%</div>
-            <div class="dinger-sub">HR/AB · 1 per ${abPerHR} AB</div>
-            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-
-      const combos=getDingerCombos(db,3);
-      if(combos.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg Dinger Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos.slice(0,8).map((c,i)=>`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${c.score.toFixed(0)}</span><div class="combo-teams">${c.teams.join(" · ")}</div></div>`).join("");
-        picksHTML+=`</div></div>`;
-      }
-    }
-  }else if(st.picksView==="streaks"){
-    const allStreaks=getStreaks();
-    const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
-    if(!fil.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">${allStreaks.length?`No ${st.streakFilter} streaks found.`:"No active streaks yet. Need 3+ games of data."}</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#ffaa00;font-size:13px;font-weight:700">🔥 Active Streaks</div><div style="color:#6b8f7b;font-size:10px">${fil.length} streaks found</div></div>
-      <div class="streak-filters"><div class="pf-btn ${st.streakFilter==="all"?"active":""}" onclick="setStreakFilter('all')">All</div><div class="pf-btn ${st.streakFilter==="bat"?"active":""}" onclick="setStreakFilter('bat')">🏏 Batters</div><div class="pf-btn ${st.streakFilter==="pitch"?"active":""}" onclick="setStreakFilter('pitch')">⚾ Pitchers</div></div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=fil.map(s=>{
-        const heat=getStreakHeat(s.streak);
-        const odds=s.overOdds?fmtOdds(s.overOdds):"";
-        return`<div class="streak-card ${heat.cls}" onclick="streakToDash('${esc(s.player)}')">
-          <div class="streak-left">
-            <div><span class="streak-emoji">${s.emoji}</span><span class="streak-name">${esc(s.player)}</span><span class="streak-label">${s.label}</span></div>
-            <div class="streak-meta">${esc(s.team)} vs ${s.propType==="pitch"?esc(s.opp):esc(s.pitcher)+" ("+s.hand+"HP)"} · ${s.desc}</div>
-            <div class="streak-chart">${miniChart(s.recentVals,s.threshold)}</div>
-            ${s.dkLine?`<div class="streak-prop">DK ${s.stat} ${s.dkLine} ${odds?" O:"+odds:""} · Avg during: ${s.avgDuring}</div>`:`<div class="streak-prop">Avg during streak: ${s.avgDuring} · Season: ${s.seasAvg}</div>`}
-          </div>
-          <div class="streak-right">
-            <div class="streak-count">${s.streak}</div>
-            <div class="streak-sub">games</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="due"){
-    // ═══ THEY'RE DUE ═══
-    const allDue=getDueBoard();
-    const fil=st.dueFilter==="all"?allDue:st.dueFilter==="bat"?allDue.filter(d=>d.type==="bat"):allDue.filter(d=>d.type==="pitch");
-    if(!fil.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">${allDue.length?`No ${st.dueFilter} candidates found.`:"No \"due\" candidates found. Need 7+ games of data and a cold streak."}</div>`}
-    else{
-      const withMatchup=fil.filter(d=>d.matchupScore>=2).length;
-      const withProp=fil.filter(d=>d.propTag).length;
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val" style="color:#38bdf8">${fil.length}</div><div class="bs-lbl">DUE UP</div></div><div class="bs-card"><div class="bs-val" style="color:#818cf8">${withMatchup}</div><div class="bs-lbl">+ MATCHUP</div></div><div class="bs-card"><div class="bs-val" style="color:#fde68a">${withProp}</div><div class="bs-lbl">HAS PROP</div></div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Cold streak + strong season numbers + tonight's matchup = regression coming. Buy low.</div>`;
-      picksHTML+=`<div class="due-filters"><div class="pf-btn ${st.dueFilter==="all"?"active":""}" onclick="setDueFilter('all')">All</div><div class="pf-btn ${st.dueFilter==="bat"?"active":""}" onclick="setDueFilter('bat')">🏏 Batters</div><div class="pf-btn ${st.dueFilter==="pitch"?"active":""}" onclick="setDueFilter('pitch')">⚾ Pitchers</div></div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=fil.map((d,i)=>{
-        const isTop=i<3;
-        const tags=[];
-        tags.push(`<span class="due-tag cold">❄️ ${d.coldGap}% below avg</span>`);
-        tags.push(`<span class="due-tag cold">📉 ${d.drought}G drought</span>`);
-        d.matchupTags.forEach(mt=>tags.push(`<span class="due-tag matchup">✅ ${esc(mt)}</span>`));
-        if(d.propTag)tags.push(`<span class="due-tag prop">🎲 DK ${d.stat} ${d.propTag.line}${d.propTag.overOdds?" O:"+fmtOdds(d.propTag.overOdds):""}</span>`);
-
-        return`<div class="due-card ${isTop?"top":""} ${d.type==="pitch"?"pitcher":""}" onclick="streakToDash('${esc(d.name)}')">
-          <div class="due-left">
-            <div><span style="font-size:14px;margin-right:4px">🧊</span><span class="due-name">${esc(d.name)}</span><span class="due-label">${d.stat}</span></div>
-            <div class="due-meta">${esc(d.team)} vs ${d.type==="pitch"?esc(d.opp):esc(d.pitcher)+" ("+d.hand+"HP)"} · ${esc(d.venue)}</div>
-            <div class="due-meta">Season: ${d.seasAvg}/g → L7: ${d.l7Avg}/g</div>
-            <div class="due-chart">${dueMiniChart(d.recentVals,parseFloat(d.seasAvg))}</div>
-            <div class="due-tags">${tags.join("")}</div>
-          </div>
-          <div class="due-right">
-            <div class="due-score">${d.totalScore.toFixed(0)}</div>
-            <div class="due-sub">due score</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="parlays"){
-    // ═══ STAT PARLAYS ═══
-    const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>!m.startsWith("P_")&&m!=="Batter_SO");
-    const availStats=["HR","H","RBI","R","TB","SB","BB"].filter(s=>allPropStats.includes(s));
-    const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
-    const board=getStatParlayBoard(pStat);
-    const combos2=getStatParlayCombos(board,2);
-    const combos3=getStatParlayCombos(board,3);
-
-    picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#818cf8;font-size:13px;font-weight:700">🎯 Stat Parlays</div><div style="color:#6b8f7b;font-size:10px">${board.length} players w/ ${pStat} prop</div></div>`;
-    picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Pick a stat, see the best same-stat parlay combos ranked by hit rate + EV edge + matchup.</div>`;
-    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="HR"?"💣":""}${s==="SB"?"💨":""}${s==="H"?"🎯":""}${s==="RBI"?"💰":""}${s==="R"?"🏃":""}${s==="TB"?"⚡":""}${s==="BB"?"👁️":""} ${s}</div>`).join("")}</div>`;
-
-    if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No DK props available. Run the engine first.</div>`}
-    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${pStat} parlays. Need 3+ games.</div>`}
-    else{
-      // Top players board
-      picksHTML+=`<div style="padding:8px 16px 4px;color:#86efac;font-size:11px;font-weight:600">TOP ${pStat} PLAYS — Ranked Board</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=board.slice(0,12).map((d,i)=>{
-        const hrPct=(d.hitRate*100).toFixed(0);
-        const edgePct=d.edge>0?`+${(d.edge*100).toFixed(0)}%`:`${(d.edge*100).toFixed(0)}%`;
-        const isTop=i<3;
-        return`<div class="due-card ${isTop?"top":""}" onclick="streakToDash('${esc(d.name)}')">
-          <div class="due-left">
-            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${esc(d.name)}</span></div>
-            <div class="due-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)</div>
-            <div class="due-tags">
-              <span class="due-tag" style="background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d">${hrPct}% hit rate</span>
-              ${d.edge>0?`<span class="due-tag matchup">${edgePct} EV</span>`:""}
-              <span class="due-tag prop">DK ${d.dkLine} O:${fmtOdds(d.overOdds)}</span>
-              ${d.matchupScore>=2?`<span class="due-tag matchup">✅ Matchup</span>`:""}
-            </div>
-            <div class="due-meta" style="margin-top:4px">Seas: ${d.seasAvg.toFixed(2)}/g · L7: ${d.l7Avg.toFixed(2)}/g · ${d.hitsOver}/${d.total} over ${d.dkLine}</div>
-          </div>
-          <div class="due-right">
-            <div class="due-score" style="color:${isTop?"#818cf8":"#38bdf8"}">${d.score.toFixed(0)}</div>
-            <div class="due-sub">score</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-
-      // 2-Leg Combos
-      if(combos2.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 2-Leg ${pStat} Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos2.map((c,i)=>{
-          const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
-        }).join("");
-        picksHTML+=`</div></div>`;
-      }
-
-      // 3-Leg Combos
-      if(combos3.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg ${pStat} Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos3.map((c,i)=>{
-          const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>esc(p.name)).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
-        }).join("");
-        picksHTML+=`</div></div>`;
-      }
-    }
-  }else if(st.picksView==="draft"){
-    const board=getDraftBoard();
-    const available=board.filter(p=>!st.drafted.has(p.name));
-    const draftedCount=st.drafted.size;
-    function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"#4ade80"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"#3b82f6"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"#4ade80"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"#3b82f6"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"#86efac"};return{label:"TIER 5 — Dart Throw",cls:"",color:"#6b8f7b"}}
-    function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
-    if(!board.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No draft data available. Run the engine first.</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;color:#4ade80;font-size:13px;font-weight:700">⚾ Draft Cheat Sheet</div>
-      <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
-      <div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
-      <div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
-      picksHTML+=`<div class="cards-grid draft-board">`;
-      let lastTier="";
-      board.forEach((p,i)=>{
-        const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
-        const tierChanged=tier.label!==lastTier;lastTier=tier.label;
-        let tags=[];
-        if(p.isSmash)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">SMASH</span>`);
-        if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:#3b82f622;color:#3b82f6">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
-        else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:#3b82f622;color:#3b82f6">👁️ PATIENT</span>`)}
-        const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
-        if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:#22c55e22;color:#22c55e">📈 HOT</span>`);
-        if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:#ef444422;color:#ef4444">📉 COLD</span>`);
-        const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
-        const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}`;
-        picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
-        <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
-          <div class="draft-rank" style="color:${isDrafted?"#2d5a3d":tier.color}">${i+1}</div>
-          <div class="draft-main"><div class="draft-name">${esc(p.name)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;font-size:10px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">📊</span></div><div class="draft-meta">${metaLine}</div>${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
-          <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"#2d5a3d":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">UD FP</div>${l7v!==projv?`<div style="font-size:9px;color:${l7v>projv?"#22c55e":"#ef4444"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
-        </div>`;
-      });
-      picksHTML+=`</div>`;
-    }
-  }else{
-    const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
-    const fil=st.propsMetric==="ALL"?st.props:st.props.filter(p=>p.METRIC===st.propsMetric);
-    const srch=st.propsSearch?fil.filter(p=>(p.PLAYER_NAME||"").toLowerCase().includes(st.propsSearch.toLowerCase())):fil;
-    const sorted=[...srch].sort((a,b)=>(a.PLAYER_NAME||"").localeCompare(b.PLAYER_NAME||"")).slice(0,200);
-    picksHTML=`<div style="padding:8px 16px"><input type="text" id="propsSearchInput" placeholder="Search player..." value="${esc(st.propsSearch)}"/></div>
-    <div class="props-filter"><div class="pf-btn ${st.propsMetric==="ALL"?"active":""}" onclick="setPropsMetric('ALL')">All</div>${allM.map(m=>`<div class="pf-btn ${st.propsMetric===m?"active":""}" onclick="setPropsMetric('${m}')">${m}</div>`).join("")}</div>
-    <div style="padding:0 16px;color:#6b8f7b;font-size:10px;margin-bottom:4px">${srch.length} props${srch.length>200?" (showing 200)":""}</div>
-    <div class="props-tbl-wrap"><table><thead><tr><th>Player</th><th>Prop</th><th>Line</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th></tr></thead><tbody>${sorted.map(p=>{
-      const lc=propToLogCol(p.METRIC);const isP=isPitcherProp(p.METRIC);
-      const hr=getHitRate(p.PLAYER_NAME,lc,parseFloat(p.DK_LINE),isP);
-      const oIP=impliedProb(parseInt(p.OVER_ODDS));
-      const hrPct=hr?`${(hr.rate*100).toFixed(0)}%`:"—";
-      const edge=hr&&oIP!==null?hr.rate-oIP:null;
-      const edgeStr=edge!==null?`<span class="ev-badge ${edge>0.08?"ev-pos":edge>0?"ev-neutral":"ev-neg"}">${edge>0?"+":""}${(edge*100).toFixed(0)}%</span>`:"—";
-      return`<tr style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="text-align:left;font-weight:600">${esc(p.PLAYER_NAME)}</td><td><span style="color:#4ade80;font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:600">${hrPct}</td><td>${edgeStr}</td></tr>`}).join("")}</tbody></table></div>`;
-  }
-
-  // === LOOKUP ===
-  const lk=st.lkPlayer;
-  const lkC=st.lkPlayerType==="pitcher"?[{k:"gamesPlayed",l:"G"},{k:"gamesStarted",l:"GS"},{k:"wins",l:"W"},{k:"losses",l:"L"},{k:"era",l:"ERA"},{k:"inningsPitched",l:"IP"},{k:"strikeOuts",l:"SO"},{k:"baseOnBalls",l:"BB"},{k:"whip",l:"WHIP"},{k:"avg",l:"BAA"}]:[{k:"gamesPlayed",l:"G"},{k:"atBats",l:"AB"},{k:"hits",l:"H"},{k:"homeRuns",l:"HR"},{k:"rbi",l:"RBI"},{k:"runs",l:"R"},{k:"stolenBases",l:"SB"},{k:"baseOnBalls",l:"BB"},{k:"strikeOuts",l:"SO"},{k:"avg",l:"AVG"},{k:"obp",l:"OBP"},{k:"slg",l:"SLG"},{k:"ops",l:"OPS"}];
-  const fv=(s,k)=>{if(!s)return"—";const v=s[k];return v===undefined||v===null?"—":v};
-  const mkT=(h,r)=>{if(!r||!r.length)return`<div class="empty">No data</div>`;return`<div class="lk-tbl-wrap"><table><thead><tr>${r[0].label?`<th></th>`:""}${h.map(x=>`<th>${x.l}</th>`).join("")}</tr></thead><tbody>${r.map(x=>`<tr>${x.label?`<td class="hl">${x.label}</td>`:""}${h.map(c=>`<td>${fv(x.stat||x,c.k)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`};
-
-  let lkSum="",lkBody="";
-  if(lk&&st.lkCareer){
-    const cs=st.lkCareer;
-    const bx=st.lkPlayerType==="pitcher"?[{v:cs.era||"—",l:"ERA"},{v:cs.wins||"—",l:"W"},{v:cs.strikeOuts||"—",l:"K"},{v:cs.whip||"—",l:"WHIP"}]:[{v:cs.avg||"—",l:"AVG"},{v:cs.homeRuns||"—",l:"HR"},{v:cs.hits||"—",l:"H"},{v:cs.ops||"—",l:"OPS"}];
-    lkSum=`<div class="stat-grid">${bx.map(b=>`<div class="stat-box"><div class="val">${b.v}</div><div class="lbl">${b.l}</div></div>`).join("")}</div>`;
-  }
-  if(st.lkSubTab==="career"){
-    if(st.lkYby){const rows=st.lkYby.map(y=>({label:`${y.season} ${y.team}`,stat:y.stat}));if(st.lkCareer)rows.push({label:"CAREER",stat:st.lkCareer});lkBody=mkT(lkC,rows)}
-    else if(st.lkLoading.career)lkBody=`<div class="loading-sm">⚾ Loading...</div>`;
-  }
-  if(st.lkSubTab==="vsTeam"){
-    const tO=st.lkTeamList.map(t=>`<option value="${t.id}" ${t.id===st.lkVsTeamId?"selected":""}>${t.abbr} — ${t.name}</option>`).join("");
-    let tbl=`<div class="empty">Select a team</div>`;
-    if(st.lkLoading.vsTeam)tbl=`<div class="loading-sm">⚾ Loading...</div>`;
-    else if(st.lkVsTeamStats){const rows=st.lkVsTeamStats.map(t=>({label:st.lkTeamList.find(x=>x.id===t.teamId)?.abbr||t.team,stat:t.stat}));tbl=rows.length?mkT(lkC,rows):`<div class="empty">No data</div>`}
-    lkBody=`<div class="lk-section"><select id="vsTeamSel"><option value="">All Teams</option>${tO}</select></div><div style="margin-top:8px">${tbl}</div>`;
-  }
-  if(st.lkSubTab==="vsPlayer"){
-    const sugs=st.lkVsPlayerResults.length?`<div class="suggestions" style="display:block;position:relative;margin:8px 16px">${st.lkVsPlayerResults.map(r=>`<div class="sug-item" onclick="pickVsP(${r.id},'${r.name.replace(/'/g,"\\'")}')"><span class="sug-name">${r.name}</span> <span class="sug-meta">${r.team} · ${r.pos}</span></div>`).join("")}</div>`:"";
-    let res=`<div class="empty">Search for a ${st.lkPlayerType==="pitcher"?"batter":"pitcher"}</div>`;
-    if(st.lkLoading.vsPlayer)res=`<div class="loading-sm">⚾ Loading...</div>`;
-    else if(st.lkVsPlayerStats){const s=st.lkVsPlayerStats;const bx=st.lkPlayerType==="pitcher"?[{v:s.era||"—",l:"ERA"},{v:s.inningsPitched||"—",l:"IP"},{v:s.strikeOuts||"—",l:"K"},{v:s.avg||"—",l:"BAA"}]:[{v:s.avg||"—",l:"AVG"},{v:s.homeRuns||"—",l:"HR"},{v:s.atBats||"—",l:"AB"},{v:s.ops||"—",l:"OPS"}];res=`<div style="padding:0 16px"><div class="card"><div class="card-title">${lk.name} vs ${st.lkVsPlayerName}</div><div class="stat-grid" style="margin:0">${bx.map(b=>`<div class="stat-box"><div class="val">${b.v}</div><div class="lbl">${b.l}</div></div>`).join("")}</div></div></div>${mkT(lkC,[{stat:s}])}`}
-    else if(st.lkVsPlayerId)res=`<div class="empty">No head-to-head data</div>`;
-    lkBody=`<div class="lk-section"><input type="text" id="vsPlayerInput" placeholder="Search ${st.lkPlayerType==="pitcher"?"batter":"pitcher"}..."/></div>${sugs}${res}`;
-  }
-  const lkSugs=st.lkResults.length?`<div class="suggestions" style="display:block">${st.lkResults.map((r,i)=>`<div class="sug-item" onclick="pickLkPlayer(${i})"><div class="sug-name">${r.name}</div><div class="sug-meta">${r.team} · ${r.pos} · #${r.number}</div></div>`).join("")}</div>`:"";
-
-  const showCtrl=activeTab==="dashboard"||activeTab==="gamelog";
-  app.innerHTML=`
-  <div class="header">
-    <div class="header-title">⚾ MLB DFS Dashboard</div>
-    <div class="top-nav">
-      <button class="tab-btn ${activeTab==="dashboard"?"active":""}" onclick="switchTab('dashboard')">📊 Dash</button>
-      <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">📋 Log</button>
-      <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">🎯 Picks</button>
-      <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">🔍 Lookup</button>
-    </div>
-    ${showCtrl?`
-    <div class="header-controls">
-      <div class="mode-toggle">
-        <div class="mode-btn" onclick="switchMode('batter')" style="${st.mode==='batter'?'background:#22c55e;color:#0f291a;border-color:#22c55e':'background:#1a3d2a;color:#6b8f7b'}">🏏 Batters</div>
-        <div class="mode-btn" onclick="switchMode('pitcher')" style="${st.mode==='pitcher'?'background:#22c55e;color:#0f291a;border-color:#22c55e':'background:#1a3d2a;color:#6b8f7b'}">⚾ Pitchers</div>
-      </div>
-      <div class="search-wrap">
-        <input type="text" id="dashPlayerSearch" list="playerList" placeholder="Search ${st.mode==='pitcher'?'pitcher':'batter'}..." value="${esc(player)}" autocomplete="off"
-          onfocus="this.select()"
-          onchange="if(this.value)pickDashPlayer(this.value)"
-        />
-        <datalist id="playerList">${curTonight.filter(p=>p.player_name).map(p=>`<option value="${esc(p.player_name)}">${esc(p.team_abbr||"")}</option>`).join("")}</datalist>
-      </div>
-      <div class="ctrl-row">
-        <select id="metricSel">${metricOpts}</select>
-        <input type="number" id="lineInput" value="${line}" placeholder="Line" step="0.5"/>
-      </div>
-    </div>`:""}
-    ${activeTab==="lookup"?`<div class="header-controls"><div class="search-wrap" style="flex:1;max-width:500px"><input type="text" id="lkSearch" placeholder="Search any MLB player..." autocomplete="off"/>${lkSugs}</div></div>`:""}
-  </div>
-
-  <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
-    ${earlyBanner}
-    ${pHasLogs?`<div class="stats-strip"><div class="stats-strip-inner">${statStrip}</div></div>`:""}
-    <div class="dash-grid">
-    ${pHasLogs?`<div class="section"><div class="label">Game Log — ${metric}</div><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Line: ${lineNum}</div>`:""}</div>`:""}
-    ${pHasLogs?`<div class="section"><div class="label">Averages</div><div class="avg-cards">${avgs}</div></div>`:""}
-    <div class="section"><div class="split-row">
-      ${isP?`<div class="split-card"><span class="split-title">Season Rates</span>${pHasLogs?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${sT.ERA||"—"}</div><div class="lbl">ERA</div></div><div class="matchup-stat"><div class="val">${sT.WHIP||"—"}</div><div class="lbl">WHIP</div></div><div class="matchup-stat"><div class="val">${sT.K9||"—"}</div><div class="lbl">K/9</div></div><div class="matchup-stat"><div class="val">${sT.SO||"—"}</div><div class="lbl">K</div></div></div>`:`<div class="no-data">No stats yet</div>`}</div>`:`<div class="split-card"><span class="split-title">vs ${oppH}HP Splits</span>${vsAvg||vsOps?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${vsAvg?vsAvg.toFixed(3):"—"}</div><div class="lbl">AVG</div></div><div class="matchup-stat"><div class="val">${vsOps?vsOps.toFixed(3):"—"}</div><div class="lbl">OPS</div></div><div class="matchup-stat"><div class="val">${vsHr||"—"}</div><div class="lbl">HR</div></div><div class="matchup-stat"><div class="val">${vsSo||"—"}</div><div class="lbl">SO</div></div></div>`:`<div class="no-data">No split data yet</div>`}</div>`}
-      <div class="split-card"><span class="split-title">Home / Away</span><div class="mini-bars-container">${haBars}</div></div>
-    </div></div>
-    <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">⚾ vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">⚾ vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>${(()=>{const vsp=getVsSP(player);if(!vsp||!toNum(vsp.AB))return"";return`<div class="matchup-stats" style="margin-top:8px"><div class="matchup-stat"><div class="val">${vsp.AVG||"—"}</div><div class="lbl">Career AVG</div></div><div class="matchup-stat"><div class="val">${vsp.AB||"—"}</div><div class="lbl">AB</div></div><div class="matchup-stat"><div class="val">${vsp.H||"—"}</div><div class="lbl">H</div></div><div class="matchup-stat"><div class="val">${vsp.HR||"—"}</div><div class="lbl">HR</div></div></div><div style="color:#6b8f7b;font-size:9px;margin-top:4px">Career: ${vsp.H||0}-for-${vsp.AB||0}${toNum(vsp.HR)?" · "+vsp.HR+" HR":""}${toNum(vsp.BB)?" · "+vsp.BB+" BB":""}${toNum(vsp.SO)?" · "+vsp.SO+" K":""}</div>`})()}`}</div></div>
-    ${wx.temp_f?`<div class="section"><div class="weather-card"><div class="card-title">🌤️ Weather</div><div class="weather-row"><span class="weather-key">Temp</span><span class="weather-val">${wx.temp_f}°F (feels ${wx.feels_like_f}°F)</span></div><div class="weather-row"><span class="weather-key">Wind</span><span class="weather-val">${wx.wind_mph} mph ${wx.wind_dir}</span></div><div class="weather-row"><span class="weather-key">Condition</span><span class="weather-val">${wx.description||"—"}</span></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="weather-row"><span class="weather-key">🏟️</span><span class="weather-val" style="color:#4ade80">Dome — weather irrelevant</span></div>`:""}</div></div>`:""}
-    ${lineNum&&pHasLogs?`<div class="section dash-full"><div class="card"><div class="card-title">📊 Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
-    </div>
-    ${pickBanner?`<div class="dash-bottom">${pickBanner}</div>`:""}
-    ${propsHTML?`<div class="dash-bottom dash-props">${propsHTML}</div>`:""}
-    <div class="timestamp">Last Refreshed: ${lastUp}</div>
-    <div class="timestamp" style="color:#2d5a3d;font-size:9px;padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
-  </div>
-
-  <div id="pg-log" class="page ${activeTab==="gamelog"?"active":""}">
-    ${!pHasLogs?`<div class="early-banner"><div class="icon">🌱</div><div class="msg">No Game Logs Yet</div><div class="sub">Check the Lookup tab for career stats.</div></div>`:`<div class="log-controls"><select id="oppFilter">${oppOpts}</select></div><div class="log-table-wrap"><table><thead><tr><th>DATE</th><th>OPP</th><th>H/A</th>${tHeaders}</tr></thead><tbody>${tRows}</tbody></table></div>`}
-  </div>
-
-  <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
-    <div class="sub-tabs" style="padding-top:12px">
-      <div class="sub-tab ${st.picksView==="bets"?"active":""}" onclick="switchPicksView('bets')">💰 Best Bets</div>
-      <div class="sub-tab ${st.picksView==="slips"?"active":""}" onclick="switchPicksView('slips')">🎫 Slips</div>
-      <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">🤖 AI Picks</div>
-      <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">⚾ Draft</div>
-      <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
-      <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">🧊 Due</div>
-      <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">💣 Dingers</div>
-      <div class="sub-tab ${st.picksView==="parlays"?"active":""}" onclick="switchPicksView('parlays')">🎯 Parlays</div>
-      <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">🎲 Props</div>
-    </div>
-    <div class="cards-wrap">${picksHTML}</div>
-    <div class="timestamp">Data from MLB Dashboard Engine · DraftKings via The Odds API</div>
-  </div>
-
-  <div id="pg-lookup" class="page ${activeTab==="lookup"?"active":""}">
-    ${lk?`<div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>${lkSum}<div class="sub-tabs"><div class="sub-tab ${st.lkSubTab==="career"?"active":""}" onclick="switchLkSub('career')">Career</div><div class="sub-tab ${st.lkSubTab==="vsTeam"?"active":""}" onclick="switchLkSub('vsTeam')">vs Team</div><div class="sub-tab ${st.lkSubTab==="vsPlayer"?"active":""}" onclick="switchLkSub('vsPlayer')">vs Player</div></div>${lkBody}`:`<div class="empty" style="padding:60px 20px;font-size:14px">Search for any active MLB player to see career stats, team matchups, and head-to-head data.</div>`}
-    <div class="timestamp">Data from MLB Stats API · Live</div>
-  </div>
-
-  <div class="tab-bar">
-    <button class="tab-btn ${activeTab==="dashboard"?"active":""}" onclick="switchTab('dashboard')">📊 Dash</button>
-    <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">📋 Log</button>
-    <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">🎯 Picks</button>
-    <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">🔍 Lookup</button>
-  </div>`;
-
-  const ms=document.getElementById("metricSel");if(ms)ms.onchange=e=>{st.metric=e.target.value;render()};
-  const li=document.getElementById("lineInput");if(li)li.onchange=e=>{st.line=e.target.value;render()};
-  const of=document.getElementById("oppFilter");if(of)of.onchange=e=>{st.oppFilter=e.target.value;render()};
-  const lkS=document.getElementById("lkSearch");if(lkS)lkS.oninput=e=>{clearTimeout(window._lkT);window._lkT=setTimeout(()=>searchLkPlayers(e.target.value),300)};
-  const vts=document.getElementById("vsTeamSel");if(vts)vts.onchange=e=>{st.lkVsTeamId=e.target.value?parseInt(e.target.value):null;fetchLkVsTeam(st.lkPlayer.id,st.lkVsTeamId)};
-  const vpi=document.getElementById("vsPlayerInput");if(vpi)vpi.oninput=e=>{clearTimeout(window._vpT);window._vpT=setTimeout(()=>searchVsP(e.target.value),300)};
-  const psi=document.getElementById("propsSearchInput");if(psi)psi.oninput=e=>{st.propsSearch=e.target.value;render()};
-  restoreFocus(focus);
-}
-
-async function searchLkPlayers(q){
-  if(q.length<2){st.lkResults=[];render();return}
-  try{const d=await mlbFetch(`${MLB_API}/people/search?names=${encodeURIComponent(q)}&sportId=1&hydrate=currentTeam&limit=10`);st.lkResults=(d.people||[]).filter(p=>p.active).map(p=>({id:p.id,name:p.fullName,team:p.currentTeam?.abbreviation||"",pos:p.primaryPosition?.abbreviation||"",number:p.primaryNumber||"",bats:p.batSide?.code||"",throws:p.pitchHand?.code||"",img:`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${p.id}/headshot/67/current`}));render()}catch(e){console.error(e)}
-}
-function pickLkPlayer(i){
-  const p=st.lkResults[i];st.lkPlayer=p;st.lkResults=[];st.lkSubTab="career";
-  st.lkCareer=null;st.lkYby=null;st.lkVsTeamStats=null;st.lkVsPlayerStats=null;st.lkVsPlayerId=null;st.lkVsPlayerName="";st.lkVsTeamId=null;
-  st.lkPlayerType=["P","TWP"].includes(p.pos)?"pitcher":"batter";
-  const isP=["P","TWP"].includes(p.pos);
-  const src=isP?st.pTonight:st.tonight;
-  const match=src.find(t=>normalizePlayerName(t.player_name)===normalizePlayerName(p.name));
-  if(match){st.player=match.player_name;if(isP&&st.mode!=="pitcher"){st.mode="pitcher";st.metric="SO"}if(!isP&&st.mode!=="batter"){st.mode="batter";st.metric="H"}}
-  render();fetchLkCareer(p.id);
-}
-async function fetchLkCareer(id){
-  st.lkLoading.career=true;render();
-  try{const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";const[cr,yby]=await Promise.all([mlbFetch(`${MLB_API}/people/${id}/stats?stats=career&group=${g}`),mlbFetch(`${MLB_API}/people/${id}/stats?stats=yearByYear&group=${g}&sportId=1`)]);st.lkCareer=(cr.stats||[])[0]?.splits?.[0]?.stat||null;st.lkYby=((yby.stats||[])[0]?.splits||[]).filter(s=>s.sport?.id===1).map(s=>({season:s.season,team:s.team?.abbreviation||"",stat:s.stat}))}catch(e){console.error(e)}
-  st.lkLoading.career=false;render();
-}
-async function fetchLkVsTeam(id,teamId){
-  st.lkLoading.vsTeam=true;render();
-  try{
-    const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";
-    if(teamId){const d=await mlbFetch(`${MLB_API}/people/${id}/stats?stats=vsTeam&group=${g}&opposingTeamId=${teamId}&sportId=1`);const sp=(d.stats||[])[0]?.splits||[];const tm=st.lkTeamList.find(t=>t.id===teamId);st.lkVsTeamStats=sp.length?[{teamId,team:tm?.abbr||"",stat:sp.length===1?sp[0].stat:combSplits(sp)}]:[]}
-    else{const results=[];for(let i=0;i<st.lkTeamList.length;i+=10){const batch=st.lkTeamList.slice(i,i+10);const pr=batch.map(async tm=>{try{const d=await mlbFetch(`${MLB_API}/people/${id}/stats?stats=vsTeam&group=${g}&opposingTeamId=${tm.id}&sportId=1`);const sp=(d.stats||[])[0]?.splits||[];if(sp.length)return{teamId:tm.id,team:tm.abbr,stat:sp.length===1?sp[0].stat:combSplits(sp)}}catch(e){}return null});results.push(...(await Promise.all(pr)).filter(Boolean));if(i+10<st.lkTeamList.length)await new Promise(r=>setTimeout(r,500))}st.lkVsTeamStats=results}
-    st.lkVsTeamStats.sort((a,b)=>(parseInt(b.stat?.gamesPlayed)||0)-(parseInt(a.stat?.gamesPlayed)||0));
-  }catch(e){console.error(e);st.lkVsTeamStats=[]}
-  st.lkLoading.vsTeam=false;render();
-}
-function combSplits(splits){
-  const t={};const keys=["gamesPlayed","atBats","hits","doubles","triples","homeRuns","rbi","runs","stolenBases","baseOnBalls","strikeOuts","totalBases","plateAppearances","hitByPitch","sacFlies","wins","losses","gamesStarted","inningsPitched"];
-  const stats=splits.map(s=>s.stat);for(const k of keys){const s=stats.reduce((a,s)=>a+(parseFloat(s[k])||0),0);if(s>0)t[k]=s}
-  if(t.atBats>0){t.avg=(t.hits/t.atBats).toFixed(3);t.slg=((t.totalBases||0)/t.atBats).toFixed(3)}
-  const pa=t.plateAppearances||(t.atBats+(t.baseOnBalls||0)+(t.hitByPitch||0)+(t.sacFlies||0));
-  if(pa>0){t.obp=((t.hits+(t.baseOnBalls||0)+(t.hitByPitch||0))/pa).toFixed(3);t.ops=(parseFloat(t.obp||0)+parseFloat(t.slg||0)).toFixed(3)}
-  return t;
-}
-async function searchVsP(q){if(q.length<2){st.lkVsPlayerResults=[];render();return}try{const d=await mlbFetch(`${MLB_API}/people/search?names=${encodeURIComponent(q)}&sportId=1&limit=8`);st.lkVsPlayerResults=(d.people||[]).map(p=>({id:p.id,name:p.fullName,pos:p.primaryPosition?.abbreviation||"",team:p.currentTeam?.abbreviation||""}));render()}catch(e){console.error(e)}}
-function pickVsP(id,name){st.lkVsPlayerId=id;st.lkVsPlayerName=name;st.lkVsPlayerResults=[];fetchLkVsPlayer(st.lkPlayer.id,id)}
-async function fetchLkVsPlayer(pid,oid){st.lkLoading.vsPlayer=true;st.lkVsPlayerResults=[];render();try{const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";const d=await mlbFetch(`${MLB_API}/people/${pid}/stats?stats=vsPlayer&group=${g}&opposingPlayerId=${oid}`);const sp=(d.stats||[])[0]?.splits||[];st.lkVsPlayerStats=sp.length?sp[0].stat:null}catch(e){st.lkVsPlayerStats=null}st.lkLoading.vsPlayer=false;render()}
-function switchLkSub(t){st.lkSubTab=t;if(t==="vsTeam")st.lkVsTeamStats=null;render()}
-
-async function loadTeams(){const yr=new Date().getMonth()>=3?new Date().getFullYear():new Date().getFullYear()-1;try{const d=await mlbFetch(`${MLB_API}/teams?sportId=1&season=${yr}`);st.lkTeamList=(d.teams||[]).map(t=>({id:t.id,name:t.name,abbr:t.abbreviation}))}catch(e){}}
-
-Promise.all([
-  loadTeams(),
-  fetchSheet("Tonights_Batters"),
-  fetchSheet("Batter_Game_Logs"),
-  fetchSheet("Home_Away_Splits").catch(()=>[]),
-  fetchSheet("Venue_Weather").catch(()=>[]),
-  fetchSheet("Tonights_Pitchers").catch(()=>[]),
-  fetchSheet("Tonights_Schedule").catch(()=>[]),
-  fetchSheet("Tonights_Starters").catch(()=>[]),
-  fetchSheet("Pitcher_Game_Logs").catch(()=>[]),
-  fetchSheet("Pitcher_Home_Away").catch(()=>[]),
-  fetchSheet("Daily_Picks").catch(()=>[]),
-  fetchSheet("DK_Player_Props").catch(()=>[]),
-  fetchSheet("Batter_vs_SP").catch(()=>[])
-]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,vsSP])=>{
-  resetDerived();
-  st.tonight=normalizeKeys(cleanRows(tonight));
-  st.gameLogs=normalizeKeys(cleanRows(logs));
-  st.splits=normalizeKeys(cleanRows(splits));
-  st.weather=normalizeKeys(cleanRows(weather));
-  st.pitchers=normalizeKeys(cleanRows(pitchers));
-  st.schedule=normalizeKeys(cleanRows(schedule));
-  st.pTonight=normalizeKeys(cleanRows(pTonight));
-  st.pGameLogs=normalizeKeys(cleanRows(pLogs));
-  st.pSplits=normalizeKeys(cleanRows(pSplits));
-  st.picks=normalizeKeys(cleanRows(picks)).map(p=>({
-    ...p,
-    player: cleanName(p.player||p.PLAYER||p.Player||p.PLAYER_NAME),
-    prop_type: normalizePropMetric(p.prop_type||p.PROP_TYPE||p.Prop_Type),
-    lean: normalizeLeanText(p.lean||p.LEAN||p.Lean),
-    confidence: normalizeConfidence(p.confidence||p.CONFIDENCE||p.Confidence),
-    DATE: normalizeDate(p.DATE||p.date||p.Date)
-  }));
-  st.props=normalizeKeys(cleanRows(props));
-  st.vsSP=normalizeKeys(cleanRows(vsSP));
-  st.dataVersion+=1;
-  st.latestPickDate=getLatestPickDate();
-  const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===st.latestPickDate):[];
-  st.pickGuard=getPickGuard(st.latestPickDate,latestPicks.length);
-  st.loading=false;st.loadedAt=new Date().toLocaleTimeString();
-
-  st.mode="batter";st.metric="H";
-  st.player=firstValidPlayer(st.tonight);
-
-  if(!st.player&&st.pTonight.length>0){
-    st.mode="pitcher";st.metric="SO";
-    st.player=firstValidPlayer(st.pTonight);
-  }
-
-  console.log(`🚀 Dashboard loaded — mode:${st.mode}, player:"${st.player}"`);
-  console.log(`   Batters: ${st.tonight.length}, Logs: ${st.gameLogs.length}, Pitchers: ${st.pTonight.length}`);
-  console.log(`   Props: ${st.props.length}, Picks: ${st.picks.length}, Weather: ${st.weather.length}`);
-  if(st.pickGuard)console.warn(`⚠️ ${st.pickGuard.text}`);
-  if(st.tonight.length>0)console.log(`   Batter row 0 keys:`,Object.keys(st.tonight[0]).slice(0,8));
-  if(st.pTonight.length>0)console.log(`   Pitcher row 0 keys:`,Object.keys(st.pTonight[0]).slice(0,8));
-  if(!st.player)console.error(`❌ NO DEFAULT PLAYER FOUND. Batter row 0:`,JSON.stringify(st.tonight[0]).slice(0,200));
-  render();
-}).catch(err=>{
-  console.error("❌ Load failed:",err);
-  st.loading=false;
-  st.error="Could not load data. Make sure your Google Sheet is set to 'Anyone with the link can view'.";
-  render();
-});
-</script>
-</body>
-</html>
+# ═══════════════════════════════════════════════
+# 📊 SUMMARY
+# ═══════════════════════════════════════════════
+print(f"\n{'='*50}")
+print(f"🏒 NHL ENGINE v1.2 — RUN COMPLETE")
+print(f"{'='*50}")
+print(f"  📅 Date: {TODAY}")
+print(f"  🏟️  Games: {len(games)}")
+print(f"  🏒 Skaters: {len(skater_tonight)} with logs")
+print(f"  🧱 Goalies: {len(goalie_tonight)} with logs")
+print(f"  📊 Game log rows: {len(skater_logs) + len(goalie_logs)}")
+print(f"  🎲 Props: {len(all_props)}")
+print(f"  🤖 AI Picks: {len(daily_picks)}")
+print(f"  ⏱️  Sheet: {SHEET_ID}")
+print(f"{'='*50}")
