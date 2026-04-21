@@ -2126,7 +2126,7 @@ async function loadTeams(){const yr=new Date().getMonth()>=3?new Date().getFullY
 
 Promise.all([
   loadTeams(),
-  fetchSheet("Tonights_Batters"),
+  fetchSheet("Tonights_Batters").catch(()=>[]),
   fetchSheet("Batter_Game_Logs").catch(()=>[]),
   fetchSheet("Home_Away_Splits").catch(()=>[]),
   fetchSheet("Venue_Weather").catch(()=>[]),
@@ -2181,6 +2181,10 @@ Promise.all([
   if(st.pTonight.length>0)console.log(`   Pitcher row 0 keys:`,Object.keys(st.pTonight[0]).slice(0,8));
   if(!st.player)console.error(`❌ NO DEFAULT PLAYER FOUND. Batter row 0:`,JSON.stringify(st.tonight[0]).slice(0,200));
   if(!st.gameLogs.length)console.warn("⚠️ Batter_Game_Logs unavailable — dashboard loaded without game log history.");
+  if(!st.tonight.length)console.warn("⚠️ Tonights_Batters unavailable — dashboard loaded without batter dashboard rows.");
+  if(!st.tonight.length&&!st.pTonight.length&&!st.props.length&&!st.picks.length){
+    st.error="Could not load MLB dashboard data. Google returned no usable rows for the current dashboard sheets.";
+  }
   render();
 }).catch(err=>{
   console.error("❌ Load failed:",err);
