@@ -770,7 +770,7 @@ function getHitRate(name,metric,line,isP){
   const combo=COMBO_STATS[metric];
   let over=0,under=0,push=0;
   for(const g of logs){
-    const val=combo?combo.reduce((s,k)=>s+toNum(g[k]),0):toNum(g[metric]);
+    const val=combo?combo.reduce((s,k)=>s+toNum(g[k]),0):metric==="P_OUTS"?toNum(g.IP_OUTS):toNum(g[metric]);
     if(val>ln)over++;
     else if(val<ln)under++;
     else push++;
@@ -786,7 +786,7 @@ function getHitRate(name,metric,line,isP){
 
 function propToLogCol(metric){
   if(COMBO_STATS[metric])return metric;
-  const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"IP"};
+  const map={H:"H",TB:"TB",HR:"HR",RBI:"RBI",R:"R",SB:"SB",BB:"BB","1B":"1B","2B":"2B",Batter_SO:"SO",P_SO:"SO",P_H:"H",P_BB:"BB",P_ER:"ER",P_OUTS:"P_OUTS"};
   return map[metric]||metric;
 }
 
@@ -839,7 +839,8 @@ function getBestBets(){
       dkLine:p.DK_LINE,
       overOdds:p.OVER_ODDS,
       underOdds:p.UNDER_ODDS,
-      isP
+      isP,
+      teamSlot:`${pT.team_abbr||""}${isP?":P":":B"}`
     });
   }
   bets.sort((a,b)=>b.edge-a.edge);
@@ -849,7 +850,7 @@ function getBestBets(){
 
 // ═══ SMART SLIP GENERATOR ═══
 function getConvictionLegs(){
-  const SLIP_WORTHY=new Set(["H","HR","RBI","R","TB","SB","BB","H+R+RBI","H+R","R+RBI","P_SO","UD_FP"]); const bets=getBestBets().filter(b=>b.edge>0).filter(b=>{   if(!SLIP_WORTHY.has(b.metric))return false;   if(b.lean==="UNDER"&&parseFloat(b.dkLine)<=0.5)return false;   return true; });
+  const SLIP_WORTHY=new Set(["H","HR","RBI","R","TB","SB","BB","H+R+RBI","H+R","R+RBI","P_SO","P_H","P_BB","P_ER","P_OUTS","UD_FP"]); const bets=getBestBets().filter(b=>b.edge>0).filter(b=>{   if(!SLIP_WORTHY.has(b.metric))return false;   if(b.lean==="UNDER"&&parseFloat(b.dkLine)<=0.5)return false;   return true; });
   if(!bets.length)return[];
 
   const latestDate=getLatestPickDate();
@@ -907,7 +908,7 @@ function getConvictionLegs(){
     else if(b.edge>=0.08)signals.push("📈 Strong EV");
     if(b.hitRate>=0.8)signals.push(`✅ ${(b.hitRate*100).toFixed(0)}% hit`);
 
-    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:aiAgreesWithBet(aiPick,b),hasAIConflict:!!aiConflictLevel,aiConflictLevel,aiDisagreementText,hasStreak:!!streak});
+    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:aiAgreesWithBet(aiPick,b),hasAIConflict:!!aiConflictLevel,aiConflictLevel,aiDisagreementText,hasStreak:!!streak,teamSlot:b.teamSlot||`${b.team}${b.isP?":P":":B"}`});
   }
   legs.sort((a,b)=>b.conviction-a.conviction);
   return legs;
@@ -923,7 +924,7 @@ function generateSlips(legs,legCount){
       const score=current.reduce((s,l)=>s+l.conviction,0);
       const avgEdge=current.reduce((s,l)=>s+l.edge,0)/legCount;
       const avgHitRate=current.reduce((s,l)=>s+l.hitRate,0)/legCount;
-      const teams=[...new Set(current.map(l=>l.team))];
+      const teams=[...new Set(current.map(l=>l.teamSlot||l.team))];
       const signals=current.reduce((s,l)=>s+l.signals.length,0);
       slips.push({legs:current.slice(),score,avgEdge,avgHitRate,teams,signalCount:signals,legCount});
       return;
@@ -931,16 +932,17 @@ function generateSlips(legs,legCount){
     for(let i=start;i<pool.length&&slips.length<maxIter;i++){
       const leg=pool[i];
       if(usedPlayers.has(leg.name.toLowerCase()))continue;
-      const tc=teamCounts.get(leg.team)||0;
+      const slot=leg.teamSlot||leg.team;
+      const tc=teamCounts.get(slot)||0;
       if(tc>=2)continue;
 
       usedPlayers.add(leg.name.toLowerCase());
-      teamCounts.set(leg.team,(tc||0)+1);
+      teamCounts.set(slot,(tc||0)+1);
       current.push(leg);
       gen(i+1,current,usedPlayers,teamCounts);
       current.pop();
       usedPlayers.delete(leg.name.toLowerCase());
-      teamCounts.set(leg.team,tc);
+      teamCounts.set(slot,tc);
     }
   }
   const pool=legs.slice(0,legCount<=3?15:legCount<=4?18:20);
@@ -1602,7 +1604,7 @@ function render(){
         const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
         return`<div class="bet-card ${cls}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
           <div class="bet-left">
-            <div class="bet-name">${esc(b.name)}</div>
+            <div class="bet-name">${b.isP?`⚾ `:""}${esc(b.name)}</div>
             <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
             <div class="bet-prop">
               <span class="prop-metric" style="font-size:10px">${b.metric}</span>
@@ -1657,7 +1659,7 @@ function render(){
               return`<div class="slip-leg">
                 <span class="slip-leg-team">${esc(l.team)}</span>
                 <div style="flex:1;min-width:0">
-                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${esc(l.name)}</span>
+                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted #4ade8088" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?`⚾ `:""}${esc(l.name)}</span>
                   ${l.aiDisagreementText?`<div style="font-size:9px;color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
                 </div>
                 <div class="slip-leg-prop">
