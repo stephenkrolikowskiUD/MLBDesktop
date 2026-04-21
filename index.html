@@ -2124,7 +2124,9 @@ function switchLkSub(t){st.lkSubTab=t;if(t==="vsTeam")st.lkVsTeamStats=null;rend
 
 async function loadTeams(){const yr=new Date().getMonth()>=3?new Date().getFullYear():new Date().getFullYear()-1;try{const d=await mlbFetch(`${MLB_API}/teams?sportId=1&season=${yr}`);st.lkTeamList=(d.teams||[]).map(t=>({id:t.id,name:t.name,abbr:t.abbreviation}))}catch(e){}}
 
-Promise.all([
+function loadAllData(){
+  st.loading=true;st.error=null;resetDerived();render();
+  Promise.all([
   loadTeams(),
   fetchSheet("Tonights_Batters").catch(()=>[]),
   fetchSheet("Batter_Game_Logs").catch(()=>[]),
@@ -2192,6 +2194,8 @@ Promise.all([
   st.error=err?.message?.startsWith("Sheet load failed:")?`Could not load required MLB sheet: ${err.message.replace("Sheet load failed: ","")}.`:"Could not load MLB dashboard data. A required sheet request failed.";
   render();
 });
+}
+loadAllData();
 </script>
 </body>
 </html>
