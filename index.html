@@ -638,6 +638,16 @@ function parseStartMs(v){
   const d=new Date(v);
   return Number.isNaN(d.getTime())?null:d.getTime();
 }
+function getScheduleRow(team,opp){
+  const t=String(team||"").trim().toUpperCase();
+  const o=String(opp||"").trim().toUpperCase();
+  if(!t||!o||!Array.isArray(st.schedule))return null;
+  return st.schedule.find(r=>{
+    const home=String(r.home_abbr||r.HOME_ABBR||"").trim().toUpperCase();
+    const away=String(r.away_abbr||r.AWAY_ABBR||"").trim().toUpperCase();
+    return (home===t&&away===o)||(home===o&&away===t);
+  })||null;
+}
 function getScheduleStartMs(team,opp){
   const row=getScheduleRow(team,opp)||{};
   return parseStartMs(row.game_time||row.GAME_TIME||row.commence_time||row.COMMENCE_TIME||row.start_time||row.START_TIME);
