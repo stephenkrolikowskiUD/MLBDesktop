@@ -1912,16 +1912,17 @@ function render(){
     }
   }else if(st.picksView==="parlays"){
     // ═══ STAT PARLAYS ═══
-    const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>!m.startsWith("P_")&&m!=="Batter_SO");
-    const availStats=["HR","H","RBI","R","TB","SB","BB"].filter(s=>allPropStats.includes(s));
+    const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>m!=="Batter_SO");
+    const availStats=["HR","H","RBI","R","TB","SB","BB","P_SO","P_BB","P_OUTS"].filter(s=>allPropStats.includes(s));
     const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
     const board=getStatParlayBoard(pStat);
     const combos2=getStatParlayCombos(board,2);
     const combos3=getStatParlayCombos(board,3);
+    const isPitcherStat=isPitcherProp(pStat);
 
     picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#818cf8;font-size:13px;font-weight:700">🎯 Stat Parlays</div><div style="color:#6b8f7b;font-size:10px">${board.length} players w/ ${pStat} prop</div></div>`;
     picksHTML+=`<div style="padding:0 16px 4px;color:#6b8f7b;font-size:10px">Pick a stat, see the best same-stat parlay combos ranked by hit rate + EV edge + matchup.</div>`;
-    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="HR"?"💣":""}${s==="SB"?"💨":""}${s==="H"?"🎯":""}${s==="RBI"?"💰":""}${s==="R"?"🏃":""}${s==="TB"?"⚡":""}${s==="BB"?"👁️":""} ${s}</div>`).join("")}</div>`;
+    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="HR"?"💣":""}${s==="SB"?"💨":""}${s==="H"?"🎯":""}${s==="RBI"?"💰":""}${s==="R"?"🏃":""}${s==="TB"?"⚡":""}${s==="BB"?"👁️":""}${s==="P_SO"?"⚾":""}${s==="P_BB"?"🧭":""}${s==="P_OUTS"?"⏱️":""} ${s}</div>`).join("")}</div>`;
 
     if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No DK props available. Run the engine first.</div>`}
     else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${pStat} parlays. Need 3+ games.</div>`}
@@ -1933,11 +1934,11 @@ function render(){
         const hrPct=(d.hitRate*100).toFixed(0);
         const edgePct=d.edge>0?`+${(d.edge*100).toFixed(0)}%`:`${(d.edge*100).toFixed(0)}%`;
         const isTop=i<3;
-        const locked=getLockInfo(d.name,false).started;
+        const locked=getLockInfo(d.name,isPitcherStat).started;
         return`<div class="due-card ${isTop?"top":""}${locked?" locked-card":""}" onclick="streakToDash('${esc(d.name)}')">
           <div class="due-left">
-            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${playerLink(d.name,pStat,d.dkLine||"")}${lockBadge(d.name,false)}</span></div>
-            <div class="due-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)</div>
+            <div><span style="font-size:12px;font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${playerLink(d.name,pStat,d.dkLine||"")}${lockBadge(d.name,isPitcherStat)}</span></div>
+            <div class="due-meta">${isPitcherStat?`${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}`:`${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)`}</div>
             <div class="due-tags">
               <span class="due-tag" style="background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d">${hrPct}% hit rate</span>
               ${d.edge>0?`<span class="due-tag matchup">${edgePct} EV</span>`:""}
