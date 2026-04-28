@@ -482,6 +482,7 @@ let derived={
   tonightByName:new Map(),
   pTonightByName:new Map(),
   latestPickDate:"",
+  latestPickRun:0,
   picksByNameLatest:new Map(),
   memo:new Map()
 };
@@ -495,6 +496,7 @@ function resetDerived(){
     tonightByName:new Map(),
     pTonightByName:new Map(),
     latestPickDate:"",
+    latestPickRun:0,
     picksByNameLatest:new Map(),
     memo:new Map()
   };
@@ -530,10 +532,12 @@ function ensureDerived(){
   }
   const allDates=[...new Set((st.picks||[]).map(p=>normalizeDate(p.DATE||p.date)).filter(Boolean))].sort();
   derived.latestPickDate=allDates.length?allDates[allDates.length-1]:"";
+  const sameDatePicks=(st.picks||[]).filter(p=>normalizeDate(p.DATE||p.date)===derived.latestPickDate);
+  derived.latestPickRun=sameDatePicks.length?Math.max(...sameDatePicks.map(p=>toNum(p.RUN_NUMBER||p.run_number||0))):0;
   for(const p of st.picks||[]){
     const key=normalizePlayerName(p?.player);
     if(!key)continue;
-    if(normalizeDate(p.DATE||p.date)===derived.latestPickDate && !derived.picksByNameLatest.has(key)){
+    if(normalizeDate(p.DATE||p.date)===derived.latestPickDate && toNum(p.RUN_NUMBER||p.run_number||0)===derived.latestPickRun && !derived.picksByNameLatest.has(key)){
       derived.picksByNameLatest.set(key,p);
     }
   }
@@ -739,6 +743,8 @@ function getRollingVal(row,prefix,m){
 function hasLogs(name,isP){return getPlayerLogs(name,isP).length>0}
 function getProps(name){if(!name||!st.props.length)return[];ensureDerived();return derived.propsByName.get(normalizePlayerName(name))||[]}
 function getLatestPickDate(){ensureDerived();return derived.latestPickDate}
+function getLatestPickRun(){ensureDerived();return derived.latestPickRun}
+function getActivePicks(){const latestDate=getLatestPickDate(),latestRun=getLatestPickRun();return (st.picks||[]).filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun)}
 function getPick(name){if(!name||!st.picks.length)return null;ensureDerived();return derived.picksByNameLatest.get(normalizePlayerName(name))||null}
 
 function firstValidPlayer(arr){
@@ -949,8 +955,9 @@ function getConvictionLegs(){
   if(!bets.length)return[];
 
   const latestDate=getLatestPickDate();
+  const latestRun=getLatestPickRun();
   const aiMap=new Map();
-  st.picks.filter(pk=>normalizeDate(pk.DATE||pk.date)===latestDate).forEach(pk=>{if(pk.player)aiMap.set(normalizePlayerName(pk.player),pk)});
+  st.picks.filter(pk=>normalizeDate(pk.DATE||pk.date)===latestDate&&toNum(pk.RUN_NUMBER||pk.run_number||0)===latestRun).forEach(pk=>{if(pk.player)aiMap.set(normalizePlayerName(pk.player),pk)});
   const streakMap=new Map();
   try{
     const streaks=getStreaks();
@@ -1328,7 +1335,8 @@ function getConvergenceBoard(){
   return getMemo("convergenceBoard",()=>{
   const board=new Map();
   const latestDate=getLatestPickDate();
-  const allowed=new Set(st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate).map(p=>normalizePlayerName(p.player)).filter(Boolean));
+  const latestRun=getLatestPickRun();
+  const allowed=new Set(st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun).map(p=>normalizePlayerName(p.player)).filter(Boolean));
   const add=(name,source,boost=0,meta={})=>{
     if(!name)return;
     const key=normalizePlayerName(name);
@@ -1346,7 +1354,7 @@ function getConvergenceBoard(){
     bestBetMap.set(normalizePlayerName(b.name),b);
     add(b.name,"Best Bets",2+Math.min(b.edge*20,3),{team:b.team,opp:b.opp,detail:`${b.lean} ${b.metric} ${b.dkLine}`});
   });
-  st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate).forEach(pk=>{
+  st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun).forEach(pk=>{
     const bestBet=bestBetMap.get(normalizePlayerName(pk.player));
     if(!aiAgreesWithBet(pk,bestBet))return;
     const conf=normalizeConfidence(pk.confidence);
@@ -1784,7 +1792,8 @@ function render(){
   }else if(st.picksView==="picks"){
     // Only show most recent date's picks
     const latestDate=getLatestPickDate();
-    const todayPicks=latestDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate):st.picks;
+    const latestRun=getLatestPickRun();
+    const todayPicks=latestDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun):st.picks;
     const pickGuard=st.pickGuard;
     if(!todayPicks.length){picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
     else{
@@ -2263,13 +2272,15 @@ function loadAllData(){
     prop_type: normalizePropMetric(p.prop_type||p.PROP_TYPE||p.Prop_Type),
     lean: normalizeLeanText(p.lean||p.LEAN||p.Lean),
     confidence: normalizeConfidence(p.confidence||p.CONFIDENCE||p.Confidence),
-    DATE: normalizeDate(p.DATE||p.date||p.Date)
+    DATE: normalizeDate(p.DATE||p.date||p.Date),
+    RUN_NUMBER: toNum(p.RUN_NUMBER||p.run_number||0)
   }));
   st.props=normalizeKeys(cleanRows(props));
   st.vsSP=normalizeKeys(cleanRows(vsSP));
   st.dataVersion+=1;
   st.latestPickDate=getLatestPickDate();
-  const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===st.latestPickDate):[];
+  const latestPickRun=getLatestPickRun();
+  const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===st.latestPickDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestPickRun):[];
   st.pickGuard=getPickGuard(st.latestPickDate,latestPicks.length);
   st.loading=false;st.loadedAt=new Date().toLocaleTimeString();
 
