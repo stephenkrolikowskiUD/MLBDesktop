@@ -619,6 +619,7 @@ function fetchSheet(name,attempt=1){
 }
 
 const toNum=v=>parseFloat(v)||0;
+function outsToIPStr(outs){const w=Math.floor(outs/3);const r=outs%3;return r===0?w+".0":w+"."+r;}
 const barColor=(v,l)=>!l?"#4ade80":v>l?"#22c55e":v===l?"#9ca3af":"#ef4444";
 const avgColor=(v,l)=>!l?"#4ade80":v>=l?"#4ade80":"#f97316";
 const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
@@ -1643,8 +1644,8 @@ function render(){
   if(isP){
     ["IP","SO","ER","H","HR","BB","W","L","PC","R"].forEach(s=>{sT[s]=allLogs.reduce((a,g)=>a+toNum(g[s]),0)});
     sT.UD_FP=allLogs.reduce((a,g)=>a+toNum(g.UD_FP),0).toFixed(1);
-    const outs=allLogs.reduce((a,g)=>{const p=(g.IP||"").toString().split(".");return a+(parseInt(p[0])||0)*3+(parseInt(p[1])||0)},0);
-    const rIP=outs/3;sT.IP=rIP.toFixed(1);
+    const outs=allLogs.reduce((a,g)=>a+Math.round(toNum(g.IP)*3),0);
+    const rIP=outs/3;sT.IP=outsToIPStr(outs);
     sT.ERA=rIP>0?((sT.ER*9)/rIP).toFixed(2):"0.00";
     sT.WHIP=rIP>0?(((sT.H||0)+(sT.BB||0))/rIP).toFixed(2):"0.00";
     sT.K9=rIP>0?((sT.SO*9)/rIP).toFixed(1):"0.0";
