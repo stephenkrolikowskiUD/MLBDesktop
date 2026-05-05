@@ -264,6 +264,14 @@ td.push{color:#9ca3af;font-weight:700}
 .bs-card{flex:1;background:#163024;border-radius:8px;padding:10px;text-align:center}
 .bs-val{font-size:18px;font-weight:800;color:#22c55e}
 .bs-lbl{font-size:9px;color:#86efac;margin-top:2px}
+.convergence-shell{padding:12px 16px 4px}
+.convergence-toggle{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #2d5a3d;border-radius:12px;background:#143222}
+.convergence-toggle::-webkit-details-marker{display:none}
+.convergence-title{display:flex;flex-direction:column;gap:2px}
+.convergence-kpis{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.convergence-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:#1a3d2a;color:#d1fae5;font-size:10px;font-weight:700}
+.convergence-chip strong{font-size:11px}
+.convergence-body{padding-top:10px}
 /* ═══ Smart Slips ═══ */
 .slip-section{padding:12px 16px 0}
 .slip-tier{color:#4ade80;font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
@@ -1379,18 +1387,14 @@ function renderConvergenceHTML(){
   const board=getConvergenceBoard();
   if(!board.length)return"";
   const top=board[0];
-  return `<div style="padding:12px 16px 4px">
-    <div style="color:#4ade80;font-size:13px;font-weight:700">🏆 Player of the Day</div>
-    <div style="color:#6b8f7b;font-size:10px;margin-top:2px">Cross-tab convergence from Best Bets, AI, Streaks, Due, and Dingers.</div>
-  </div>
-  <div class="bet-summary">
+  return `<div class="convergence-shell"><details class="convergence-details"><summary class="convergence-toggle"><div class="convergence-title"><div style="color:#4ade80;font-size:13px;font-weight:700">🏆 Player of the Day</div><div style="color:#6b8f7b;font-size:10px">Cross-tab convergence from Best Bets, AI, Streaks, Due, and Dingers.</div></div><div class="convergence-kpis"><span class="convergence-chip"><strong style="color:#4ade80">${top.sourceCount}</strong> top</span><span class="convergence-chip"><strong>${board.length}</strong> 2+</span><span class="convergence-chip"><strong style="color:#22c55e">${board.filter(p=>p.sourceCount>=3).length}</strong> 3+</span></div></summary><div class="convergence-body"><div class="bet-summary">
     <div class="bs-card"><div class="bs-val" style="color:#4ade80">${top.sourceCount}</div><div class="bs-lbl">TOP SIGNALS</div></div>
     <div class="bs-card"><div class="bs-val">${board.length}</div><div class="bs-lbl">2+ SURFACES</div></div>
     <div class="bs-card"><div class="bs-val" style="color:#22c55e">${board.filter(p=>p.sourceCount>=3).length}</div><div class="bs-lbl">3+ MATCHES</div></div>
   </div>
   <div class="cards-grid">
     ${board.map((p,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:pointer;border-color:${i===0?"#4ade80":"#2d5a3d"}" onclick="streakToDash('${esc(p.name)}')"><div class="bet-left"><div class="bet-name">${i===0?"🏆 ":""}${playerLink(p.name)}</div><div class="bet-meta">${esc(p.team||"")} ${p.opp?`vs ${esc(p.opp)}`:""}</div>${p.detail?`<div class="bet-prop"><span class="prop-metric" style="font-size:10px">Lead</span><span style="color:#d1fae5;font-size:11px">${esc(p.detail)}</span></div>`:""}<div class="draft-tags" style="margin-top:6px">${p.sourceList.map(s=>`<span class="draft-tag" style="background:#173522;color:${s==="AI"?"#4ade80":s==="Best Bets"?"#86efac":s==="Streaks"?"#ffaa00":s==="Due"?"#38bdf8":"#ef4444"}">${esc(s)}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${p.sourceCount}x</div><div class="bet-sub">signals</div></div></div>`).join("")}
-  </div>`;
+  </div></div></details></div>`;
 }
 
 // ═══ DRAFT CHEAT SHEET ═══
