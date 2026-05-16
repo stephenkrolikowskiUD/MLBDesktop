@@ -3,7 +3,7 @@ name: MLB Grader
 on:
   workflow_dispatch:
   schedule:
-    - cron: "15 10 * * *"
+    - cron: "15 15 * * *"
 
 jobs:
   run-mlb-grader:
