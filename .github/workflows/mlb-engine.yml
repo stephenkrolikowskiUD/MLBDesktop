@@ -33,12 +33,4 @@ jobs:
           python -m pip install pandas numpy requests pytz gspread google-auth google-genai gspread-dataframe pybaseball
 
       - name: Run MLB engine
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          src = Path("MLBEnginev5-4.py")
-          text = src.read_text()
-          lines = [line for line in text.splitlines() if not line.lstrip().startswith('!pip ')]
-          Path("/tmp/MLBEnginev5-4.run.py").write_text("\n".join(lines) + "\n")
-          PY
-          python /tmp/MLBEnginev5-4.run.py
+        run: python MLBEnginev5-4.py

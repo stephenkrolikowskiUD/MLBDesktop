@@ -1,5 +1,4 @@
 # @title ⚾ MLB Dashboard Engine (v1.3.0 — Underdog Scoring) — 5-4 Baseline
-!pip install pybaseball requests pandas numpy gspread google-auth gspread-dataframe google-genai
 import pandas as pd
 import numpy as np
 import requests
@@ -25,6 +24,7 @@ warnings.filterwarnings('ignore')
 print("Authenticating with Google...")
 
 SHEET_NAME = 'MLB_Dashboard_Data'
+SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = "2026-05-04"
 
@@ -317,8 +317,8 @@ print(f"📅 Schedule date: {schedule_date}")
 print(f"📆 Season: {SEASON}")
 
 try:
-    sh = gc.open(SHEET_NAME)
-    print(f"✅ Connected to Google Sheet: {SHEET_NAME}")
+    sh = gc.open_by_key(SHEET_ID)
+    print(f"✅ Connected to Google Sheet: {SHEET_ID}")
 except Exception as e:
     print(f"❌ Error: {e}")
 

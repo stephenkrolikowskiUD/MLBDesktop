@@ -37,10 +37,11 @@ def get_gspread_client():
 gc = get_gspread_client()
 
 SHEET_NAME = 'MLB_Dashboard_Data'
+SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = "2026-05-04"
-sh = gc.open(SHEET_NAME)
-print(f"✅ Connected to Google Sheet: {SHEET_NAME}")
+sh = gc.open_by_key(SHEET_ID)
+print(f"✅ Connected to Google Sheet: {SHEET_ID}")
 
 eastern = pytz.timezone('US/Eastern')
 now_est = datetime.now(eastern)
