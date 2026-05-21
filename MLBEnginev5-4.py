@@ -2286,30 +2286,48 @@ if df_picks is not None and len(df_picks) > 0:
     try:
         try:
             ws_picks = sh.worksheet('Daily_Picks')
-            existing = ws_picks.get_all_records()
-            df_existing = pd.DataFrame(existing)
-            print(f"   📋 Existing picks: {len(df_existing)} rows")
+            existing_values = ws_picks.get_all_values()
+            existing_headers = existing_values[0] if existing_values else []
+            existing_count = max(len(existing_values) - 1, 0)
+            print(f"   📋 Existing picks: {existing_count} rows")
         except gspread.exceptions.WorksheetNotFound:
-            df_existing = pd.DataFrame()
             ws_picks = sh.add_worksheet(title='Daily_Picks', rows=500, cols=26)
+            existing_values = []
+            existing_headers = []
+            existing_count = 0
             print(f"   🆕 Created Daily_Picks sheet")
 
-        df_existing = refresh_clv_frame(df_existing, schedule_date, df_props, timestamp_est)
+        df_append = df_picks.copy().fillna('')
+        for col in df_append.columns:
+            df_append[col] = df_append[col].apply(lambda x: x.item() if hasattr(x, 'item') else x)
 
-        # Stack old + new
-        df_all_picks = pd.concat([df_existing, df_picks], ignore_index=True)
-        df_all_picks = df_all_picks.fillna('')
-        for col in df_all_picks.columns:
-            df_all_picks[col] = df_all_picks[col].apply(lambda x: x.item() if hasattr(x, 'item') else x)
+        if not existing_headers:
+            ws_picks.update([df_append.columns.tolist()])
+            existing_headers = df_append.columns.tolist()
+        all_headers = existing_headers + [c for c in df_append.columns.tolist() if c not in existing_headers]
+        if all_headers != existing_headers:
+            print("   🔄 Expanding Daily_Picks headers without clearing historical rows")
+            rewritten = [all_headers]
+            for row in existing_values[1:]:
+                row_map = {existing_headers[i]: row[i] for i in range(min(len(existing_headers), len(row)))}
+                rewritten.append([row_map.get(h, "") for h in all_headers])
+            ws_picks.clear()
+            needed_rows = len(rewritten)
+            needed_cols = len(all_headers)
+            if ws_picks.row_count < needed_rows or ws_picks.col_count < needed_cols:
+                ws_picks.resize(rows=max(needed_rows, ws_picks.row_count), cols=max(needed_cols, ws_picks.col_count))
+            ws_picks.update(rewritten, value_input_option='RAW')
+            existing_headers = all_headers
+            existing_values = rewritten
+            existing_count = max(len(existing_values) - 1, 0)
 
-        ws_picks.clear()
-        from gspread_dataframe import set_with_dataframe
-        needed_rows = len(df_all_picks) + 1
-        needed_cols = len(df_all_picks.columns)
-        if ws_picks.row_count < needed_rows or ws_picks.col_count < needed_cols:
-            ws_picks.resize(rows=max(needed_rows, ws_picks.row_count), cols=max(needed_cols, ws_picks.col_count))
-        set_with_dataframe(ws_picks, df_all_picks)
-        print(f"   ✅ Daily_Picks: {len(df_all_picks)} total rows ({len(df_existing)} old + {len(df_picks)} new)")
+        for col in existing_headers:
+            if col not in df_append.columns:
+                df_append[col] = ''
+        df_append = df_append[existing_headers]
+        cleaned = [[clean_cell(v) for v in row] for row in df_append.values.tolist()]
+        ws_picks.append_rows(cleaned, value_input_option='RAW')
+        print(f"   ✅ Daily_Picks: {existing_count + len(df_append)} total rows ({existing_count} old + {len(df_append)} new)")
     except Exception as e:
         print(f"   ❌ Daily_Picks append failed: {e}")
     time.sleep(2)
