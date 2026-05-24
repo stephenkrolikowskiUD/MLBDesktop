@@ -7,12 +7,14 @@ import math
 import re
 import unicodedata
 import os, json
+import atexit
 from datetime import datetime, timedelta
 from itertools import combinations
 import pytz
 import gspread
 from google.auth import default
 from google.oauth2.service_account import Credentials
+from run_logger import RunLogger
 
 def get_gspread_client():
     scopes = [
@@ -42,6 +44,8 @@ MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = "2026-05-04"
 sh = gc.open_by_key(SHEET_ID)
 print(f"✅ Connected to Google Sheet: {SHEET_ID}")
+runlog = RunLogger(gc, SHEET_ID, sport='MLB', kind='grader')
+atexit.register(runlog.finalize_and_write)
 
 eastern = pytz.timezone('US/Eastern')
 now_est = datetime.now(eastern)
@@ -201,11 +205,11 @@ blank_ungraded_mask = (hit_series == '') & date_series.notna() & (date_series < 
 ungraded = df_picks[blank_ungraded_mask | retry_dnp_mask].copy()
 
 if ungraded.empty:
-    print("✅ All picks are already graded! Nothing to do.")
-    dates_to_grade = []
-
-if ungraded.empty:
-    print(f"⏳ All ungraded picks are from today ({today_str}) — games haven't finished yet. Run tomorrow.")
+    blanks_today = int(((hit_series == '') & date_series.notna() & (date_series >= today_ts)).sum())
+    if blanks_today > 0:
+        print(f"⏳ {blanks_today} ungraded picks from today ({today_str}) — games haven't finished yet. Run tomorrow.")
+    else:
+        print("✅ All picks are already graded! Nothing to do.")
     dates_to_grade = []
 else:
     dates_to_grade = sorted(ungraded['DATE'].unique())
@@ -383,6 +387,7 @@ if not sheets_loaded or grade_dates_missing:
                     singles = h - hr - doubles - triples
                     tb = int(stat.get('totalBases', 0))
 
+                    singles_pos = float(max(singles, 0))
                     box_lookup[(player_name, game_date)] = {
                         'H': float(h),
                         'HR': float(hr),
@@ -393,14 +398,18 @@ if not sheets_loaded or grade_dates_missing:
                         'BB': float(stat.get('baseOnBalls', 0)),
                         'TB': float(tb),
                         'AB': float(stat.get('atBats', 0)),
-                        '1B': float(max(singles, 0)),
+                        '1B': singles_pos,
                         '2B': float(doubles),
                         '3B': float(triples),
                         'HBP': float(stat.get('hitByPitch', 0)),
-                        'DK_FP': round(singles * 3 + doubles * 5 + triples * 8 + hr * 10 +
+                        'DK_FP': round(singles_pos * 3 + doubles * 5 + triples * 8 + hr * 10 +
                                        float(stat.get('runs', 0)) * 2 + float(stat.get('rbi', 0)) * 2 +
                                        float(stat.get('baseOnBalls', 0)) * 2 + float(stat.get('stolenBases', 0)) * 5 +
                                        float(stat.get('strikeOuts', 0)) * -0.5, 2),
+                        'UD_FP': round(singles_pos * 3 + doubles * 6 + triples * 8 + hr * 10 +
+                                       float(stat.get('baseOnBalls', 0)) * 3 + float(stat.get('hitByPitch', 0)) * 3 +
+                                       float(stat.get('rbi', 0)) * 2 + float(stat.get('runs', 0)) * 2 +
+                                       float(stat.get('stolenBases', 0)) * 4, 2),
                     }
             time.sleep(0.2)
         except Exception as e:
@@ -518,6 +527,11 @@ else:
 # --- 7. SUMMARY ---
 total_decided = hits + misses
 hit_rate = (hits / total_decided * 100) if total_decided > 0 else 0
+runlog.hits = hits
+runlog.misses = misses
+runlog.dnp_count = dnp
+runlog.not_found_count = not_found
+runlog.picks_graded = hits + misses
 
 print("\n" + "=" * 60)
 print("📊 GRADING COMPLETE")

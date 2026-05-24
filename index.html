@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Snapshot: 2026-04-28 -->
+<!-- Baseline: 2026-05-04 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -2286,10 +2286,39 @@ function loadAllData(){
     confidence: normalizeConfidence(p.confidence||p.CONFIDENCE||p.Confidence),
     DATE: normalizeDate(p.DATE||p.date||p.Date),
     RUN_NUMBER: toNum(p.RUN_NUMBER||p.run_number||0)
-  }));
-  st.props=normalizeKeys(cleanRows(props));
-  st.vsSP=normalizeKeys(cleanRows(vsSP));
-  st.dataVersion+=1;
+	  }));
+	  st.props=normalizeKeys(cleanRows(props));
+	  st.vsSP=normalizeKeys(cleanRows(vsSP));
+	  const DASHBOARD_EXPECTS = {
+	    Tonights_Batters: ['player_name', 'team_abbr', 'opp_abbr_tonight',
+	                       'RETURNING', 'LIMITED_SAMPLE', 'L5_GAMES_PLAYED',
+	                       'GAMES_LAST_7D', 'IBB_RISK', 'LINEUP_PROTECTION_NOTE'],
+	    Daily_Picks: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
+	                  'confidence', 'rationale', 'HIT'],
+	    DK_Player_Props: ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS'],
+	    Tonights_Pitchers: ['team_abbr', 'opp_pitcher_name', 'opp_pitcher_hand'],
+	  };
+	  const _schemaSources = {
+	    Tonights_Batters: st.tonight,
+	    Daily_Picks: st.picks,
+	    DK_Player_Props: st.props,
+	    Tonights_Pitchers: st.pitchers,
+	  };
+	  const _schemaIssues = [];
+	  for (const [sheet, expectedCols] of Object.entries(DASHBOARD_EXPECTS)) {
+	    const rows = _schemaSources[sheet];
+	    if (!rows || !rows.length) continue;
+	    const actualCols = new Set(Object.keys(rows[0]));
+	    const missing = expectedCols.filter(c => !actualCols.has(c));
+	    if (missing.length) _schemaIssues.push(`${sheet}: missing [${missing.join(', ')}]`);
+	  }
+	  if (_schemaIssues.length) {
+	    console.warn('⚠️ SCHEMA DRIFT DETECTED:');
+	    _schemaIssues.forEach(i => console.warn('  ' + i));
+	  } else {
+	    console.log('✅ Dashboard schema audit: all expected columns present');
+	  }
+	  st.dataVersion+=1;
   st.latestPickDate=getLatestPickDate();
   const latestPickRun=getLatestPickRun();
   const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===st.latestPickDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestPickRun):[];

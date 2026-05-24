@@ -8,6 +8,7 @@ import math
 import re
 import unicodedata
 import os
+import atexit
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pytz
@@ -17,6 +18,7 @@ from google.auth import default
 from google.oauth2.service_account import Credentials
 from google import genai
 from google.genai import types
+from run_logger import RunLogger
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -27,6 +29,43 @@ SHEET_NAME = 'MLB_Dashboard_Data'
 SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = "2026-05-04"
+
+SHEET_SCHEMAS = {
+    'Tonights_Batters': {
+        'required': [
+            'player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name',
+            'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight',
+            'L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
+            'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'LAST_UPDATED',
+        ],
+        'recommended': ['Seas_OPS', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2'],
+    },
+    'Tonights_Pitchers': {
+        'required': ['team_abbr', 'opp_pitcher_id', 'opp_pitcher_name', 'opp_pitcher_hand', 'LAST_UPDATED'],
+        'recommended': [],
+    },
+    'Daily_Picks': {
+        'required': [
+            'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
+            'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
+        ],
+        'recommended': ['CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE'],
+    },
+    'DK_Player_Props': {
+        'required': ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'LAST_UPDATED'],
+        'recommended': [],
+    },
+    'Batter_Game_Logs': {
+        'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
+                     'AB', 'H', 'HR', 'RBI', 'R', 'BB', 'SO', 'TB', 'UD_FP', 'DK_FP'],
+        'recommended': ['Seas_OPS', 'L7_OPS', 'L14_OPS', 'L30_OPS'],
+    },
+    'Pitcher_Game_Logs': {
+        'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
+                     'IP', 'SO', 'ER', 'BB', 'H', 'UD_FP', 'DK_FP'],
+        'recommended': ['QS'],
+    },
+}
 
 now_est = datetime.now(pytz.timezone('US/Eastern'))
 today_str = now_est.strftime('%Y-%m-%d')
@@ -319,6 +358,8 @@ print(f"📆 Season: {SEASON}")
 try:
     sh = gc.open_by_key(SHEET_ID)
     print(f"✅ Connected to Google Sheet: {SHEET_ID}")
+    runlog = RunLogger(gc, SHEET_ID, sport='MLB', kind='engine')
+    atexit.register(runlog.finalize_and_write)
 except Exception as e:
     print(f"❌ Error: {e}")
 
@@ -398,14 +439,15 @@ def get_player_game_log(player_id, season):
                 '2B': int(stat.get('doubles', 0)),
                 '3B': int(stat.get('triples', 0)),
                 'HBP': int(stat.get('hitByPitch', 0)),  # v1.3.0: Added for Underdog scoring
+                'SF': int(stat.get('sacFlies', 0)),
             })
         return games
     except Exception:
         return []
 
 BATTER_LOG_BASE_COLS = ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
-                        'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP']
-BATTER_LOG_NUMERIC_COLS = ['player_id', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP']
+                        'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
+BATTER_LOG_NUMERIC_COLS = ['player_id', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
 existing_batter_logs = load_existing_log_sheet('Batter_Game_Logs', BATTER_LOG_BASE_COLS, BATTER_LOG_NUMERIC_COLS)
 latest_batter_date_by_pid = {}
 if len(existing_batter_logs) > 0:
@@ -446,7 +488,7 @@ new_batter_logs = pd.DataFrame(all_game_logs, columns=BATTER_LOG_BASE_COLS)
 combined_batter_logs = pd.concat([existing_batter_logs, new_batter_logs], ignore_index=True)
 if len(combined_batter_logs) > 0:
     combined_batter_logs['game_date'] = combined_batter_logs['game_date'].map(normalize_game_date)
-    dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP']
+    dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
     combined_batter_logs = combined_batter_logs.drop_duplicates(subset=dedupe_cols, keep='last')
     combined_batter_logs['game_date'] = pd.to_datetime(combined_batter_logs['game_date'], errors='coerce')
     df_logs = combined_batter_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
@@ -490,6 +532,30 @@ for label, w in windows.items():
 seas_h = df_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
 seas_ab = df_logs.groupby('player_id')['AB'].transform(lambda x: x.expanding().sum())
 df_logs['Seas_AVG'] = np.where(seas_ab > 0, (seas_h / seas_ab).round(3), 0)
+
+# OPS rollings — supports IBB_RISK / lineup protection in §8
+for label, w in windows.items():
+    roll_h   = df_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+    roll_bb  = df_logs.groupby('player_id')['BB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+    roll_hbp = df_logs.groupby('player_id')['HBP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+    roll_sf  = df_logs.groupby('player_id')['SF'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+    roll_ab  = df_logs.groupby('player_id')['AB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+    roll_tb  = df_logs.groupby('player_id')['TB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+    pa = roll_ab + roll_bb + roll_hbp + roll_sf
+    df_logs[f'{label}_OBP'] = np.where(pa > 0, ((roll_h + roll_bb + roll_hbp) / pa).round(3), 0)
+    df_logs[f'{label}_SLG'] = np.where(roll_ab > 0, (roll_tb / roll_ab).round(3), 0)
+    df_logs[f'{label}_OPS'] = (df_logs[f'{label}_OBP'] + df_logs[f'{label}_SLG']).round(3)
+
+seas_h_ops   = df_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
+seas_bb_ops  = df_logs.groupby('player_id')['BB'].transform(lambda x: x.expanding().sum())
+seas_hbp_ops = df_logs.groupby('player_id')['HBP'].transform(lambda x: x.expanding().sum())
+seas_sf_ops  = df_logs.groupby('player_id')['SF'].transform(lambda x: x.expanding().sum())
+seas_ab_ops  = df_logs.groupby('player_id')['AB'].transform(lambda x: x.expanding().sum())
+seas_tb_ops  = df_logs.groupby('player_id')['TB'].transform(lambda x: x.expanding().sum())
+seas_pa_ops = seas_ab_ops + seas_bb_ops + seas_hbp_ops + seas_sf_ops
+df_logs['Seas_OBP'] = np.where(seas_pa_ops > 0, ((seas_h_ops + seas_bb_ops + seas_hbp_ops) / seas_pa_ops).round(3), 0)
+df_logs['Seas_SLG'] = np.where(seas_ab_ops > 0, (seas_tb_ops / seas_ab_ops).round(3), 0)
+df_logs['Seas_OPS'] = (df_logs['Seas_OBP'] + df_logs['Seas_SLG']).round(3)
 
 df_logs = df_logs.reset_index()
 df_sample_flags = build_batter_sample_flags(df_logs, today_str)
@@ -848,7 +914,8 @@ ha_prompt_cols = ['Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB
 final_cols = (
     ['player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name', 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight'] +
     [f'vs_OPP_{s}' for s in split_stats] + ha_prompt_cols + rolling_cols +
-    ['IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
+    ['L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
+     'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
 final_cols = [c for c in final_cols if c in most_recent.columns]
 df_tonight = most_recent[final_cols].copy()
 df_tonight = df_tonight.sort_values('player_name').reset_index(drop=True)
@@ -1574,14 +1641,14 @@ def generate_gemini_picks():
                 if opp_avg:
                     ln += f" | vs {p.get('opp_pitcher_hand','?')}HP: AVG={opp_avg} OPS={opp_ops} HR={opp_hr}"
                 loc = p.get('home_away_tonight', '')
+                split_bits = []
                 if loc in ('Home', 'Away'):
-                    split_bits = []
                     for stat in ['H', 'TB', 'HR', 'RBI', 'UD_FP']:
                         val = p.get(f'{stat}_{loc}')
                         if pd.notna(val):
                             split_bits.append(f"{stat}={val}")
-                if split_bits:
-                    ln += f" | Tonight {loc} split: {' '.join(split_bits[:5])}"
+                    if split_bits:
+                        ln += f" | Tonight {loc} split: {' '.join(split_bits[:5])}"
                 ln += f" | Weather edge: {weather_note_for_venue(p.get('venue_tonight'))}"
                 streak_bits = player_streak_map.get(player_norm)
                 if streak_bits:
@@ -2217,16 +2284,43 @@ else:
 
 # --- 10.75 GEMINI AI DAILY PICKS GENERATOR ---
 df_picks = generate_gemini_picks()
+try:
+    runlog.picks_generated = len(df_picks) if df_picks is not None else 0
+except Exception:
+    pass
 
 # --- 11. WRITE ALL DATA TO GOOGLE SHEETS ---
 print("\n" + "=" * 60)
 print("WRITING ALL DATA TO GOOGLE SHEETS")
 print("=" * 60)
 
+def validate_sheet_schema(sheet_name, df):
+    schema = SHEET_SCHEMAS.get(sheet_name) if 'SHEET_SCHEMAS' in globals() else None
+    if schema:
+        actual_cols = set(df.columns)
+        missing_required = [c for c in schema['required'] if c not in actual_cols]
+        missing_recommended = [c for c in schema['recommended'] if c not in actual_cols]
+        if missing_required:
+            msg = f"{sheet_name} missing REQUIRED columns: {missing_required}"
+            print(f"   ❌ SCHEMA VIOLATION: {msg}")
+            try:
+                runlog.warn(msg)
+            except Exception:
+                pass
+            raise RuntimeError(f"Schema validation failed for {sheet_name}: missing required {missing_required}")
+        if missing_recommended:
+            msg = f"{sheet_name} missing recommended columns: {missing_recommended}"
+            print(f"   ⚠️ SCHEMA WARNING: {msg}")
+            try:
+                runlog.warn(msg)
+            except Exception:
+                pass
+
 def safe_upload(spreadsheet, sheet_name, df, max_retries=3):
     if df is None or len(df) == 0:
         print(f"   ⏭️  {sheet_name}: No data — skipped")
         return
+    validate_sheet_schema(sheet_name, df)
     df_clean = df.copy()
     df_clean = df_clean.replace([np.inf, -np.inf], None)
     df_clean = df_clean.fillna('')
@@ -2245,6 +2339,10 @@ def safe_upload(spreadsheet, sheet_name, df, max_retries=3):
                 ws.resize(rows=max(needed_rows, ws.row_count), cols=max(needed_cols, ws.col_count))
             set_with_dataframe(ws, df_clean)
             print(f"   ✅ {sheet_name}: {len(df_clean)} rows × {len(df_clean.columns)} cols")
+            try:
+                runlog.record_write(sheet_name, len(df_clean))
+            except Exception:
+                pass
             return
         except gspread.exceptions.APIError as e:
             if 'RATE_LIMIT' in str(e) or '429' in str(e):
@@ -2298,6 +2396,7 @@ if df_picks is not None and len(df_picks) > 0:
             print(f"   🆕 Created Daily_Picks sheet")
 
         df_append = df_picks.copy().fillna('')
+        validate_sheet_schema('Daily_Picks', df_append)
         for col in df_append.columns:
             df_append[col] = df_append[col].apply(lambda x: x.item() if hasattr(x, 'item') else x)
 
@@ -2349,6 +2448,10 @@ if df_picks is not None and len(df_picks) > 0:
             cleaned.append(cleaned_row)
         ws_picks.append_rows(cleaned, value_input_option='RAW')
         print(f"   ✅ Daily_Picks: {existing_count + len(df_append)} total rows ({existing_count} old + {len(df_append)} new)")
+        try:
+            runlog.record_write('Daily_Picks', len(df_append))
+        except Exception:
+            pass
     except Exception as e:
         print(f"   ❌ Daily_Picks append failed: {e}")
     time.sleep(2)
