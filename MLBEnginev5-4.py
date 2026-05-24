@@ -2325,7 +2325,18 @@ if df_picks is not None and len(df_picks) > 0:
             if col not in df_append.columns:
                 df_append[col] = ''
         df_append = df_append[existing_headers]
-        cleaned = [[clean_cell(v) for v in row] for row in df_append.values.tolist()]
+        cleaned = []
+        for row in df_append.values.tolist():
+            cleaned_row = []
+            for v in row:
+                if hasattr(v, 'item'):
+                    v = v.item()
+                if isinstance(v, float) and (np.isinf(v) or np.isnan(v)):
+                    v = ''
+                elif v is None:
+                    v = ''
+                cleaned_row.append(v)
+            cleaned.append(cleaned_row)
         ws_picks.append_rows(cleaned, value_input_option='RAW')
         print(f"   ✅ Daily_Picks: {existing_count + len(df_append)} total rows ({existing_count} old + {len(df_append)} new)")
     except Exception as e:
