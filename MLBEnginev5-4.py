@@ -2325,6 +2325,16 @@ if df_picks is not None and len(df_picks) > 0:
             if col not in df_append.columns:
                 df_append[col] = ''
         df_append = df_append[existing_headers]
+        metadata_defaults = {
+            'DATE': schedule_date,
+            'RUN_NUMBER': today_run_number,
+            'RUN_TIME': timestamp_est,
+            'LAST_UPDATED': timestamp_est,
+        }
+        for col, default_val in metadata_defaults.items():
+            if col in df_append.columns:
+                df_append[col] = df_append[col].replace('', np.nan)
+                df_append[col] = df_append[col].fillna(default_val)
         cleaned = []
         for row in df_append.values.tolist():
             cleaned_row = []
