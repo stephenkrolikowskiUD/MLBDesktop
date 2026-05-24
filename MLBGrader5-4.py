@@ -193,21 +193,27 @@ else:
 
 # --- 3. FIND UNGRADED PICKS ---
 hit_series = df_picks['HIT'].fillna('').astype(str).str.strip()
-ungraded = df_picks[hit_series == ''].copy()
+date_series = pd.to_datetime(df_picks['DATE'], errors='coerce')
+today_ts = pd.to_datetime(today_str)
+retry_cutoff = today_ts - pd.Timedelta(days=RETRY_DNP_LOOKBACK_DAYS)
+retry_dnp_mask = (hit_series == 'DNP') & date_series.notna() & (date_series >= retry_cutoff) & (date_series <= today_ts)
+blank_ungraded_mask = (hit_series == '') & date_series.notna() & (date_series < today_ts)
+ungraded = df_picks[blank_ungraded_mask | retry_dnp_mask].copy()
 
 if ungraded.empty:
     print("✅ All picks are already graded! Nothing to do.")
     dates_to_grade = []
-
-# Only grade picks from completed dates (not today)
-ungraded = ungraded[ungraded['DATE'] < today_str]
 
 if ungraded.empty:
     print(f"⏳ All ungraded picks are from today ({today_str}) — games haven't finished yet. Run tomorrow.")
     dates_to_grade = []
 else:
     dates_to_grade = sorted(ungraded['DATE'].unique())
-    print(f"🎯 {len(ungraded)} gradeable picks from: {', '.join(dates_to_grade)}")
+    retry_ct = int(retry_dnp_mask.sum())
+    if retry_ct > 0:
+        print(f"🎯 {len(ungraded)} gradeable picks from: {', '.join(dates_to_grade)} ({retry_ct} recent DNP retries)")
+    else:
+        print(f"🎯 {len(ungraded)} gradeable picks from: {', '.join(dates_to_grade)}")
 
 # --- 4. FETCH MLB BOX SCORES ---
 # We need actual game stats for each player on each date.
