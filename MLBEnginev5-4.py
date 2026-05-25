@@ -387,16 +387,24 @@ def safe_div(num, denom):
 def numeric_series(df, col):
     if df is None or col not in df.columns:
         return pd.Series(dtype=float)
-    return pd.to_numeric(df[col], errors='coerce')
+    return pd.to_numeric(df[col], errors='coerce').astype('float64')
 
 def numeric_col(df, col, default=np.nan):
     if df is None or col not in df.columns:
         return pd.Series(default, index=df.index if df is not None else None, dtype=float)
-    return pd.to_numeric(df[col], errors='coerce')
+    return pd.to_numeric(df[col], errors='coerce').astype('float64')
+
+def safe_numeric_mean(values):
+    vals = pd.to_numeric(values, errors='coerce').astype('float64').dropna()
+    return float(vals.mean()) if len(vals) else np.nan
+
+def safe_numeric_max(values):
+    vals = pd.to_numeric(values, errors='coerce').astype('float64').dropna()
+    return float(vals.max()) if len(vals) else np.nan
 
 def weighted_mean(values, weights):
-    vals = pd.to_numeric(values, errors='coerce')
-    wts = pd.to_numeric(weights, errors='coerce').fillna(0)
+    vals = pd.to_numeric(values, errors='coerce').astype('float64')
+    wts = pd.to_numeric(weights, errors='coerce').astype('float64').fillna(0)
     mask = vals.notna() & (wts > 0)
     if not mask.any():
         vals = vals.dropna()
@@ -492,20 +500,20 @@ def summarize_statcast_role(raw_df, role, name_map, team_map):
             'batted_balls': batted_count,
             'pa_events': int(grp.get('events', pd.Series(index=grp.index)).notna().sum()),
             'pitches': int(len(grp)),
-            'avg_ev': round(float(launch_speed[batted_mask].mean()), 2) if batted_count else np.nan,
-            'max_ev': round(float(launch_speed.max()), 2) if launch_speed.notna().any() else np.nan,
-            'avg_la': round(float(launch_angle[batted_mask].mean()), 2) if batted_count else np.nan,
+            'avg_ev': round(safe_numeric_mean(launch_speed[batted_mask]), 2) if batted_count else np.nan,
+            'max_ev': round(safe_numeric_max(launch_speed), 2) if launch_speed.notna().any() else np.nan,
+            'avg_la': round(safe_numeric_mean(launch_angle[batted_mask]), 2) if batted_count else np.nan,
             'hard_hit_pct': safe_div((launch_speed >= 95).sum(), batted_count),
             'barrel_pct': safe_div((numeric_series(batted, 'launch_speed_angle') == 6).sum(), batted_count),
             'sweet_spot_pct': safe_div(launch_angle[batted_mask].between(8, 32).sum(), batted_count),
-            'xBA': round(float(numeric_series(batted, 'estimated_ba_using_speedangle').mean()), 3) if batted_count else np.nan,
-            'xSLG': round(float(numeric_series(batted, 'estimated_slg_using_speedangle').mean()), 3) if batted_count else np.nan,
-            'xwOBA': round(float(numeric_series(batted, 'estimated_woba_using_speedangle').mean()), 3) if batted_count else np.nan,
+            'xBA': round(safe_numeric_mean(numeric_series(batted, 'estimated_ba_using_speedangle')), 3) if batted_count else np.nan,
+            'xSLG': round(safe_numeric_mean(numeric_series(batted, 'estimated_slg_using_speedangle')), 3) if batted_count else np.nan,
+            'xwOBA': round(safe_numeric_mean(numeric_series(batted, 'estimated_woba_using_speedangle')), 3) if batted_count else np.nan,
             'whiff_pct': safe_div(whiffs.sum(), swings.sum()),
             'chase_pct': safe_div((swings & outside_zone).sum(), outside_zone.sum()),
             'csw_pct': safe_div((called_strikes | whiffs).sum(), len(grp)),
             'zone_pct': safe_div(in_zone.sum(), zones.notna().sum()),
-            'avg_release_speed': round(float(numeric_series(grp, 'release_speed').mean()), 2) if role == 'PITCHER' else np.nan,
+            'avg_release_speed': round(safe_numeric_mean(numeric_series(grp, 'release_speed')), 2) if role == 'PITCHER' else np.nan,
             'LAST_UPDATED': timestamp_est,
         }
         rows.append(row)
@@ -524,8 +532,16 @@ def fetch_statcast_daily_summaries(start_date, end_date, batter_names, batter_te
     if raw is None or len(raw) == 0:
         print("   ℹ️ Statcast returned no rows")
         return pd.DataFrame(columns=STATCAST_DAILY_COLS)
-    batter_daily = summarize_statcast_role(raw, 'BATTER', batter_names, batter_teams)
-    pitcher_daily = summarize_statcast_role(raw, 'PITCHER', pitcher_names, pitcher_teams)
+    try:
+        batter_daily = summarize_statcast_role(raw, 'BATTER', batter_names, batter_teams)
+    except Exception as e:
+        print(f"   ⚠️ Batter Statcast summary failed: {e}")
+        batter_daily = pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    try:
+        pitcher_daily = summarize_statcast_role(raw, 'PITCHER', pitcher_names, pitcher_teams)
+    except Exception as e:
+        print(f"   ⚠️ Pitcher Statcast summary failed: {e}")
+        pitcher_daily = pd.DataFrame(columns=STATCAST_DAILY_COLS)
     out = pd.concat([batter_daily, pitcher_daily], ignore_index=True)
     print(f"   ✅ Statcast summarized: {len(out)} player-days from {len(raw)} pitches")
     return out
@@ -564,7 +580,7 @@ def rollup_statcast_players(daily_df, role, ref_date):
             row[f'SC_{label}_batted_balls'] = int(contact_weight.sum())
             row[f'SC_{label}_pitches'] = int(pitch_weight.sum())
             row[f'SC_{label}_avg_ev'] = round(weighted_mean(win['avg_ev'], contact_weight), 2)
-            row[f'SC_{label}_max_ev'] = round(float(pd.to_numeric(win['max_ev'], errors='coerce').max()), 2) if win['max_ev'].notna().any() else np.nan
+            row[f'SC_{label}_max_ev'] = round(safe_numeric_max(win['max_ev']), 2) if win['max_ev'].notna().any() else np.nan
             row[f'SC_{label}_avg_la'] = round(weighted_mean(win['avg_la'], contact_weight), 2)
             for col in ['hard_hit_pct', 'barrel_pct', 'sweet_spot_pct', 'xBA', 'xSLG', 'xwOBA']:
                 row[f'SC_{label}_{col}'] = round(weighted_mean(win[col], contact_weight), 3 if col.startswith('x') else 2)
