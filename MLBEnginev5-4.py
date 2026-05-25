@@ -2164,7 +2164,7 @@ ACTIVE PROP STREAKS:
 {streak_ctx}
 RULES:
 - CRITICAL: ONLY pick players from the PLAYER DATA list above.
-- Return EXACTLY 14 ranked picks as a JSON array.
+- Return EXACTLY 20 ranked candidate picks as a JSON array. The engine will keep the top 14 valid picks after sportsbook validation.
 - Confidence tiers: SMASH (top 3-4 highest conviction only), STRONG (next 4-5), LEAN (rest).
 - STRONG should require multiple confirming signals: positive EV, strong hit rate, and supportive matchup/split context. If only one signal is strong, use LEAN.
 - Players flagged RETURNING have depressed lines due to injury/absence. Their season averages are NOT reliable short-term predictors. Treat with extreme caution — do NOT SMASH these players.
@@ -2180,12 +2180,12 @@ RULES:
 - Do NOT pick H OVER lines above 0.5 — H OVER 1.5 is a consistent losing pick
 - Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
 - Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
-- DIVERSIFY prop types: max 3 picks of the same prop type per slate.
-- Max 3 pitcher props per slate.
+- DIVERSIFY prop types where the sportsbook offers enough valid markets.
+- On H/P_SO-heavy slates, you may return up to 10 H props and up to 4 pitcher props.
 - P_SO is the preferred pitcher market. Include at least 1 pitcher strikeouts (P_SO) pick per slate when a strong pitcher matchup exists.
 - H props have a 53% hit rate. Prioritize H OVER 0.5 as the core of every slate.
 - When edges are close, prioritize H props over every other batter market.
-- Prefer at least 8 of your 14 picks to be H props when valid H markets exist.
+- Prefer 8-10 H props when valid H markets exist.
 - Keep R props secondary to H. Use R only when matchup, lineup spot, and recent form strongly agree.
 - Include a mix across H, R, P_SO, P_ER, and P_BB when supported by the listed real markets.
 - CRITICAL: Every pick must match one of the listed REAL DK props for that exact player and line.
@@ -2286,10 +2286,11 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             if prompt_metric == 'SO':
                 pk['prop_type'] = 'Batter_SO'
                 metric_cap_key = 'Batter_SO'
-            if metric_cap_key == 'H' and hit_count >= 8:
+            if metric_cap_key == 'H' and hit_count >= 10:
                 dropped_reasons.append(f"{pk.get('player')} H — hit prop cap")
                 continue
-            if metric_cap_key != 'H' and prop_type_counts.get(metric_cap_key, 0) >= 3:
+            per_type_cap = 4 if metric_cap_key == 'P_SO' else 3
+            if metric_cap_key != 'H' and prop_type_counts.get(metric_cap_key, 0) >= per_type_cap:
                 dropped_reasons.append(f"{pk.get('player')} {metric_cap_key} — per-type cap")
                 continue
             if metric_cap_key == 'TB' and prop_type_counts.get('TB', 0) >= 2:
@@ -2299,7 +2300,7 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
                 dropped_reasons.append(f"{pk.get('player')} R — run prop cap")
                 continue
             if metric_cap_key.startswith('P_'):
-                if pitcher_pick_count >= 3:
+                if pitcher_pick_count >= 4:
                     dropped_reasons.append(f"{pk.get('player')} {metric_cap_key} — pitcher cap")
                     continue
                 pitcher_pick_count += 1
@@ -2326,6 +2327,8 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             if metric_cap_key == 'R':
                 run_prop_count += 1
             filtered.append(pk)
+            if len(filtered) >= 14:
+                break
         picks_data = filtered
 
         print(f"   Gemini picks after post-filter: {len(picks_data)}")
