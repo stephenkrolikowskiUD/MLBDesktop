@@ -18,7 +18,18 @@ from google.auth import default
 from google.oauth2.service_account import Credentials
 from google import genai
 from google.genai import types
-from run_logger import RunLogger
+try:
+    from run_logger import RunLogger
+except Exception:
+    class RunLogger:
+        def __init__(self, *args, **kwargs):
+            self.picks_generated = 0
+        def finalize_and_write(self):
+            pass
+        def warn(self, msg):
+            print(f"⚠️ RunLogger unavailable: {msg}")
+        def record_write(self, sheet_name, rows):
+            pass
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -33,7 +44,7 @@ print("Authenticating with Google...")
 SHEET_NAME = 'MLB_Dashboard_Data'
 SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
-SNAPSHOT_DATE = "2026-05-04"
+SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
 
 SHEET_SCHEMAS = {
     'Tonights_Batters': {
@@ -54,7 +65,10 @@ SHEET_SCHEMAS = {
             'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
             'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
         ],
-        'recommended': ['CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE'],
+        'recommended': [
+            'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
+            'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
+        ],
     },
     'DK_Player_Props': {
         'required': ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'LAST_UPDATED'],
@@ -571,6 +585,67 @@ def fmt_num(val, digits=1):
     num = pd.to_numeric(pd.Series([val]), errors='coerce').iloc[0]
     return "" if pd.isna(num) else f"{num:.{digits}f}"
 
+def calculate_hit_streak(values, line, lean):
+    vals = pd.to_numeric(values, errors='coerce').dropna().tolist()
+    if not vals:
+        return 0
+    streak = 0
+    for val in reversed(vals):
+        hit = val > line if lean == 'OVER' else val < line
+        if not hit:
+            break
+        streak += 1
+    return streak
+
+def get_streaks(min_streak=3, max_rows=40):
+    if 'df_props' not in globals() or df_props is None or df_props.empty:
+        return []
+    logs_by_norm = {}
+    if 'df_logs' in globals() and df_logs is not None and not df_logs.empty:
+        tmp = df_logs.copy()
+        tmp['_player_norm'] = tmp['player_name'].map(normalize_player_name)
+        logs_by_norm['BATTER'] = {k: v.sort_values('game_date') for k, v in tmp.groupby('_player_norm')}
+    if 'df_pitcher_logs' in globals() and df_pitcher_logs is not None and not df_pitcher_logs.empty:
+        tmp = df_pitcher_logs.copy()
+        tmp['_player_norm'] = tmp['player_name'].map(normalize_player_name)
+        logs_by_norm['PITCHER'] = {k: v.sort_values('game_date') for k, v in tmp.groupby('_player_norm')}
+    if not logs_by_norm:
+        return []
+
+    rows = []
+    props = df_props.copy()
+    props['PLAYER_NORM'] = props['PLAYER_NAME'].map(normalize_player_name)
+    props['PROMPT_METRIC'] = props['METRIC'].map(normalize_prop_metric)
+    props = props.dropna(subset=['PLAYER_NORM', 'PROMPT_METRIC', 'DK_LINE'])
+    for _, prop in props.drop_duplicates(subset=['PLAYER_NORM', 'PROMPT_METRIC', 'DK_LINE']).iterrows():
+        metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
+        player_norm = prop.get('PLAYER_NORM', '')
+        try:
+            line = float(prop.get('DK_LINE'))
+        except (TypeError, ValueError):
+            continue
+        is_pitcher = metric.startswith('P_')
+        role = 'PITCHER' if is_pitcher else 'BATTER'
+        player_logs = logs_by_norm.get(role, {}).get(player_norm)
+        if player_logs is None or player_logs.empty:
+            continue
+        metric_col = 'IP_OUTS' if metric == 'P_OUTS' else metric.replace('P_', '')
+        if metric == 'SO' and not is_pitcher:
+            metric_col = 'SO'
+        if metric_col not in player_logs.columns:
+            continue
+        lean = 'UNDER' if metric in {'P_H', 'P_BB', 'P_ER'} else 'OVER'
+        streak = calculate_hit_streak(player_logs[metric_col], line, lean)
+        if streak < min_streak:
+            continue
+        rows.append({
+            'player': prop.get('PLAYER_NAME', ''),
+            'stat': f"{metric} {lean} {line:g}",
+            'streak': streak,
+        })
+    rows.sort(key=lambda item: item['streak'], reverse=True)
+    return rows[:max_rows]
+
 SEASON, OPENING_DAY, schedule_date, IN_SEASON = derive_mlb_season_context(now_est)
 gc = get_gspread_client()
 
@@ -589,6 +664,7 @@ try:
     atexit.register(runlog.finalize_and_write)
 except Exception as e:
     print(f"❌ Error: {e}")
+    raise
 
 ODDS_API_KEY = load_secret('ODDS_API_KEY', '🔑 Paste your Odds API Key: ')
 OPENWEATHER_API_KEY = load_secret('OPENWEATHER_API_KEY', '🌤️ Paste your OpenWeather API Key: ')
@@ -1258,7 +1334,7 @@ def fetch_batter_vs_pitcher(batter_name, batter_id, pitcher_id, pitcher_name):
             'TB': int(stat.get('totalBases', 0)),
             'AVG': stat.get('avg', '.000'), 'OPS': stat.get('ops', '.000'),
         }
-    except:
+    except Exception:
         return None
 
 # Build batter→pitcher pairs from tonight's matchups
@@ -1527,6 +1603,7 @@ if (now_est >= OPENING_DAY or now_est.month >= 4) and ODDS_API_KEY and len(games
             dk_raw_market_keys = set()
             dk_parsed_market_keys = set()
             api_errors = 0
+            p_resp = None
             for eid in tonight_ids:
                 p_url = f'https://api.the-odds-api.com/v4/sports/{PROP_SPORT}/events/{eid}/odds'
                 for batch in MARKET_BATCHES:
@@ -1599,7 +1676,7 @@ if (now_est >= OPENING_DAY or now_est.month >= 4) and ODDS_API_KEY and len(games
             if not df_props.empty:
                 df_props = df_props.dropna(subset=['DK_LINE'])
                 df_props['LAST_UPDATED'] = timestamp_est
-                remaining = p_resp.headers.get('x-requests-remaining', '?') if 'p_resp' in dir() else '?'
+                remaining = p_resp.headers.get('x-requests-remaining', '?') if p_resp is not None else '?'
                 print(f"   📊 API Quota remaining: {remaining}")
                 print(f"   ✅ Fetched {len(df_props)} player props across {df_props['METRIC'].nunique()} markets!")
                 print(f"   Batter props: {len(df_props[~df_props['METRIC'].str.startswith('P_')])}")
@@ -1864,6 +1941,10 @@ def generate_gemini_picks():
                 'opp_pitcher': row.get('opp_pitcher_name', row.get('opp_starter', 'TBD')),
                 'venue': row.get('venue_tonight', ''),
                 'lineup_risk_note': row.get('LINEUP_PROTECTION_NOTE', ''),
+                'H_EDGE_SCORE': row.get('H_EDGE_SCORE', np.nan),
+                'POWER_EDGE_SCORE': row.get('POWER_EDGE_SCORE', np.nan),
+                'P_SO_EDGE_SCORE': row.get('P_SO_EDGE_SCORE', np.nan),
+                'P_ER_RISK_SCORE': row.get('P_ER_RISK_SCORE', np.nan),
             }
             for _, row in gemini_pool.iterrows()
             if row.get('_player_norm')
@@ -2056,6 +2137,7 @@ IF you pick {names_str} for a BATTER prop, you MUST set injury_context to start 
 
         allowed_prompt_props = ['H', 'R', 'P_SO', 'P_ER', 'P_BB']
         print(f"   📋 Gemini available prop types: {', '.join(allowed_prompt_props)}")
+        allowed_prompt_props_str = ', '.join(allowed_prompt_props)
         prompt = f"""You are an expert MLB props analyst. Today is {schedule_date}. MLB Regular Season.
 {two_way_notice}
 TONIGHT'S GAMES (with pitchers and weather):
@@ -2074,23 +2156,22 @@ RULES:
 - STAR players are the top 20 by season UD fantasy points in tonight's valid prop pool.
 - Prefer at least 4 of your 14 picks to come from STAR players. Non-stars should fill the remaining slots only when they have exceptional edges or matchup context.
 - Available prop types: ONLY the real DK props listed next to each player in PLAYER DATA.
-- Batters can only get batter props. Pitchers can only get pitcher props (P_SO, P_H, P_BB, P_ER, P_OUTS).
+- Batters can only get batter props. Pitchers can only get pitcher props.
+- Allowed prop types for this slate: {allowed_prompt_props_str}.
 - For batters, only use: H, R.
-- Do NOT pick TB, HR, RBI, SB, 2B, P_H, P_OUTS — confirmed losing props by grader data
-- Do NOT pick SB, 2B, 1B, or BB at all. Remove them entirely from consideration.
+- For pitchers, only use: P_SO, P_ER, P_BB.
+- Do NOT pick TB, HR, RBI, SB, 2B, 1B, BB, P_H, or P_OUTS — removed by grader data.
 - Do NOT pick H OVER lines above 0.5 — H OVER 1.5 is a consistent losing pick
 - Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
 - Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
 - DIVERSIFY prop types: max 3 picks of the same prop type per slate.
 - Max 3 pitcher props per slate.
 - P_SO is the preferred pitcher market. Include at least 1 pitcher strikeouts (P_SO) pick per slate when a strong pitcher matchup exists.
-- HR picks: maximum 1 per slate. HR overs are low-probability — only pick when data strongly supports it.
 - H props have a 53% hit rate. Prioritize H OVER 0.5 as the core of every slate.
 - When edges are close, prioritize H props over every other batter market.
 - Prefer at least 8 of your 14 picks to be H props when valid H markets exist.
-- Hard cap TB at 2 picks.
-- Keep R props secondary to H and RBI. Use R only when matchup, lineup spot, and recent form strongly agree.
-- Include a mix of prop types across H, RBI, R, TB, HR, and the strongest pitcher markets when supported by the listed data.
+- Keep R props secondary to H. Use R only when matchup, lineup spot, and recent form strongly agree.
+- Include a mix across H, R, P_SO, P_ER, and P_BB when supported by the listed real markets.
 - CRITICAL: Every pick must match one of the listed REAL DK props for that exact player and line.
 - Lines must be real sportsbook lines from the listed REAL DK props. Do NOT invent lines or use player averages.
 - Use DK lines when available. NEVER return null for line.
@@ -2213,6 +2294,8 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             pk['venue'] = pk.get('venue') or player_meta['venue']
             pk['game'] = pk.get('game') or f"{player_meta['team']} @ {player_meta['opp']}"
             pk['weather_note'] = pk.get('weather_note') or weather_note_for_venue(player_meta['venue'])
+            for edge_col in ['H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE']:
+                pk[edge_col] = player_meta.get(edge_col, np.nan)
             lineup_risk_note = str(player_meta.get('lineup_risk_note', '') or '').strip()
             if lineup_risk_note:
                 existing_ctx = str(pk.get('injury_context', '') or '').strip()
@@ -2250,10 +2333,7 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             max_smash = min(3, max(1, len(df_picks) // 4 + (1 if len(df_picks) >= 8 else 0)))
             for idx in smash_idx[max_smash:]:
                 df_picks.at[idx, 'confidence'] = 'STRONG'
-            if 'line' in df_picks.columns:
-                df_picks['line'] = df_picks['line'].astype(float).apply(lambda x: round(x - 0.5) + 0.5 if x > 0 else 0.5)
-                print("   📐 Lines snapped to real prop lines")
-            batter_prop_types = {'H', 'HR', 'RBI', 'R', 'TB', 'H+R+RBI', 'UD_FP', '2B', '3B', '1B', 'BB', 'Batter_SO'}
+            batter_prop_types = {'H', 'HR', 'RBI', 'R', 'TB', 'UD_FP', '2B', '3B', '1B', 'BB', 'Batter_SO'}
             if two_way_tonight and 'player' in df_picks.columns:
                 for i, row in df_picks.iterrows():
                     if row.get('player') in two_way_tonight and row.get('prop_type') in batter_prop_types:
@@ -2315,6 +2395,7 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             df_picks = pd.DataFrame(dedup_keep)
             col_order = ['DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team', 'opponent', 'opp_pitcher', 'prop_type',
                          'line', 'lean', 'confidence', 'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note', 'DATA_SOURCE', 'source',
+                         'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
                          'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CONSENSUS_TAG',
                          'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA', 'CLV_LAST_UPDATE',
                          'RESULT', 'ACTUAL_STAT', 'HIT', 'LAST_UPDATED']
