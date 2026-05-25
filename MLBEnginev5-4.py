@@ -22,6 +22,11 @@ from run_logger import RunLogger
 import warnings
 warnings.filterwarnings('ignore')
 
+try:
+    from pybaseball import statcast as pybaseball_statcast
+except Exception:
+    pybaseball_statcast = None
+
 # --- 1. AUTHENTICATION & SETUP ---
 print("Authenticating with Google...")
 
@@ -64,6 +69,18 @@ SHEET_SCHEMAS = {
         'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
                      'IP', 'SO', 'ER', 'BB', 'H', 'UD_FP', 'DK_FP'],
         'recommended': ['QS'],
+    },
+    'Statcast_Daily': {
+        'required': ['game_date', 'player_id', 'player_name', 'role', 'LAST_UPDATED'],
+        'recommended': ['avg_ev', 'hard_hit_pct', 'barrel_pct', 'xBA', 'xSLG', 'xwOBA', 'whiff_pct', 'chase_pct', 'csw_pct'],
+    },
+    'Batter_Statcast': {
+        'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
+        'recommended': ['SC_L14_xBA', 'SC_L14_xwOBA', 'SC_L14_hard_hit_pct', 'SC_L14_barrel_pct'],
+    },
+    'Pitcher_Statcast': {
+        'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
+        'recommended': ['SC_L14_whiff_pct', 'SC_L14_csw_pct', 'SC_L14_xwOBA', 'SC_L14_barrel_pct'],
     },
 }
 
@@ -343,6 +360,216 @@ def build_batter_sample_flags(log_df, ref_date=None):
             'RETURNING': returning,
         })
     return pd.DataFrame(rows, columns=cols)
+
+def safe_div(num, denom):
+    try:
+        denom = float(denom)
+        if denom == 0:
+            return np.nan
+        return round(float(num) / denom * 100, 2)
+    except (TypeError, ValueError):
+        return np.nan
+
+def numeric_series(df, col):
+    if df is None or col not in df.columns:
+        return pd.Series(dtype=float)
+    return pd.to_numeric(df[col], errors='coerce')
+
+def numeric_col(df, col, default=np.nan):
+    if df is None or col not in df.columns:
+        return pd.Series(default, index=df.index if df is not None else None, dtype=float)
+    return pd.to_numeric(df[col], errors='coerce')
+
+def weighted_mean(values, weights):
+    vals = pd.to_numeric(values, errors='coerce')
+    wts = pd.to_numeric(weights, errors='coerce').fillna(0)
+    mask = vals.notna() & (wts > 0)
+    if not mask.any():
+        vals = vals.dropna()
+        return float(vals.mean()) if len(vals) else np.nan
+    return float(np.average(vals[mask], weights=wts[mask]))
+
+def clip_score(series):
+    return pd.to_numeric(series, errors='coerce').clip(lower=0, upper=100).round(1)
+
+def build_statcast_name_maps(batters, pitchers, batter_logs=None, pitcher_logs=None):
+    batter_names = {int(b['player_id']): b['player_name'] for b in batters if b.get('player_id')}
+    batter_teams = {int(b['player_id']): b.get('team_abbr', '') for b in batters if b.get('player_id')}
+    pitcher_names = {int(p['player_id']): p['player_name'] for p in pitchers if p.get('player_id')}
+    pitcher_teams = {int(p['player_id']): p.get('team_abbr', '') for p in pitchers if p.get('player_id')}
+    if batter_logs is not None and len(batter_logs) > 0:
+        latest = batter_logs.sort_values('game_date').groupby('player_id').last().reset_index()
+        for _, row in latest.iterrows():
+            pid = pd.to_numeric(row.get('player_id'), errors='coerce')
+            if pd.notna(pid):
+                batter_names.setdefault(int(pid), row.get('player_name', ''))
+                batter_teams.setdefault(int(pid), row.get('team_abbr', ''))
+    if pitcher_logs is not None and len(pitcher_logs) > 0:
+        latest = pitcher_logs.sort_values('game_date').groupby('player_id').last().reset_index()
+        for _, row in latest.iterrows():
+            pid = pd.to_numeric(row.get('player_id'), errors='coerce')
+            if pd.notna(pid):
+                pitcher_names.setdefault(int(pid), row.get('player_name', ''))
+                pitcher_teams.setdefault(int(pid), row.get('team_abbr', ''))
+    return batter_names, batter_teams, pitcher_names, pitcher_teams
+
+STATCAST_DAILY_COLS = [
+    'game_date', 'player_id', 'player_name', 'role', 'team_abbr',
+    'batted_balls', 'pa_events', 'pitches',
+    'avg_ev', 'max_ev', 'avg_la', 'hard_hit_pct', 'barrel_pct', 'sweet_spot_pct',
+    'xBA', 'xSLG', 'xwOBA',
+    'whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed',
+    'LAST_UPDATED',
+]
+STATCAST_NUMERIC_COLS = [
+    'player_id', 'batted_balls', 'pa_events', 'pitches', 'avg_ev', 'max_ev', 'avg_la',
+    'hard_hit_pct', 'barrel_pct', 'sweet_spot_pct', 'xBA', 'xSLG', 'xwOBA',
+    'whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed',
+]
+
+def summarize_statcast_role(raw_df, role, name_map, team_map):
+    if raw_df is None or raw_df.empty:
+        return pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    id_col = 'batter' if role == 'BATTER' else 'pitcher'
+    if id_col not in raw_df.columns or 'game_date' not in raw_df.columns:
+        return pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    df = raw_df.copy()
+    df['game_date'] = df['game_date'].map(normalize_game_date)
+    df[id_col] = pd.to_numeric(df[id_col], errors='coerce')
+    df = df.dropna(subset=[id_col, 'game_date'])
+    if df.empty:
+        return pd.DataFrame(columns=STATCAST_DAILY_COLS)
+
+    for col in ['launch_speed', 'launch_angle', 'estimated_ba_using_speedangle',
+                'estimated_slg_using_speedangle', 'estimated_woba_using_speedangle',
+                'launch_speed_angle', 'release_speed', 'zone']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    swing_descriptions = {
+        'swinging_strike', 'swinging_strike_blocked', 'foul', 'foul_tip',
+        'foul_bunt', 'hit_into_play', 'hit_into_play_no_out', 'hit_into_play_score',
+        'missed_bunt',
+    }
+    rows = []
+    for (game_date, player_id), grp in df.groupby(['game_date', id_col]):
+        pid = int(player_id)
+        launch_speed = numeric_series(grp, 'launch_speed')
+        launch_angle = numeric_series(grp, 'launch_angle')
+        batted_mask = launch_speed.notna()
+        batted = grp[batted_mask]
+        descriptions = grp.get('description', pd.Series(index=grp.index, dtype=object)).fillna('').astype(str)
+        swings = descriptions.isin(swing_descriptions)
+        whiffs = descriptions.str.startswith('swinging_strike') | (descriptions == 'missed_bunt')
+        called_strikes = descriptions == 'called_strike'
+        zones = numeric_series(grp, 'zone')
+        in_zone = zones.between(1, 9)
+        outside_zone = zones.notna() & ~in_zone
+        player_name = name_map.get(pid, '')
+        if not player_name and role == 'PITCHER' and 'player_name' in grp.columns:
+            player_name = str(grp['player_name'].dropna().iloc[0]) if grp['player_name'].notna().any() else ''
+        batted_count = int(batted_mask.sum())
+        row = {
+            'game_date': game_date,
+            'player_id': pid,
+            'player_name': player_name,
+            'role': role,
+            'team_abbr': team_map.get(pid, ''),
+            'batted_balls': batted_count,
+            'pa_events': int(grp.get('events', pd.Series(index=grp.index)).notna().sum()),
+            'pitches': int(len(grp)),
+            'avg_ev': round(float(launch_speed[batted_mask].mean()), 2) if batted_count else np.nan,
+            'max_ev': round(float(launch_speed.max()), 2) if launch_speed.notna().any() else np.nan,
+            'avg_la': round(float(launch_angle[batted_mask].mean()), 2) if batted_count else np.nan,
+            'hard_hit_pct': safe_div((launch_speed >= 95).sum(), batted_count),
+            'barrel_pct': safe_div((numeric_series(batted, 'launch_speed_angle') == 6).sum(), batted_count),
+            'sweet_spot_pct': safe_div(launch_angle[batted_mask].between(8, 32).sum(), batted_count),
+            'xBA': round(float(numeric_series(batted, 'estimated_ba_using_speedangle').mean()), 3) if batted_count else np.nan,
+            'xSLG': round(float(numeric_series(batted, 'estimated_slg_using_speedangle').mean()), 3) if batted_count else np.nan,
+            'xwOBA': round(float(numeric_series(batted, 'estimated_woba_using_speedangle').mean()), 3) if batted_count else np.nan,
+            'whiff_pct': safe_div(whiffs.sum(), swings.sum()),
+            'chase_pct': safe_div((swings & outside_zone).sum(), outside_zone.sum()),
+            'csw_pct': safe_div((called_strikes | whiffs).sum(), len(grp)),
+            'zone_pct': safe_div(in_zone.sum(), zones.notna().sum()),
+            'avg_release_speed': round(float(numeric_series(grp, 'release_speed').mean()), 2) if role == 'PITCHER' else np.nan,
+            'LAST_UPDATED': timestamp_est,
+        }
+        rows.append(row)
+    return pd.DataFrame(rows, columns=STATCAST_DAILY_COLS)
+
+def fetch_statcast_daily_summaries(start_date, end_date, batter_names, batter_teams, pitcher_names, pitcher_teams):
+    if pybaseball_statcast is None:
+        print("   ⚠️ pybaseball not available — skipping Statcast fetch")
+        return pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    try:
+        print(f"   📡 Baseball Savant Statcast fetch: {start_date} → {end_date}")
+        raw = pybaseball_statcast(start_dt=start_date, end_dt=end_date)
+    except Exception as e:
+        print(f"   ⚠️ Statcast fetch failed: {e}")
+        return pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    if raw is None or len(raw) == 0:
+        print("   ℹ️ Statcast returned no rows")
+        return pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    batter_daily = summarize_statcast_role(raw, 'BATTER', batter_names, batter_teams)
+    pitcher_daily = summarize_statcast_role(raw, 'PITCHER', pitcher_names, pitcher_teams)
+    out = pd.concat([batter_daily, pitcher_daily], ignore_index=True)
+    print(f"   ✅ Statcast summarized: {len(out)} player-days from {len(raw)} pitches")
+    return out
+
+def rollup_statcast_players(daily_df, role, ref_date):
+    base_cols = ['player_id', 'player_name', 'SC_GAMES', 'SC_LAST_DATE', 'LAST_UPDATED']
+    if daily_df is None or daily_df.empty:
+        return pd.DataFrame(columns=base_cols)
+    df = daily_df[daily_df['role'] == role].copy()
+    if df.empty:
+        return pd.DataFrame(columns=base_cols)
+    df['game_date'] = pd.to_datetime(df['game_date'], errors='coerce')
+    ref_ts = pd.to_datetime(ref_date, errors='coerce')
+    if pd.isna(ref_ts):
+        ref_ts = df['game_date'].max()
+
+    rows = []
+    for player_id, grp in df.groupby('player_id'):
+        grp = grp.dropna(subset=['game_date']).sort_values('game_date')
+        if grp.empty:
+            continue
+        row = {
+            'player_id': player_id,
+            'player_name': grp['player_name'].dropna().iloc[-1] if grp['player_name'].notna().any() else '',
+            'SC_GAMES': int(grp['game_date'].nunique()),
+            'SC_LAST_DATE': grp['game_date'].max().strftime('%Y-%m-%d'),
+            'LAST_UPDATED': timestamp_est,
+        }
+        for label, days in {'L14': 14, 'L30': 30}.items():
+            cutoff = ref_ts - pd.Timedelta(days=days - 1)
+            win = grp[(grp['game_date'] >= cutoff) & (grp['game_date'] <= ref_ts)]
+            if win.empty:
+                continue
+            contact_weight = pd.to_numeric(win['batted_balls'], errors='coerce').fillna(0)
+            pitch_weight = pd.to_numeric(win['pitches'], errors='coerce').fillna(0)
+            row[f'SC_{label}_batted_balls'] = int(contact_weight.sum())
+            row[f'SC_{label}_pitches'] = int(pitch_weight.sum())
+            row[f'SC_{label}_avg_ev'] = round(weighted_mean(win['avg_ev'], contact_weight), 2)
+            row[f'SC_{label}_max_ev'] = round(float(pd.to_numeric(win['max_ev'], errors='coerce').max()), 2) if win['max_ev'].notna().any() else np.nan
+            row[f'SC_{label}_avg_la'] = round(weighted_mean(win['avg_la'], contact_weight), 2)
+            for col in ['hard_hit_pct', 'barrel_pct', 'sweet_spot_pct', 'xBA', 'xSLG', 'xwOBA']:
+                row[f'SC_{label}_{col}'] = round(weighted_mean(win[col], contact_weight), 3 if col.startswith('x') else 2)
+            for col in ['whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed']:
+                row[f'SC_{label}_{col}'] = round(weighted_mean(win[col], pitch_weight), 2)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+def fmt_pct(val):
+    num = pd.to_numeric(pd.Series([val]), errors='coerce').iloc[0]
+    return "" if pd.isna(num) else f"{num:.0f}%"
+
+def fmt_dec(val, digits=3):
+    num = pd.to_numeric(pd.Series([val]), errors='coerce').iloc[0]
+    return "" if pd.isna(num) else f"{num:.{digits}f}"
+
+def fmt_num(val, digits=1):
+    num = pd.to_numeric(pd.Series([val]), errors='coerce').iloc[0]
+    return "" if pd.isna(num) else f"{num:.{digits}f}"
 
 SEASON, OPENING_DAY, schedule_date, IN_SEASON = derive_mlb_season_context(now_est)
 gc = get_gspread_client()
@@ -667,6 +894,66 @@ ha_pivot = ha_pivot[cols]
 ha_pivot['LAST_UPDATED'] = timestamp_est
 print(f"✅ Home/Away splits for {ha_pivot['player_name'].nunique()} players")
 
+# --- 6.5 STATCAST QUALITY OF CONTACT / PITCH SHAPE SIGNALS ---
+print("\nFetching and aggregating Statcast signals...")
+
+df_statcast_daily = load_existing_log_sheet('Statcast_Daily', STATCAST_DAILY_COLS, STATCAST_NUMERIC_COLS)
+df_batter_statcast = pd.DataFrame()
+df_pitcher_statcast = pd.DataFrame()
+
+statcast_enabled = os.environ.get('STATCAST_ENABLED', '1').strip().lower() not in {'0', 'false', 'no'}
+statcast_lookback_days = int(os.environ.get('STATCAST_LOOKBACK_DAYS', '21') or 21)
+statcast_cache_days = int(os.environ.get('STATCAST_CACHE_DAYS', '45') or 45)
+statcast_end_ts = pd.to_datetime(schedule_date, errors='coerce')
+if pd.isna(statcast_end_ts):
+    statcast_end_ts = pd.to_datetime(today_str, errors='coerce')
+statcast_fetch_start = statcast_end_ts - pd.Timedelta(days=statcast_lookback_days - 1)
+
+if len(df_statcast_daily) > 0:
+    df_statcast_daily['game_date'] = df_statcast_daily['game_date'].map(normalize_game_date)
+    latest_statcast_date = pd.to_datetime(df_statcast_daily['game_date'], errors='coerce').max()
+    if pd.notna(latest_statcast_date):
+        statcast_fetch_start = max(statcast_fetch_start, latest_statcast_date + pd.Timedelta(days=1))
+        print(f"♻️ Seeded Statcast_Daily through {latest_statcast_date.strftime('%Y-%m-%d')} ({len(df_statcast_daily)} rows)")
+else:
+    print("🆕 No existing Statcast_Daily seed found — recent Statcast fetch")
+
+if statcast_enabled and pd.notna(statcast_end_ts) and statcast_fetch_start <= statcast_end_ts:
+    batter_names, batter_teams, pitcher_names, pitcher_teams = build_statcast_name_maps(
+        qualified_batters, [], df_logs, None)
+    new_statcast_daily = fetch_statcast_daily_summaries(
+        statcast_fetch_start.strftime('%Y-%m-%d'),
+        statcast_end_ts.strftime('%Y-%m-%d'),
+        batter_names, batter_teams, pitcher_names, pitcher_teams)
+    df_statcast_daily = pd.concat([df_statcast_daily, new_statcast_daily], ignore_index=True)
+elif not statcast_enabled:
+    print("   ⏭️ Statcast disabled by STATCAST_ENABLED=0")
+else:
+    print("   ✅ Statcast cache already current for requested date")
+
+if len(df_statcast_daily) > 0:
+    df_statcast_daily['game_date'] = df_statcast_daily['game_date'].map(normalize_game_date)
+    df_statcast_daily['player_id'] = pd.to_numeric(df_statcast_daily['player_id'], errors='coerce')
+    df_statcast_daily = df_statcast_daily.dropna(subset=['player_id', 'game_date', 'role']).copy()
+    df_statcast_daily['player_id'] = df_statcast_daily['player_id'].astype(int)
+    for col in STATCAST_NUMERIC_COLS:
+        if col in df_statcast_daily.columns:
+            df_statcast_daily[col] = pd.to_numeric(df_statcast_daily[col], errors='coerce')
+    df_statcast_daily = df_statcast_daily.drop_duplicates(
+        subset=['game_date', 'player_id', 'role'], keep='last')
+    cache_cutoff = statcast_end_ts - pd.Timedelta(days=statcast_cache_days - 1)
+    df_statcast_daily_dt = pd.to_datetime(df_statcast_daily['game_date'], errors='coerce')
+    df_statcast_daily = df_statcast_daily[df_statcast_daily_dt >= cache_cutoff].copy()
+    df_statcast_daily['LAST_UPDATED'] = timestamp_est
+    df_batter_statcast = rollup_statcast_players(df_statcast_daily, 'BATTER', schedule_date)
+    df_pitcher_statcast = rollup_statcast_players(df_statcast_daily, 'PITCHER', schedule_date)
+    print(f"✅ Statcast rollups — {len(df_batter_statcast)} batters, {len(df_pitcher_statcast)} pitchers")
+else:
+    df_statcast_daily = pd.DataFrame(columns=STATCAST_DAILY_COLS)
+    df_batter_statcast = pd.DataFrame()
+    df_pitcher_statcast = pd.DataFrame()
+    print("⚠️ No Statcast data available; continuing without Statcast signals")
+
 # --- 7. TONIGHT'S SCHEDULE & STARTING PITCHERS ---
 print("\nFetching tonight's schedule and starting pitchers...")
 
@@ -901,6 +1188,27 @@ ha_merge_cols = [c for c in ha_merge_cols if c in ha_pivot.columns]
 if ha_merge_cols:
     most_recent = most_recent.merge(ha_pivot[ha_merge_cols], on='player_id', how='left')
 
+if df_batter_statcast is not None and len(df_batter_statcast) > 0:
+    statcast_merge_cols = ['player_id'] + [c for c in df_batter_statcast.columns if c.startswith('SC_')]
+    most_recent = most_recent.merge(df_batter_statcast[statcast_merge_cols], on='player_id', how='left')
+    h_score = (
+        50
+        + (numeric_col(most_recent, 'SC_L14_xBA') - 0.250).fillna(0) * 120
+        + (numeric_col(most_recent, 'SC_L14_hard_hit_pct') - 35).fillna(0) * 0.45
+        + (numeric_col(most_recent, 'L7_H') - numeric_col(most_recent, 'Seas_H')).fillna(0) * 5
+    )
+    power_score = (
+        50
+        + (numeric_col(most_recent, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
+        + (numeric_col(most_recent, 'SC_L14_avg_ev') - 89).fillna(0) * 1.7
+        + (numeric_col(most_recent, 'SC_L14_xSLG') - 0.420).fillna(0) * 70
+    )
+    most_recent['H_EDGE_SCORE'] = clip_score(h_score)
+    most_recent['POWER_EDGE_SCORE'] = clip_score(power_score)
+else:
+    most_recent['H_EDGE_SCORE'] = np.nan
+    most_recent['POWER_EDGE_SCORE'] = np.nan
+
 split_stats = ['AVG', 'OPS', 'H', 'HR', 'TB', 'RBI', 'SO', 'BB']
 for stat in split_stats:
     most_recent[f'vs_OPP_{stat}'] = np.where(
@@ -909,11 +1217,12 @@ for stat in split_stats:
         most_recent.get(f'SPLIT_vs_RHP_{stat}', np.nan))
 
 rolling_cols = [c for c in most_recent.columns if any(c.startswith(p) for p in ['L7_', 'L14_', 'L30_', 'Seas_'])]
+statcast_cols = [c for c in most_recent.columns if c.startswith('SC_')] + ['H_EDGE_SCORE', 'POWER_EDGE_SCORE']
 ha_prompt_cols = ['Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB_Away',
                   'HR_Home', 'HR_Away', 'RBI_Home', 'RBI_Away', 'UD_FP_Home', 'UD_FP_Away']
 final_cols = (
     ['player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name', 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight'] +
-    [f'vs_OPP_{s}' for s in split_stats] + ha_prompt_cols + rolling_cols +
+    [f'vs_OPP_{s}' for s in split_stats] + ha_prompt_cols + rolling_cols + statcast_cols +
     ['L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
      'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
 final_cols = [c for c in final_cols if c in most_recent.columns]
@@ -1584,6 +1893,26 @@ def generate_gemini_picks():
                 ln += f" | Venue={p.get('venue_tonight','?')} | Seas: SO={p.get('Seas_SO','')} ER={p.get('Seas_ER','')} IP={p.get('Seas_IP','')} UD={p.get('Seas_UD_FP','')}"
                 ln += f" | L3: SO={p.get('L3_SO','')} ER={p.get('L3_ER','')} IP={p.get('L3_IP','')} UD={p.get('L3_UD_FP','')}"
                 ln += f" | L7: SO={p.get('L7_SO','')} ER={p.get('L7_ER','')} IP={p.get('L7_IP','')} UD={p.get('L7_UD_FP','')}"
+                sc_bits = []
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_whiff_pct')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"Whiff={fmt_pct(p.get('SC_L14_whiff_pct'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_csw_pct')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"CSW={fmt_pct(p.get('SC_L14_csw_pct'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xwOBA')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"xwOBA={fmt_dec(p.get('SC_L14_xwOBA'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_hard_hit_pct')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"HH={fmt_pct(p.get('SC_L14_hard_hit_pct'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_barrel_pct')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
+                if sc_bits:
+                    ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
+                edge_bits = []
+                if pd.notna(pd.to_numeric(pd.Series([p.get('P_SO_EDGE_SCORE')]), errors='coerce').iloc[0]):
+                    edge_bits.append(f"KEdge={fmt_num(p.get('P_SO_EDGE_SCORE'), 0)}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('P_ER_RISK_SCORE')]), errors='coerce').iloc[0]):
+                    edge_bits.append(f"ERRisk={fmt_num(p.get('P_ER_RISK_SCORE'), 0)}")
+                if edge_bits:
+                    ln += f" | Model edge: {' '.join(edge_bits)}"
                 if not df_pitcher_props.empty:
                     player_props = df_pitcher_props[df_pitcher_props['PLAYER_NORM'] == player_norm]
                     if not player_props.empty:
@@ -1629,6 +1958,26 @@ def generate_gemini_picks():
                 ln += f" | vs {p.get('opp_pitcher_name','TBD')} ({p.get('opp_pitcher_hand','?')}HP)"
                 ln += f" | Seas: H={p.get('Seas_H','')} HR={p.get('Seas_HR','')} RBI={p.get('Seas_RBI','')} TB={p.get('Seas_TB','')} R={p.get('Seas_R','')} UD={p.get('Seas_UD_FP','')}"
                 ln += f" | L7: H={p.get('L7_H','')} HR={p.get('L7_HR','')} RBI={p.get('L7_RBI','')} TB={p.get('L7_TB','')} UD={p.get('L7_UD_FP','')}"
+                sc_bits = []
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xBA')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"xBA={fmt_dec(p.get('SC_L14_xBA'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xwOBA')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"xwOBA={fmt_dec(p.get('SC_L14_xwOBA'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_hard_hit_pct')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"HH={fmt_pct(p.get('SC_L14_hard_hit_pct'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_barrel_pct')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_avg_ev')]), errors='coerce').iloc[0]):
+                    sc_bits.append(f"EV={fmt_num(p.get('SC_L14_avg_ev'))}")
+                if sc_bits:
+                    ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
+                edge_bits = []
+                if pd.notna(pd.to_numeric(pd.Series([p.get('H_EDGE_SCORE')]), errors='coerce').iloc[0]):
+                    edge_bits.append(f"HEdge={fmt_num(p.get('H_EDGE_SCORE'), 0)}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('POWER_EDGE_SCORE')]), errors='coerce').iloc[0]):
+                    edge_bits.append(f"PowEdge={fmt_num(p.get('POWER_EDGE_SCORE'), 0)}")
+                if edge_bits:
+                    ln += f" | Model edge: {' '.join(edge_bits)}"
                 if bool(p.get('RETURNING', False)):
                     ln += f" | SAMPLE FLAG: RETURNING (L5 games={int(p.get('L5_GAMES_PLAYED', 0) or 0)}, last7={int(p.get('GAMES_LAST_7D', 0) or 0)})"
                 elif bool(p.get('LIMITED_SAMPLE', False)):
@@ -1747,8 +2096,10 @@ RULES:
 - Use DK lines when available. NEVER return null for line.
 ANALYSIS FACTORS:
 - Batter vs LHP/RHP splits, recent form, active prop streaks, home/away split, weather, park, and pitcher quality.
+- Statcast L14 quality: xBA/xwOBA, hard-hit rate, barrel rate, exit velocity, whiff/chase/CSW, and model edge scores.
 - Coors Field, warm weather (75F+), and strong favorable weather notes should boost H/TB overs.
 - Pitcher strikeout form, recent IP/outs workload, earned run prevention, matchup offense, and park.
+- For pitchers, use Statcast whiff/CSW for K props and xwOBA/barrel/hard-hit allowed for ER/H risk.
 - Prefer props with strong listed hit-rate / EV signals when the market and matchup agree.
 For each pick provide:
 - rank (1-14)
@@ -2267,8 +2618,30 @@ if len(games_tonight) > 0:
     df_pitcher_tonight['home_away_tonight'] = df_pitcher_tonight['player_id'].map({k: v['home_away'] for k, v in pitcher_to_game.items()})
     df_pitcher_tonight['opp_starter'] = df_pitcher_tonight['player_id'].map({k: v['opp_pitcher'] for k, v in pitcher_to_game.items()})
 
+    if df_pitcher_statcast is not None and len(df_pitcher_statcast) > 0:
+        p_statcast_merge_cols = ['player_id'] + [c for c in df_pitcher_statcast.columns if c.startswith('SC_')]
+        df_pitcher_tonight = df_pitcher_tonight.merge(df_pitcher_statcast[p_statcast_merge_cols], on='player_id', how='left')
+        k_score = (
+            50
+            + (numeric_col(df_pitcher_tonight, 'SC_L14_whiff_pct') - 25).fillna(0) * 1.2
+            + (numeric_col(df_pitcher_tonight, 'SC_L14_csw_pct') - 28).fillna(0) * 1.1
+            + (numeric_col(df_pitcher_tonight, 'L3_SO') - numeric_col(df_pitcher_tonight, 'Seas_SO')).fillna(0) * 4
+        )
+        er_risk_score = (
+            50
+            + (numeric_col(df_pitcher_tonight, 'SC_L14_xwOBA') - 0.320).fillna(0) * 120
+            + (numeric_col(df_pitcher_tonight, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
+            + (numeric_col(df_pitcher_tonight, 'SC_L14_hard_hit_pct') - 38).fillna(0) * 0.5
+        )
+        df_pitcher_tonight['P_SO_EDGE_SCORE'] = clip_score(k_score)
+        df_pitcher_tonight['P_ER_RISK_SCORE'] = clip_score(er_risk_score)
+    else:
+        df_pitcher_tonight['P_SO_EDGE_SCORE'] = np.nan
+        df_pitcher_tonight['P_ER_RISK_SCORE'] = np.nan
+
     p_rolling_cols = [c for c in df_pitcher_tonight.columns if any(c.startswith(p) for p in ['L3_', 'L7_', 'L15_', 'Seas_'])]
-    p_final_cols = ['player_name', 'team_abbr', 'opp_abbr_tonight', 'venue_tonight', 'home_away_tonight', 'opp_starter'] + p_rolling_cols + ['LAST_UPDATED']
+    p_statcast_cols = [c for c in df_pitcher_tonight.columns if c.startswith('SC_')] + ['P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE']
+    p_final_cols = ['player_name', 'team_abbr', 'opp_abbr_tonight', 'venue_tonight', 'home_away_tonight', 'opp_starter'] + p_rolling_cols + p_statcast_cols + ['LAST_UPDATED']
     p_final_cols = [c for c in p_final_cols if c in df_pitcher_tonight.columns]
     df_pitcher_tonight = df_pitcher_tonight[p_final_cols].copy()
     df_pitcher_tonight = df_pitcher_tonight.sort_values('player_name').reset_index(drop=True)
@@ -2362,6 +2735,9 @@ SHEETS_TO_WRITE = {
     'Tonights_Batters': df_tonight,
     'LHP_RHP_Splits': df_splits,
     'Home_Away_Splits': ha_pivot,
+    'Statcast_Daily': df_statcast_daily if len(df_statcast_daily) > 0 else pd.DataFrame(),
+    'Batter_Statcast': df_batter_statcast if len(df_batter_statcast) > 0 else pd.DataFrame(),
+    'Pitcher_Statcast': df_pitcher_statcast if len(df_pitcher_statcast) > 0 else pd.DataFrame(),
     'Tonights_Schedule': df_schedule,
     'Tonights_Pitchers': df_pitchers,
     'Venue_Weather': df_weather,
