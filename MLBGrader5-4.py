@@ -50,6 +50,7 @@ atexit.register(runlog.finalize_and_write)
 eastern = pytz.timezone('US/Eastern')
 now_est = datetime.now(eastern)
 today_str = now_est.strftime('%Y-%m-%d')
+timestamp_est = now_est.strftime('%Y-%m-%d %I:%M:%S %p EST')
 RETRY_DNP_LOOKBACK_DAYS = 7
 
 def safe_float(val, default=None):
@@ -175,6 +176,104 @@ def print_clv_summary(df_all):
     if not neg_df.empty:
         neg_hits = len(neg_df[neg_df['HIT'] == 'YES'])
         print(f"   Flat/Negative CLV: {neg_hits}-{len(neg_df)-neg_hits} ({neg_hits/len(neg_df)*100:.0f}%) | Avg {neg_df['clv_edge'].mean():+.2f}")
+
+def write_dataframe_sheet(spreadsheet, sheet_name, df):
+    if df is None or df.empty:
+        print(f"   ⏭️  {sheet_name}: No data — skipped")
+        return
+    df_clean = df.copy().replace([np.inf, -np.inf], '')
+    df_clean = df_clean.fillna('')
+    for col in df_clean.columns:
+        df_clean[col] = df_clean[col].apply(lambda x: x.item() if hasattr(x, 'item') else x)
+    try:
+        try:
+            ws_out = spreadsheet.worksheet(sheet_name)
+            ws_out.clear()
+        except gspread.exceptions.WorksheetNotFound:
+            ws_out = spreadsheet.add_worksheet(title=sheet_name, rows=max(len(df_clean) + 1, 100), cols=max(len(df_clean.columns), 26))
+        needed_rows = len(df_clean) + 1
+        needed_cols = len(df_clean.columns)
+        if ws_out.row_count < needed_rows or ws_out.col_count < needed_cols:
+            ws_out.resize(rows=max(needed_rows, ws_out.row_count), cols=max(needed_cols, ws_out.col_count))
+        ws_out.update([df_clean.columns.tolist()] + df_clean.values.tolist(), value_input_option='RAW')
+        print(f"   ✅ {sheet_name}: {len(df_clean)} rows × {len(df_clean.columns)} cols")
+    except Exception as e:
+        print(f"   ❌ {sheet_name}: {e}")
+
+def score_bucket(val):
+    if pd.isna(val):
+        return None
+    if val < 40:
+        return '00-39'
+    if val < 60:
+        return '40-59'
+    if val < 80:
+        return '60-79'
+    return '80-100'
+
+def build_score_backtest(df_graded):
+    score_cols = ['H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE']
+    if df_graded is None or df_graded.empty:
+        return pd.DataFrame(columns=['SCORE', 'BUCKET', 'PROP_TYPE', 'CONFIDENCE', 'PICKS', 'WINS', 'HIT_RATE', 'MEAN_SCORE', 'LAST_UPDATED'])
+    df_graded = df_graded[df_graded['HIT'].isin(['YES', 'NO'])].copy()
+    if df_graded.empty:
+        return pd.DataFrame(columns=['SCORE', 'BUCKET', 'PROP_TYPE', 'CONFIDENCE', 'PICKS', 'WINS', 'HIT_RATE', 'MEAN_SCORE', 'LAST_UPDATED'])
+    for col in score_cols:
+        if col not in df_graded.columns:
+            df_graded[col] = np.nan
+        df_graded[col] = pd.to_numeric(df_graded[col], errors='coerce')
+    df_graded['WIN'] = (df_graded['HIT'] == 'YES').astype(int)
+
+    rows = []
+    for score_col in score_cols:
+        df_score = df_graded.dropna(subset=[score_col]).copy()
+        if df_score.empty:
+            continue
+        df_score['BUCKET'] = df_score[score_col].map(score_bucket)
+        for bucket, grp in df_score.groupby('BUCKET'):
+            rows.append({
+                'SCORE': score_col,
+                'BUCKET': bucket,
+                'PROP_TYPE': 'ALL',
+                'CONFIDENCE': 'ALL',
+                'PICKS': len(grp),
+                'WINS': int(grp['WIN'].sum()),
+                'HIT_RATE': round(grp['WIN'].mean(), 3),
+                'MEAN_SCORE': round(grp[score_col].mean(), 1),
+            })
+        if 'prop_type' in df_score.columns:
+            for (bucket, prop), grp in df_score.groupby(['BUCKET', 'prop_type']):
+                if len(grp) < 3:
+                    continue
+                rows.append({
+                    'SCORE': score_col,
+                    'BUCKET': bucket,
+                    'PROP_TYPE': prop,
+                    'CONFIDENCE': 'ALL',
+                    'PICKS': len(grp),
+                    'WINS': int(grp['WIN'].sum()),
+                    'HIT_RATE': round(grp['WIN'].mean(), 3),
+                    'MEAN_SCORE': round(grp[score_col].mean(), 1),
+                })
+        if 'confidence' in df_score.columns:
+            for (bucket, conf), grp in df_score.groupby(['BUCKET', 'confidence']):
+                if len(grp) < 3:
+                    continue
+                rows.append({
+                    'SCORE': score_col,
+                    'BUCKET': bucket,
+                    'PROP_TYPE': 'ALL',
+                    'CONFIDENCE': conf,
+                    'PICKS': len(grp),
+                    'WINS': int(grp['WIN'].sum()),
+                    'HIT_RATE': round(grp['WIN'].mean(), 3),
+                    'MEAN_SCORE': round(grp[score_col].mean(), 1),
+                })
+    df_backtest = pd.DataFrame(rows)
+    if df_backtest.empty:
+        return pd.DataFrame(columns=['SCORE', 'BUCKET', 'PROP_TYPE', 'CONFIDENCE', 'PICKS', 'WINS', 'HIT_RATE', 'MEAN_SCORE', 'LAST_UPDATED'])
+    df_backtest['LAST_UPDATED'] = timestamp_est
+    return df_backtest.sort_values(['SCORE', 'BUCKET', 'PROP_TYPE', 'CONFIDENCE']).reset_index(drop=True)
 
 # --- 2. LOAD DAILY_PICKS ---
 print("\nLoading Daily_Picks...")
@@ -523,6 +622,36 @@ if updates:
     print("✅ Sheet updated!")
 else:
     print("\n⚠️ No updates to write.")
+
+# --- 7. SCORE BACKTEST ---
+print("\n📊 Building Score_Backtest...")
+try:
+    ws_picks = sh.worksheet('Daily_Picks')
+    df_graded = pd.DataFrame(ws_picks.get_all_records())
+    if 'HIT' not in df_graded.columns:
+        print("   ⚠️ Daily_Picks has no HIT column — skipping Score_Backtest")
+    else:
+        df_backtest_source = df_graded[df_graded['HIT'].isin(['YES', 'NO'])].copy()
+        df_backtest = build_score_backtest(df_backtest_source)
+        if df_backtest.empty:
+            print("   ⚠️ No graded picks with edge scores yet — Score_Backtest skipped")
+        else:
+            write_dataframe_sheet(sh, 'Score_Backtest', df_backtest)
+            date_count = df_backtest_source['DATE'].nunique() if 'DATE' in df_backtest_source.columns else '?'
+            print(f"\n📊 Score backtest: {len(df_backtest)} rows across {date_count} dates, {len(df_backtest_source)} graded picks")
+            score_cols = ['H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE']
+            for score_col in score_cols:
+                overall = df_backtest[
+                    (df_backtest['SCORE'] == score_col) &
+                    (df_backtest['PROP_TYPE'] == 'ALL') &
+                    (df_backtest['CONFIDENCE'] == 'ALL')
+                ]
+                if not overall.empty:
+                    print(f"   {score_col}:")
+                    for _, r in overall.iterrows():
+                        print(f"      {r['BUCKET']}: {r['HIT_RATE'] * 100:.0f}% ({int(r['WINS'])}/{int(r['PICKS'])})")
+except Exception as e:
+    print(f"   ⚠️ Score_Backtest failed: {e}")
 
 # --- 7. SUMMARY ---
 total_decided = hits + misses
