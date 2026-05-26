@@ -2263,7 +2263,7 @@ RULES:
 - Allowed prop types for this slate: {allowed_prompt_props_str}.
 - For batters, only use: H, R.
 - For pitchers, only use: P_SO, P_ER, P_BB.
-- Do NOT pick TB, HR, RBI, SB, 2B, 1B, BB, P_H, or P_OUTS — removed by grader data.
+- Any prop type NOT in the allowed list above is excluded — do not invent picks for them.
 - Do NOT pick H OVER lines above 0.5 — H OVER 1.5 is a consistent losing pick
 - Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
 - Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
@@ -2298,10 +2298,8 @@ For each pick provide:
 - confidence (SMASH, STRONG, or LEAN)
 - rationale (1 sentence, under 15 words)
 - injury_context (under 10 words)
-- venue (stadium name)
-- weather_note (under 10 words)
 OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no explanation:
-[{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":1.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy.","venue":"Rogers Centre","weather_note":"Dome"}}]"""
+[{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":1.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy."}}]"""
 
         consensus_pick_lists = []
         consensus_temps = [0.35, 0.55, 0.75]
