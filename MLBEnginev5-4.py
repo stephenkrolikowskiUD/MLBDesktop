@@ -72,6 +72,13 @@ SHEET_SCHEMAS = {
     },
     'DK_Player_Props': {
         'required': ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'LAST_UPDATED'],
+        'recommended': ['BOOK', 'REFERENCE_BOOK', 'BEST_OVER_BOOK', 'BEST_OVER_ODDS', 'BEST_OVER_DELTA_PP',
+                        'BEST_UNDER_BOOK', 'BEST_UNDER_ODDS', 'BEST_UNDER_DELTA_PP',
+                        'ALT_LINE_AVAILABLE', 'ALT_LINE_BOOKS'],
+    },
+    'All_Books_Props': {
+        'required': ['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS',
+                     'OVER_IMPLIED', 'UNDER_IMPLIED', 'LAST_UPDATED'],
         'recommended': [],
     },
     'Batter_Game_Logs': {
@@ -1531,11 +1538,17 @@ for team_abbr, info in pitcher_map.items():
 df_pitchers = pd.DataFrame(pitcher_rows_out)
 df_pitchers['LAST_UPDATED'] = timestamp_est
 
-# --- 10.5 DK PLAYER PROPS ---
-print("\nFetching Live DraftKings Player Props...")
-
-PROP_SPORT = 'baseball_mlb'
+# --- MULTI-BOOK PLAYER PROPS ---
+print("\nFetching Live Multi-Book Player Props...")
+SPORT = 'baseball_mlb'
+BOOKMAKER = 'draftkings'
 PROP_BOOKMAKER = 'draftkings'
+FALLBACK_BOOKMAKER = 'fanduel'
+THIN_MARKET_THRESHOLD = 5
+SUPPORTED_BOOKMAKERS = ['draftkings', 'fanduel', 'betmgm', 'caesars', 'espnbet']
+REFERENCE_BOOKMAKER = 'draftkings'
+BEST_BOOK_TIE_BREAK = 'alpha'
+
 MARKET_BATCHES = [
     'batter_hits,batter_total_bases,batter_home_runs,batter_rbis,batter_runs_scored',
     'batter_stolen_bases,batter_strikeouts,batter_walks,batter_singles,batter_doubles',
@@ -1548,7 +1561,8 @@ market_mapping = {
     'batter_strikeouts': 'Batter_SO', 'batter_walks': 'BB',
     'batter_singles': '1B', 'batter_doubles': '2B',
     'pitcher_strikeouts': 'P_SO', 'pitcher_hits_allowed': 'P_H',
-    'pitcher_walks': 'P_BB', 'pitcher_earned_runs': 'P_ER', 'pitcher_outs': 'P_OUTS'}
+    'pitcher_walks': 'P_BB', 'pitcher_earned_runs': 'P_ER', 'pitcher_outs': 'P_OUTS'
+}
 
 BINARY_PROP_MARKETS = {
     'batter_home_runs': 0.5,
@@ -1556,233 +1570,306 @@ BINARY_PROP_MARKETS = {
     'batter_singles': 0.5,
     'batter_doubles': 0.5,
 }
+name_fixes = {}
 
-def parse_prop_outcomes_for_market(mkt, metric_name):
-    parsed_rows = []
-    pd_dict = {}
+DK_PLAYER_PROPS_COLUMNS = [
+    'PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'BOOK',
+    'REFERENCE_BOOK', 'BEST_OVER_BOOK', 'BEST_OVER_ODDS', 'BEST_OVER_DELTA_PP',
+    'BEST_UNDER_BOOK', 'BEST_UNDER_ODDS', 'BEST_UNDER_DELTA_PP',
+    'ALT_LINE_AVAILABLE', 'ALT_LINE_BOOKS', 'LAST_UPDATED'
+]
+ALL_BOOKS_PROPS_COLUMNS = [
+    'PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS',
+    'OVER_IMPLIED', 'UNDER_IMPLIED', 'LAST_UPDATED'
+]
+
+
+def american_to_implied(odds):
+    try:
+        if odds is None or pd.isna(odds):
+            return np.nan
+        if isinstance(odds, str) and odds.strip().lower() in {'', 'nan', 'none'}:
+            return np.nan
+        odds = float(odds)
+        if odds == 0:
+            return np.nan
+        return (-odds / (-odds + 100)) if odds < 0 else (100 / (odds + 100))
+    except (TypeError, ValueError):
+        return np.nan
+
+
+def implied_to_american(prob):
+    try:
+        prob = float(prob)
+        if prob <= 0 or prob >= 1:
+            return None
+        return int(round(-100 * prob / (1 - prob))) if prob >= 0.5 else int(round(100 * (1 - prob) / prob))
+    except (TypeError, ValueError):
+        return None
+
+
+def apply_multi_book_name_fixes(df, name_fixes):
+    if df is None or df.empty or 'PLAYER_NAME' not in df.columns:
+        return df
+    out = df.copy()
+    out['PLAYER_NAME'] = out['PLAYER_NAME'].replace(name_fixes or {})
+    return out
+
+
+def parse_multi_book_market(mkt, metric_name, book_key, binary_prop_markets=None):
+    rows_by_key = {}
     market_key = mkt.get('key', '')
+    binary_prop_markets = binary_prop_markets or {}
     for oc in mkt.get('outcomes', []):
-        player_name = (
-            oc.get('description') or
-            oc.get('participant') or
-            oc.get('player') or
-            ''
-        )
+        player_name = oc.get('description') or oc.get('participant') or oc.get('player') or ''
         bet_type = str(oc.get('name', '')).strip()
         line_val = oc.get('point')
         odds_val = oc.get('price')
-
         if not player_name or odds_val is None:
             continue
-        if line_val is None and market_key in BINARY_PROP_MARKETS:
-            line_val = BINARY_PROP_MARKETS[market_key]
+        if line_val is None and market_key in binary_prop_markets:
+            line_val = binary_prop_markets[market_key]
         if line_val is None:
             continue
-
-        if player_name not in pd_dict:
-            pd_dict[player_name] = {
+        try:
+            line_val = float(line_val)
+        except (TypeError, ValueError):
+            continue
+        key = (player_name, metric_name, line_val, book_key)
+        if key not in rows_by_key:
+            rows_by_key[key] = {
                 'PLAYER_NAME': player_name,
                 'METRIC': metric_name,
-                'DK_LINE': line_val,
-                'OVER_ODDS': None,
-                'UNDER_ODDS': None
+                'LINE': line_val,
+                'BOOK': book_key,
+                'OVER_ODDS': np.nan,
+                'UNDER_ODDS': np.nan,
             }
-
         if bet_type in {'Over', 'Yes'}:
-            pd_dict[player_name]['OVER_ODDS'] = odds_val
+            rows_by_key[key]['OVER_ODDS'] = odds_val
         elif bet_type in {'Under', 'No'}:
-            pd_dict[player_name]['UNDER_ODDS'] = odds_val
+            rows_by_key[key]['UNDER_ODDS'] = odds_val
+    return list(rows_by_key.values())
+
+
+def finalize_all_books_frame(rows, timestamp_value, name_fixes=None):
+    if not rows:
+        return pd.DataFrame(columns=ALL_BOOKS_PROPS_COLUMNS)
+    df = pd.DataFrame(rows)
+    df = df[df['BOOK'].isin(SUPPORTED_BOOKMAKERS)].copy()
+    df = apply_multi_book_name_fixes(df, name_fixes or {})
+    df['LINE'] = pd.to_numeric(df['LINE'], errors='coerce')
+    df['OVER_ODDS'] = pd.to_numeric(df['OVER_ODDS'], errors='coerce')
+    df['UNDER_ODDS'] = pd.to_numeric(df['UNDER_ODDS'], errors='coerce')
+    df = df.dropna(subset=['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK'])
+    df['OVER_IMPLIED'] = df['OVER_ODDS'].map(american_to_implied).round(4)
+    df['UNDER_IMPLIED'] = df['UNDER_ODDS'].map(american_to_implied).round(4)
+    df['LAST_UPDATED'] = timestamp_value
+    df = df.drop_duplicates(subset=['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK'], keep='first')
+    return df.reindex(columns=ALL_BOOKS_PROPS_COLUMNS).sort_values(['METRIC', 'PLAYER_NAME', 'LINE', 'BOOK']).reset_index(drop=True)
+
+
+def _select_best_book(same_line, odds_col):
+    available = same_line.dropna(subset=[odds_col]).copy()
+    if available.empty:
+        return None, np.nan, np.nan, []
+    available[odds_col] = pd.to_numeric(available[odds_col], errors='coerce')
+    available = available.dropna(subset=[odds_col])
+    if available.empty:
+        return None, np.nan, np.nan, []
+    best_odds = available[odds_col].max()
+    tied = sorted(available[available[odds_col] == best_odds]['BOOK'].astype(str).unique())
+    best_book = tied[0] if tied else None
+    best_implied = american_to_implied(best_odds)
+    return best_book, best_odds, best_implied, tied
+
+
+def compute_best_book_columns(df_long, timestamp_value):
+    if df_long is None or df_long.empty:
+        return pd.DataFrame(columns=DK_PLAYER_PROPS_COLUMNS), []
+    df = df_long.copy()
+    df['LINE'] = pd.to_numeric(df['LINE'], errors='coerce')
+    df['OVER_ODDS'] = pd.to_numeric(df['OVER_ODDS'], errors='coerce')
+    df['UNDER_ODDS'] = pd.to_numeric(df['UNDER_ODDS'], errors='coerce')
+    df = df.dropna(subset=['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK'])
+    if df.empty:
+        return pd.DataFrame(columns=DK_PLAYER_PROPS_COLUMNS), []
+
+    metric_book_coverage = (
+        df.groupby(['METRIC', 'BOOK'])['PLAYER_NAME']
+        .nunique()
+        .reset_index(name='coverage')
+        .sort_values(['METRIC', 'coverage', 'BOOK'], ascending=[True, False, True])
+    )
+    coverage_lookup = {
+        metric: grp.iloc[0]['BOOK']
+        for metric, grp in metric_book_coverage.groupby('METRIC')
+        if not grp.empty
+    }
+
+    rows = []
+    tie_notes = []
+    for (player, metric), grp in df.groupby(['PLAYER_NAME', 'METRIC'], sort=True):
+        dk_rows = grp[grp['BOOK'] == REFERENCE_BOOKMAKER].sort_values(['LINE', 'BOOK'])
+        if not dk_rows.empty:
+            ref = dk_rows.iloc[0]
+            reference_book = REFERENCE_BOOKMAKER
         else:
-            # Some books occasionally emit a player label/name variant here; keep row but don't classify odds.
-            continue
+            reference_book = coverage_lookup.get(metric) or sorted(grp['BOOK'].astype(str).unique())[0]
+            ref_rows = grp[grp['BOOK'] == reference_book].sort_values(['LINE', 'BOOK'])
+            if ref_rows.empty:
+                ref_rows = grp.sort_values(['BOOK', 'LINE'])
+                reference_book = ref_rows.iloc[0]['BOOK']
+            ref = ref_rows.iloc[0]
 
-    parsed_rows.extend(pd_dict.values())
-    return parsed_rows
+        ref_line = float(ref['LINE'])
+        same_line = grp[grp['LINE'].sub(ref_line).abs() < 1e-9].copy()
+        alt_line_books = sorted(grp[grp['LINE'].sub(ref_line).abs() >= 1e-9]['BOOK'].astype(str).unique())
+        best_over_book, best_over_odds, best_over_implied, over_ties = _select_best_book(same_line, 'OVER_ODDS')
+        best_under_book, best_under_odds, best_under_implied, under_ties = _select_best_book(same_line, 'UNDER_ODDS')
+        if len(over_ties) > 1:
+            tie_notes.append(f"{player} {metric} OVER tied: {', '.join(over_ties)}")
+        if len(under_ties) > 1:
+            tie_notes.append(f"{player} {metric} UNDER tied: {', '.join(under_ties)}")
 
-df_props = pd.DataFrame()
+        ref_over_implied = american_to_implied(ref.get('OVER_ODDS'))
+        ref_under_implied = american_to_implied(ref.get('UNDER_ODDS'))
+        over_delta = (ref_over_implied - best_over_implied) * 100 if pd.notna(ref_over_implied) and pd.notna(best_over_implied) else np.nan
+        under_delta = (ref_under_implied - best_under_implied) * 100 if pd.notna(ref_under_implied) and pd.notna(best_under_implied) else np.nan
 
-if (now_est >= OPENING_DAY or now_est.month >= 4) and ODDS_API_KEY and len(games_tonight) > 0:
-    try:
-        ev_url = f'https://api.the-odds-api.com/v4/sports/{PROP_SPORT}/events'
-        ev_resp = requests.get(ev_url, params={'apiKey': ODDS_API_KEY}, timeout=15)
-        if ev_resp.status_code != 200:
-            print(f"   ❌ Failed to fetch events: {ev_resp.text[:200]}")
-        else:
-            ev_data = ev_resp.json()
-            tonight_team_names = {t['team_name'].lower() for t in team_list if t['team_abbr'] in active_team_abbrs}
-            tonight_ids = [e['id'] for e in ev_data
-                if e.get('home_team', '').lower() in tonight_team_names
-                or e.get('away_team', '').lower() in tonight_team_names]
-            print(f"   🏟️ Found {len(tonight_ids)} events for props...")
+        rows.append({
+            'PLAYER_NAME': player,
+            'METRIC': metric,
+            'DK_LINE': ref_line,
+            'OVER_ODDS': ref.get('OVER_ODDS'),
+            'UNDER_ODDS': ref.get('UNDER_ODDS'),
+            'BOOK': ref.get('BOOK'),
+            'REFERENCE_BOOK': reference_book,
+            'BEST_OVER_BOOK': best_over_book,
+            'BEST_OVER_ODDS': best_over_odds,
+            'BEST_OVER_DELTA_PP': round(over_delta, 3) if pd.notna(over_delta) else np.nan,
+            'BEST_UNDER_BOOK': best_under_book,
+            'BEST_UNDER_ODDS': best_under_odds,
+            'BEST_UNDER_DELTA_PP': round(under_delta, 3) if pd.notna(under_delta) else np.nan,
+            'ALT_LINE_AVAILABLE': bool(alt_line_books),
+            'ALT_LINE_BOOKS': ','.join(alt_line_books),
+            'LAST_UPDATED': timestamp_value,
+        })
 
-            prop_list = []
-            dk_raw_market_keys = set()
-            dk_parsed_market_keys = set()
-            api_errors = 0
-            p_resp = None
-            for eid in tonight_ids:
-                p_url = f'https://api.the-odds-api.com/v4/sports/{PROP_SPORT}/events/{eid}/odds'
-                for batch in MARKET_BATCHES:
-                    p_params = {
-                        'apiKey': ODDS_API_KEY,
-                        'regions': 'us',
-                        'markets': batch,
-                        'bookmakers': PROP_BOOKMAKER,
-                        'oddsFormat': 'american'
-                    }
-                    try:
-                        p_resp = requests.get(p_url, params=p_params, timeout=15)
-                        if p_resp.status_code != 200:
-                            api_errors += 1
-                            if api_errors <= 3:
-                                print(f"   ⚠️ DK props API {p_resp.status_code} for {eid} [{batch}]: {p_resp.text[:100]}")
-                            continue
-                        p_data = p_resp.json()
-                        for bk in p_data.get('bookmakers', []):
-                            if eid == tonight_ids[0]:
-                                market_debug = [
-                                    f"{mkt.get('key')} ({len(mkt.get('outcomes', []))})"
-                                    for mkt in bk.get('markets', [])
-                                ]
-                                print(f"   🔎 DK sample bookmaker={bk.get('key')} markets: {', '.join(market_debug)}")
-                            if bk['key'] != PROP_BOOKMAKER:
-                                continue
-                            for mkt in bk.get('markets', []):
-                                dk_raw_market_keys.add(mkt.get('key'))
-                                mn = market_mapping.get(mkt['key'])
-                                if not mn:
-                                    continue
-                                parsed_rows = parse_prop_outcomes_for_market(mkt, mn)
-                                if parsed_rows:
-                                    dk_parsed_market_keys.add(mkt.get('key'))
-                                    prop_list.extend(parsed_rows)
-                    except Exception as e:
-                        print(f"   ⚠️ Props error for {eid} [{batch}]: {e}")
-                        continue
-                time.sleep(0.5)
+    df_props_out = pd.DataFrame(rows, columns=DK_PLAYER_PROPS_COLUMNS)
+    if not df_props_out.empty:
+        df_props_out = df_props_out.sort_values(['METRIC', 'PLAYER_NAME']).reset_index(drop=True)
+    return df_props_out, tie_notes
 
-            if tonight_ids:
-                parsed_metrics_seen = {row.get('METRIC') for row in prop_list if row.get('METRIC')}
-                if {'Batter_SO', 'HR'} - parsed_metrics_seen:
-                    probe_url = f'https://api.the-odds-api.com/v4/sports/{PROP_SPORT}/events/{tonight_ids[0]}/odds'
-                    probe_params = {
-                        'apiKey': ODDS_API_KEY,
-                        'regions': 'us',
-                        'markets': 'batter_home_runs_alternate,batter_strikeouts_alternate',
-                        'bookmakers': 'draftkings,fanduel',
-                        'oddsFormat': 'american'
-                    }
-                    try:
-                        probe_resp = requests.get(probe_url, params=probe_params, timeout=15)
-                        if probe_resp.status_code == 200:
-                            probe_data = probe_resp.json()
-                            print("   🔎 Alternate-market probe on first event:")
-                            for bk in probe_data.get('bookmakers', []):
-                                market_debug = [
-                                    f"{mkt.get('key')} ({len(mkt.get('outcomes', []))})"
-                                    for mkt in bk.get('markets', [])
-                                ]
-                                print(f"   🔎 ALT bookmaker={bk.get('key')} markets: {', '.join(market_debug)}")
-                        else:
-                            print(f"   ⚠️ Alternate-market probe API {probe_resp.status_code}: {probe_resp.text[:120]}")
-                    except Exception as e:
-                        print(f"   ⚠️ Alternate-market probe failed: {e}")
 
-            df_props = pd.DataFrame(prop_list)
-            if not df_props.empty:
-                df_props = df_props.dropna(subset=['DK_LINE'])
-                df_props['LAST_UPDATED'] = timestamp_est
-                remaining = p_resp.headers.get('x-requests-remaining', '?') if p_resp is not None else '?'
-                print(f"   📊 API Quota remaining: {remaining}")
-                print(f"   ✅ Fetched {len(df_props)} player props across {df_props['METRIC'].nunique()} markets!")
-                print(f"   Batter props: {len(df_props[~df_props['METRIC'].str.startswith('P_')])}")
-                print(f"   Pitcher props: {len(df_props[df_props['METRIC'].str.startswith('P_')])}")
-                if api_errors:
-                    print(f"   ⚠️ DK props API errors: {api_errors}")
-                if dk_raw_market_keys != dk_parsed_market_keys:
-                    raw_unparsed = sorted(dk_raw_market_keys - dk_parsed_market_keys)
-                    if raw_unparsed:
-                        print(f"   ⚠️ DK returned but did not fully parse markets: {', '.join(raw_unparsed)}")
+def print_best_book_summary(df_props, df_all_books):
+    print("\n" + "=" * 60)
+    print("BEST-BOOK ROUTING SUMMARY")
+    print("=" * 60)
+    print(f"   Books queried:    {', '.join(SUPPORTED_BOOKMAKERS)}")
+    if df_all_books is None or df_all_books.empty or df_props is None or df_props.empty:
+        print("   Props covered:    0 unique (player, metric) pairs")
+        print("=" * 60)
+        return
+    covered = len(df_props)
+    dk_ref = int((df_props['REFERENCE_BOOK'] == REFERENCE_BOOKMAKER).sum()) if 'REFERENCE_BOOK' in df_props.columns else 0
+    dk_pct = (dk_ref / covered * 100) if covered else 0
+    print(f"   Props covered:    {covered} unique (player, metric) pairs")
+    print(f"   DK reference:     {dk_ref} / {covered} ({dk_pct:.1f}%)")
+    print("   Best-book wins by:")
+    for book in SUPPORTED_BOOKMAKERS:
+        over_ct = int((df_props.get('BEST_OVER_BOOK') == book).sum()) if 'BEST_OVER_BOOK' in df_props.columns else 0
+        under_ct = int((df_props.get('BEST_UNDER_BOOK') == book).sum()) if 'BEST_UNDER_BOOK' in df_props.columns else 0
+        print(f"      {book:<12} {over_ct:>4} OVER  / {under_ct:>4} UNDER")
+    over_edge = pd.to_numeric(df_props.get('BEST_OVER_DELTA_PP'), errors='coerce').dropna()
+    under_edge = pd.to_numeric(df_props.get('BEST_UNDER_DELTA_PP'), errors='coerce').dropna()
+    over_avg = over_edge.mean() if not over_edge.empty else 0
+    under_avg = under_edge.mean() if not under_edge.empty else 0
+    alt_ct = int(df_props.get('ALT_LINE_AVAILABLE', pd.Series(dtype=bool)).fillna(False).astype(bool).sum()) if 'ALT_LINE_AVAILABLE' in df_props.columns else 0
+    print(f"   Avg edge captured: +{over_avg:.1f}pp OVER, +{under_avg:.1f}pp UNDER (vs reference)")
+    print(f"   Alt lines available: {alt_ct} props")
+    print("=" * 60)
 
-                # --- FANDUEL FALLBACK: Fill gaps for missing markets ---
-                dk_metrics = set(df_props['METRIC'].unique())
-                all_metrics = set(market_mapping.values())
-                missing = all_metrics - dk_metrics
-                if missing:
-                    print(f"\n   🔄 FanDuel fallback for missing markets: {', '.join(sorted(missing))}")
-                    fd_list = []
-                    fd_raw_market_keys = set()
-                    fd_parsed_market_keys = set()
-                    fd_api_errors = 0
-                    for eid in tonight_ids:
-                        p_url = f'https://api.the-odds-api.com/v4/sports/{PROP_SPORT}/events/{eid}/odds'
-                        for batch in MARKET_BATCHES:
-                            batch_markets = [m for m in batch.split(',') if market_mapping.get(m) in missing]
-                            if not batch_markets:
-                                continue
-                            p_params = {
-                                'apiKey': ODDS_API_KEY,
-                                'regions': 'us',
-                                'markets': ','.join(batch_markets),
-                                'bookmakers': 'fanduel',
-                                'oddsFormat': 'american'
-                            }
-                            try:
-                                p_resp = requests.get(p_url, params=p_params, timeout=15)
-                                if p_resp.status_code != 200:
-                                    fd_api_errors += 1
-                                    if fd_api_errors <= 3:
-                                        print(f"   ⚠️ FD props API {p_resp.status_code} for {eid} [{','.join(batch_markets)}]: {p_resp.text[:100]}")
-                                    continue
-                                p_data = p_resp.json()
-                                for bk in p_data.get('bookmakers', []):
-                                    if eid == tonight_ids[0]:
-                                        market_debug = [
-                                            f"{mkt.get('key')} ({len(mkt.get('outcomes', []))})"
-                                            for mkt in bk.get('markets', [])
-                                        ]
-                                        print(f"   🔎 FD sample bookmaker={bk.get('key')} markets: {', '.join(market_debug)}")
-                                    if bk['key'] != 'fanduel':
-                                        continue
-                                    for mkt in bk.get('markets', []):
-                                        fd_raw_market_keys.add(mkt.get('key'))
-                                        mn = market_mapping.get(mkt['key'])
-                                        if not mn or mn not in missing:
-                                            continue
-                                        parsed_rows = parse_prop_outcomes_for_market(mkt, mn)
-                                        if parsed_rows:
-                                            fd_parsed_market_keys.add(mkt.get('key'))
-                                            fd_list.extend(parsed_rows)
-                            except Exception:
-                                continue
-                        time.sleep(0.5)
 
-                    if fd_list:
-                        df_fd = pd.DataFrame(fd_list).dropna(subset=['DK_LINE'])
-                        df_fd['LAST_UPDATED'] = timestamp_est
-                        df_props = pd.concat([df_props, df_fd], ignore_index=True)
-                        print(f"   ✅ FanDuel added {len(df_fd)} props for: {', '.join(sorted(missing & set(df_fd['METRIC'].unique())))}")
-                        print(f"   📊 Total props now: {len(df_props)} across {df_props['METRIC'].nunique()} markets")
-                        if fd_api_errors:
-                            print(f"   ⚠️ FanDuel props API errors: {fd_api_errors}")
-                        raw_unparsed_fd = sorted(fd_raw_market_keys - fd_parsed_market_keys)
-                        if raw_unparsed_fd:
-                            print(f"   ⚠️ FanDuel returned but did not fully parse markets: {', '.join(raw_unparsed_fd)}")
-                    else:
-                        if fd_api_errors:
-                            print(f"   ⚠️ FanDuel props API errors: {fd_api_errors}")
-                        print(f"   ⚠️ Odds API returned no {sorted(missing)} data from FanDuel either (book may not expose these markets via Odds API even when shown in app)")
-                else:
-                    print(f"   ✅ DK covered all markets — no FanDuel fallback needed")
-            else:
-                print("   ⚠️ No player props returned.")
-    except Exception as e:
-        print(f"   ❌ Failed to fetch player props: {e}")
-else:
-    if len(games_tonight) == 0:
-        print("   ⚠️ No games tonight — skipping props.")
+df_props = pd.DataFrame(columns=DK_PLAYER_PROPS_COLUMNS)
+df_all_books = pd.DataFrame(columns=ALL_BOOKS_PROPS_COLUMNS)
+try:
+    ev_resp = requests.get(f'https://api.the-odds-api.com/v4/sports/{SPORT}/events', params={'apiKey': ODDS_API_KEY}, timeout=15)
+    if ev_resp.status_code != 200:
+        print(f"❌ Failed to fetch events: {ev_resp.status_code} — {ev_resp.text[:200]}")
     else:
-        print("   ⏭️ Props skipped")
+        ev_data = ev_resp.json()
+        tonight_team_names = {t['team_name'].lower() for t in team_list if t['team_abbr'] in active_team_abbrs}
+        tonight_ids = [
+            e['id'] for e in ev_data
+            if e.get('home_team', '').lower() in tonight_team_names
+            or e.get('away_team', '').lower() in tonight_team_names
+        ]
+        print(f"🏟️ Found {len(tonight_ids)} events — fetching props from {len(SUPPORTED_BOOKMAKERS)} books...")
+
+        all_book_rows = []
+        api_errors = 0
+        last_resp = None
+        for eid in tonight_ids:
+            for batch in MARKET_BATCHES:
+                markets_param = batch if isinstance(batch, str) else ','.join(batch)
+                pr = requests.get(
+                    f'https://api.the-odds-api.com/v4/sports/{SPORT}/events/{eid}/odds',
+                    params={
+                        'apiKey': ODDS_API_KEY,
+                        'regions': 'us',
+                        'markets': markets_param,
+                        'bookmakers': ','.join(SUPPORTED_BOOKMAKERS),
+                        'oddsFormat': 'american'
+                    },
+                    timeout=15
+                )
+                last_resp = pr
+                if pr.status_code != 200:
+                    if api_errors < 3:
+                        print(f"   ⚠️ Props API {pr.status_code} for event {eid}: {pr.text[:100]}")
+                    api_errors += 1
+                    if api_errors > 5:
+                        print("   ⚠️ More than 5 props API errors — continuing with partial data")
+                    continue
+                data = pr.json()
+                for bk in data.get('bookmakers', []):
+                    book_key = bk.get('key', '')
+                    if book_key not in SUPPORTED_BOOKMAKERS:
+                        continue
+                    for mkt in bk.get('markets', []):
+                        mn = market_mapping.get(mkt.get('key'))
+                        if not mn:
+                            continue
+                        all_book_rows.extend(parse_multi_book_market(mkt, mn, book_key, BINARY_PROP_MARKETS))
+            time.sleep(0.5)
+
+        df_all_books = finalize_all_books_frame(all_book_rows, timestamp_est, name_fixes)
+        if last_resp is not None and hasattr(last_resp, 'headers'):
+            print(f"   📊 API quota remaining: {last_resp.headers.get('x-requests-remaining', '?')}")
+        if api_errors:
+            print(f"   ⚠️ Total props API errors: {api_errors}")
+        for book in SUPPORTED_BOOKMAKERS:
+            book_ct = 0 if df_all_books.empty else int((df_all_books['BOOK'] == book).sum())
+            if book_ct == 0:
+                print(f"   {book}: 0 props")
+        df_props, tie_notes = compute_best_book_columns(df_all_books, timestamp_est)
+        for note in tie_notes[:10]:
+            print(f"   ℹ️ Best-book tie: {note}")
+        if len(tie_notes) > 10:
+            print(f"   ℹ️ Best-book ties suppressed: {len(tie_notes) - 10} more")
+        if not df_props.empty:
+            metric_counts = df_props['METRIC'].value_counts().to_dict()
+            thin_metrics = sorted([metric for metric in set(market_mapping.values()) if metric_counts.get(metric, 0) < THIN_MARKET_THRESHOLD])
+            if thin_metrics:
+                print(f"   ⚠️ Thin/missing markets after multi-book fetch: {', '.join(thin_metrics)}")
+            print(f"✅ Fetched {len(df_props)} reference props across {df_props['METRIC'].nunique()} markets")
+            print(f"✅ All_Books_Props rows: {len(df_all_books)} across {df_all_books['BOOK'].nunique()} books")
+        else:
+            print("⚠️ No player props returned.")
+        print_best_book_summary(df_props, df_all_books)
+except Exception as e:
+    print(f"❌ Failed to fetch player props: {e}")
 
 # --- 10.6 GEMINI AI PICKS ---
 print("\n" + "=" * 60)
@@ -2176,7 +2263,7 @@ RULES:
 - Allowed prop types for this slate: {allowed_prompt_props_str}.
 - For batters, only use: H, R.
 - For pitchers, only use: P_SO, P_ER, P_BB.
-- Do NOT pick TB, HR, RBI, SB, 2B, 1B, BB, P_H, or P_OUTS — removed by grader data.
+- Any prop type NOT in the allowed list above is excluded — do not invent picks for them.
 - Do NOT pick H OVER lines above 0.5 — H OVER 1.5 is a consistent losing pick
 - Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
 - Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
@@ -2211,10 +2298,8 @@ For each pick provide:
 - confidence (SMASH, STRONG, or LEAN)
 - rationale (1 sentence, under 15 words)
 - injury_context (under 10 words)
-- venue (stadium name)
-- weather_note (under 10 words)
 OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no explanation:
-[{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":1.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy.","venue":"Rogers Centre","weather_note":"Dome"}}]"""
+[{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":1.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy."}}]"""
 
         consensus_pick_lists = []
         consensus_temps = [0.35, 0.55, 0.75]
@@ -2843,6 +2928,7 @@ SHEETS_TO_WRITE = {
     'Venue_Weather': df_weather,
     'Odds': df_odds if len(df_odds) > 0 else pd.DataFrame(),
     'DK_Player_Props': df_props if len(df_props) > 0 else pd.DataFrame(),
+    'All_Books_Props': df_all_books if len(df_all_books) > 0 else pd.DataFrame(),
     'Teams': df_teams,
     'Pitcher_Game_Logs': df_pitcher_logs if len(df_pitcher_logs) > 0 else pd.DataFrame(),
     'Tonights_Starters': df_pitcher_tonight if len(df_pitcher_tonight) > 0 else pd.DataFrame(),
@@ -2951,6 +3037,7 @@ print(f"🌤️  Venues w/ weather: {len(df_weather)}")
 print(f"🎰 Odds:             {'✅ ' + str(len(df_odds)) + ' games' if len(df_odds) > 0 else 'Skipped'}")
 if len(df_props) > 0:
     print(f"🎲 DK Props:         {len(df_props)} props across {df_props['METRIC'].nunique()} markets")
+    print(f"🏪 All Books Props:  {len(df_all_books)} rows across {df_all_books['BOOK'].nunique() if len(df_all_books) > 0 else 0} books")
 else:
     print(f"🎲 DK Props:         Skipped")
 if len(df_picks) > 0:
