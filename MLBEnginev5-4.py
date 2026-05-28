@@ -1911,6 +1911,21 @@ def generate_gemini_picks():
             return abs(odds) / (abs(odds) + 100.0)
         return None
 
+    def safe_int(val, default=0):
+        num = pd.to_numeric(val, errors='coerce')
+        return int(num) if pd.notna(num) else default
+
+    def fmt_american_odds(odds):
+        num = pd.to_numeric(odds, errors='coerce')
+        return f"{int(num):+d}" if pd.notna(num) else None
+
+    def truthy_flag(val):
+        if pd.isna(val):
+            return False
+        if isinstance(val, str):
+            return val.strip().upper() in {"1", "TRUE", "YES", "Y"}
+        return bool(val)
+
     def weather_note_for_venue(venue_name):
         wx = next((w for w in weather_rows if w.get('venue_name') == venue_name), {})
         if not wx:
@@ -2074,7 +2089,7 @@ def generate_gemini_picks():
             player_norm = p.get('_player_norm') or normalize_player_name(p.get('player_name'))
             if p.get('ROLE') == 'PITCHER':
                 ln = f"{p.get('player_name','?')} [PITCHER] ({p.get('team_abbr','?')} vs {p.get('opp_abbr_tonight','?')})"
-                if bool(p.get('STAR', False)):
+                if truthy_flag(p.get('STAR', False)):
                     ln += " | STAR"
                 ln += f" | Venue={p.get('venue_tonight','?')} | Seas: SO={p.get('Seas_SO','')} ER={p.get('Seas_ER','')} IP={p.get('Seas_IP','')} UD={p.get('Seas_UD_FP','')}"
                 ln += f" | L3: SO={p.get('L3_SO','')} ER={p.get('L3_ER','')} IP={p.get('L3_IP','')} UD={p.get('L3_UD_FP','')}"
@@ -2109,10 +2124,12 @@ def generate_gemini_picks():
                             over_odds = prop.get('OVER_ODDS')
                             under_odds = prop.get('UNDER_ODDS')
                             odds_bits = []
-                            if pd.notna(over_odds):
-                                odds_bits.append(f"O {int(over_odds):+d}")
-                            if pd.notna(under_odds):
-                                odds_bits.append(f"U {int(under_odds):+d}")
+                            over_odds_str = fmt_american_odds(over_odds)
+                            under_odds_str = fmt_american_odds(under_odds)
+                            if over_odds_str:
+                                odds_bits.append(f"O {over_odds_str}")
+                            if under_odds_str:
+                                odds_bits.append(f"U {under_odds_str}")
                             odds_str = f" ({', '.join(odds_bits)})" if odds_bits else ""
                             prop_lines.append(f"{prop.get('PROMPT_METRIC')} {prop.get('DK_LINE')}{odds_str}")
                             metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
@@ -2139,7 +2156,7 @@ def generate_gemini_picks():
                             ln += f" | Best prop signals: {'; '.join(signal_lines[:3])}"
             else:
                 ln = f"{p.get('player_name','?')} [BATTER] ({p.get('team_abbr','?')} vs {p.get('opp_abbr_tonight','?')})"
-                if bool(p.get('STAR', False)):
+                if truthy_flag(p.get('STAR', False)):
                     ln += " | STAR"
                 ln += f" | vs {p.get('opp_pitcher_name','TBD')} ({p.get('opp_pitcher_hand','?')}HP)"
                 ln += f" | Seas: H={p.get('Seas_H','')} HR={p.get('Seas_HR','')} RBI={p.get('Seas_RBI','')} TB={p.get('Seas_TB','')} R={p.get('Seas_R','')} UD={p.get('Seas_UD_FP','')}"
@@ -2164,11 +2181,11 @@ def generate_gemini_picks():
                     edge_bits.append(f"PowEdge={fmt_num(p.get('POWER_EDGE_SCORE'), 0)}")
                 if edge_bits:
                     ln += f" | Model edge: {' '.join(edge_bits)}"
-                if bool(p.get('RETURNING', False)):
-                    ln += f" | SAMPLE FLAG: RETURNING (L5 games={int(p.get('L5_GAMES_PLAYED', 0) or 0)}, last7={int(p.get('GAMES_LAST_7D', 0) or 0)})"
-                elif bool(p.get('LIMITED_SAMPLE', False)):
-                    ln += f" | SAMPLE FLAG: LIMITED_SAMPLE (L5 games={int(p.get('L5_GAMES_PLAYED', 0) or 0)})"
-                if bool(p.get('IBB_RISK', False)):
+                if truthy_flag(p.get('RETURNING', False)):
+                    ln += f" | SAMPLE FLAG: RETURNING (L5 games={safe_int(p.get('L5_GAMES_PLAYED'))}, last7={safe_int(p.get('GAMES_LAST_7D'))})"
+                elif truthy_flag(p.get('LIMITED_SAMPLE', False)):
+                    ln += f" | SAMPLE FLAG: LIMITED_SAMPLE (L5 games={safe_int(p.get('L5_GAMES_PLAYED'))})"
+                if truthy_flag(p.get('IBB_RISK', False)):
                     ln += f" | RISK FLAG: {p.get('LINEUP_PROTECTION_NOTE', 'LINEUP RISK')}"
                 opp_avg = p.get('vs_OPP_AVG', '')
                 opp_ops = p.get('vs_OPP_OPS', '')
@@ -2198,10 +2215,12 @@ def generate_gemini_picks():
                             over_odds = prop.get('OVER_ODDS')
                             under_odds = prop.get('UNDER_ODDS')
                             odds_bits = []
-                            if pd.notna(over_odds):
-                                odds_bits.append(f"O {int(over_odds):+d}")
-                            if pd.notna(under_odds):
-                                odds_bits.append(f"U {int(under_odds):+d}")
+                            over_odds_str = fmt_american_odds(over_odds)
+                            under_odds_str = fmt_american_odds(under_odds)
+                            if over_odds_str:
+                                odds_bits.append(f"O {over_odds_str}")
+                            if under_odds_str:
+                                odds_bits.append(f"U {under_odds_str}")
                             odds_str = f" ({', '.join(odds_bits)})" if odds_bits else ""
                             prop_lines.append(f"{prop.get('PROMPT_METRIC')} {prop.get('DK_LINE')}{odds_str}")
                             metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
@@ -2213,7 +2232,7 @@ def generate_gemini_picks():
                                     hr = (vals > line_val).mean()
                                     ip = implied_prob_american(over_odds)
                                     edge = (hr - ip) * 100 if ip is not None else None
-                                    if bool(p.get('RETURNING', False)) and edge is not None:
+                                    if truthy_flag(p.get('RETURNING', False)) and edge is not None:
                                         edge *= 0.5
                                     sig = f"{metric} {line_val:g} HR={hr*100:.0f}%"
                                     if edge is not None:
