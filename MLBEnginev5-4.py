@@ -2274,7 +2274,8 @@ RULES:
 - CRITICAL: ONLY pick players from the PLAYER DATA list above.
 - Return EXACTLY 20 ranked candidate picks as a JSON array. The engine will keep the top 14 valid picks after sportsbook validation.
 - Confidence tiers: SMASH (top 3-4 highest conviction only), STRONG (next 4-5), LEAN (rest).
-- STRONG should require multiple confirming signals: positive EV, strong hit rate, and supportive matchup/split context. If only one signal is strong, use LEAN.
+- STRONG requires ALL of: (a) season hit rate >55% on the prop type for this player, (b) EV% >5%, (c) supportive matchup or split context (vs pitcher handedness, opponent rank, park factor, weather). Any pick missing even one of these is LEAN, not STRONG.
+- LEAN is the default tier when only 1-2 signals are positive. Use LEAN liberally — it should be the most common tier in the slate.
 - Players flagged RETURNING have depressed lines due to injury/absence. Their season averages are NOT reliable short-term predictors. Treat with extreme caution — do NOT SMASH these players.
 - Players flagged with LINEUP RISK / weak lineup protection may be pitched around late. Lower confidence on H/R props when that warning appears unless the edge is overwhelming.
 - STAR players are the top 20 by season UD fantasy points in tonight's valid prop pool.
@@ -2289,6 +2290,7 @@ RULES:
 - Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
 - Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
 - DIVERSIFY prop types where the sportsbook offers enough valid markets.
+- UNDER props are profitable in MLB (observed ~59% hit rate, n=145). Evaluate UNDER opportunities on overlined batters and pitchers when L5/L10 form and matchup support it. Soft target: 3-5 UNDERs per 14-pick slate, no LEAN UNDERs.
 - On H/P_SO-heavy slates, you may return up to 10 H props and up to 4 pitcher props.
 - P_SO is the preferred pitcher market. Include at least 1 pitcher strikeouts (P_SO) pick per slate when a strong pitcher matchup exists.
 - H props have a 53% hit rate. Prioritize H OVER 0.5 as the core of every slate.
