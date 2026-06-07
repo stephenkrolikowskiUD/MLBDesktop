@@ -471,6 +471,11 @@ const GAME_ENTRY_MIN_LEGS = 1;
 const GAME_ENTRY_MAX_LEGS = 8;
 const GAME_ENTRY_DEFAULT_LEGS = 5;
 const GAME_ENTRY_MAX_LEGS_PER_PLAYER = 3;
+const SOFT_LINE_CENTS_THRESHOLD = 5;
+const SOFT_LINE_PP_THRESHOLD = 3.0;
+const SOFT_LINE_MIN_AGREEMENT = 2;
+const SOFT_LINE_MIN_BOOKS = 2;
+const SOFT_LINE_BOOKS = ['fanduel', 'betmgm', 'espnbet'];
 const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","UD_FP","H+R+RBI"];
 const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
@@ -478,7 +483,7 @@ const MLB_API="https://statsapi.mlb.com/api/v1";
 let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
-  picks:[],props:[],
+  picks:[],props:[],allBooksProps:[],
   pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
   mode:"batter",
   player:"",metric:"H",line:"",activeTab:"dashboard",oppFilter:"",
@@ -884,6 +889,9 @@ function impliedProb(odds){
   const o=parseInt(odds);if(isNaN(o))return null;
   return o<0?Math.abs(o)/(Math.abs(o)+100):100/(o+100);
 }
+function computeMedian(arr){const vals=(arr||[]).map(Number).filter(Number.isFinite).sort((a,b)=>a-b);if(!vals.length)return null;const mid=Math.floor(vals.length/2);return vals.length%2?vals[mid]:(vals[mid-1]+vals[mid])/2}
+function impliedToAmerican(p){const prob=Number(p);if(!Number.isFinite(prob)||prob<=0||prob>=1)return null;return prob>=0.5?Math.round(-100*prob/(1-prob)):Math.round(100*(1-prob)/prob)}
+function americanCentsDiff(odds1,odds2){const a=parseInt(odds1),b=parseInt(odds2);if(!Number.isFinite(a)||!Number.isFinite(b))return null;return Math.abs(a-b)}
 
 function getHitRate(name,metric,line,isP){
   const logs=getPlayerLogs(name,isP);
@@ -1698,7 +1706,13 @@ function getBestBookForLean(prop,lean){if(!prop)return null;const side=String(le
 function renderBestBookPill(prop,lean){const b=getBestBookForLean(prop,lean);if(!b)return "";const book=formatBookName(b.book);const oddsText=typeof fmtOdds==="function"?fmtOdds(b.odds):String(b.odds);const showDelta=b.delta!==null&&Math.abs(b.delta)>0.05&&!b.isDK;const deltaText=showDelta?` <b>${b.delta>0?"+":""}${b.delta.toFixed(1)}pp</b>`:"";const star=showDelta&&b.delta>=3?" ⭐":"";const bg=b.isDK?"rgba(148,163,184,.12)":`${MULTI_BOOK_ACCENT}24`;const border=b.isDK?"rgba(148,163,184,.25)":`${MULTI_BOOK_ACCENT}88`;const color=b.isDK?"#9ca3af":MULTI_BOOK_ACCENT;return `<span class="best-book-pill" title="Best ${b.side}: ${book} ${oddsText}${showDelta?` (${b.delta.toFixed(1)}pp cheaper than reference)`:""}" style="display:inline-flex;align-items:center;gap:4px;border:1px solid ${border};background:${bg};color:${color};border-radius:999px;padding:2px 7px;font-size:10px;font-weight:800;white-space:nowrap">${b.side[0]} ${book} ${oddsText}${deltaText}${star}</span>`}
 function renderAltLineFlag(prop){if(!mbBool(mbField(prop,'ALT_LINE_AVAILABLE')))return "";const books=mbField(prop,'ALT_LINE_BOOKS')||"available";return `<span class="alt-line-flag" title="Alt lines: ${esc(String(books))}" style="display:inline-flex;align-items:center;border:1px solid #f59e0b66;background:#f59e0b18;color:#fbbf24;border-radius:999px;padding:2px 7px;font-size:10px;font-weight:800;white-space:nowrap">🔀 alt</span>`}
 function renderReferenceFootnote(prop){const ref=mbField(prop,'REFERENCE_BOOK');if(!ref||String(ref).toLowerCase()==='draftkings')return "";return `<span style="font-size:10px;color:#fbbf24">DK n/a — using ${formatBookName(ref)} as reference</span>`}
-function renderPropBestBookBlock(prop){if(!prop)return "";const over=renderBestBookPill(prop,'OVER'),under=renderBestBookPill(prop,'UNDER'),alt=renderAltLineFlag(prop),ref=renderReferenceFootnote(prop);const top=[over,under,alt].filter(Boolean).join(" ");if(!top&&!ref)return "";return `<div class="best-book-block" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center">${top}${ref?`<div style="flex-basis:100%">${ref}</div>`:""}</div>`}
+function softLinePropKey(prop){return `${normalizePlayerName(mbField(prop,'PLAYER_NAME'))}|${mbMetric(mbField(prop,'METRIC'))}|${String(mbField(prop,'DK_LINE')).trim()}`}
+function softLineAllBooksByKey(){return getMemo('softLineAllBooks',()=>{const map=new Map();(st.allBooksProps||[]).forEach(r=>{const key=`${normalizePlayerName(mbField(r,'PLAYER_NAME'))}|${mbMetric(mbField(r,'METRIC'))}`;if(!map.has(key))map.set(key,[]);map.get(key).push(r)});return map})}
+function detectSoftLine(dkOdds,otherRows,side){const dkImplied=impliedProb(dkOdds);if(dkImplied===null)return null;const rows=(otherRows||[]).map(r=>({book:String(mbField(r,'BOOK')).toLowerCase(),odds:mbField(r,`${side}_ODDS`)})).filter(r=>r.odds!==''&&impliedProb(r.odds)!==null);if(rows.length<SOFT_LINE_MIN_BOOKS)return null;const implieds=rows.map(r=>impliedProb(r.odds));const median=computeMedian(implieds);const consensusOdds=impliedToAmerican(median);if(median===null||consensusOdds===null)return null;const ppSpread=(median-dkImplied)*100;const direction=Math.sign(ppSpread);if(direction<=0)return null;const centsSpread=americanCentsDiff(dkOdds,consensusOdds);const sameDirectionCount=rows.filter(r=>Math.sign(impliedProb(r.odds)-dkImplied)===direction).length;const flagged=Math.abs(centsSpread||0)>=SOFT_LINE_CENTS_THRESHOLD&&ppSpread>=SOFT_LINE_PP_THRESHOLD&&sameDirectionCount>=SOFT_LINE_MIN_AGREEMENT;return {side,flagged,dkOdds,dkImplied,consensusOdds,consensusImplied:median,ppSpread,centsSpread,sameDirectionCount,totalOtherBooks:rows.length,books:rows.map(r=>({...r,implied:impliedProb(r.odds)}))}}
+function evaluateSoftLineForProp(prop){if(!prop)return null;const book=String(mbField(prop,'BOOK')||'draftkings').toLowerCase();const ref=String(mbField(prop,'REFERENCE_BOOK')||'draftkings').toLowerCase();if(book&&book!=='draftkings')return null;if(ref&&ref!=='draftkings')return null;const baseKey=`${normalizePlayerName(mbField(prop,'PLAYER_NAME'))}|${mbMetric(mbField(prop,'METRIC'))}`;const line=String(mbField(prop,'DK_LINE')).trim();let rows=(softLineAllBooksByKey().get(baseKey)||[]).filter(r=>SOFT_LINE_BOOKS.includes(String(mbField(r,'BOOK')).toLowerCase())&&impliedProb(mbField(r,'OVER_ODDS'))!==null&&impliedProb(mbField(r,'UNDER_ODDS'))!==null);const sameLine=rows.filter(r=>String(mbField(r,'LINE')).trim()===line);if(sameLine.length>=SOFT_LINE_MIN_BOOKS)rows=sameLine;const over=detectSoftLine(mbField(prop,'OVER_ODDS'),rows,'OVER');const under=detectSoftLine(mbField(prop,'UNDER_ODDS'),rows,'UNDER');if(!over&&!under)return null;return {key:softLinePropKey(prop),over:over&&over.flagged?over:null,under:under&&under.flagged?under:null}}
+function renderSoftLineTooltip(result){if(!result)return "";const sides=[result.over,result.under].filter(Boolean);if(!sides.length)return "";return `<div onclick="event.stopPropagation()" style="position:relative;flex-basis:100%;max-width:420px;margin-top:6px;background:#111827;border:1px solid #fbbf2466;border-radius:8px;padding:9px;color:#e5e7eb;box-shadow:0 8px 24px #0008;z-index:20">${sides.map(r=>`<div style="margin-bottom:${sides.length>1?'10px':'0'}"><div style="color:#fbbf24;font-size:11px;font-weight:900;margin-bottom:6px">🚨 Soft DK line — ${r.side}</div><div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:11px"><span style="color:#9ca3af">DK:</span><span>${fmtOdds(r.dkOdds)} (${(r.dkImplied*100).toFixed(1)}%)</span><span style="color:#9ca3af">Consensus:</span><span>${fmtOdds(r.consensusOdds)} (${(r.consensusImplied*100).toFixed(1)}%)</span><span style="color:#9ca3af">Spread:</span><span>+${Math.round(r.centsSpread)} cents | ${r.ppSpread>0?'+':''}${r.ppSpread.toFixed(1)}pp</span></div><div style="font-size:10px;color:#d1d5db;margin-top:6px">${r.sameDirectionCount} of ${r.totalOtherBooks} other books agree DK is too low.</div><div style="font-size:10px;color:#9ca3af;margin-top:6px">${r.books.map(b=>`${formatBookName(b.book)}: ${fmtOdds(b.odds)} (${(b.implied*100).toFixed(1)}%)`).join(' · ')}</div></div>`).join('')}</div>`}
+function renderSoftLinePill(prop){const result=evaluateSoftLineForProp(prop);if(!result||(!result.over&&!result.under))return "";const side=result.over&&result.under?'BOTH':result.over?'OVER':'UNDER';const open=window.__softLineOpen===result.key;return `<span onclick="event.stopPropagation();window.__softLineOpen=${open?'null':JSON.stringify(result.key)};render()" class="soft-line-pill" title="Tap for soft DK math" style="display:inline-flex;align-items:center;border:1px solid #fbbf2477;background:#f59e0b22;color:#fbbf24;border-radius:999px;padding:2px 7px;font-size:10px;font-weight:900;white-space:nowrap;cursor:pointer">🚨 Soft DK (${side})</span>${open?renderSoftLineTooltip(result):""}`}
+function renderPropBestBookBlock(prop){if(!prop)return "";const over=renderBestBookPill(prop,'OVER'),under=renderBestBookPill(prop,'UNDER'),alt=renderAltLineFlag(prop),soft=renderSoftLinePill(prop),ref=renderReferenceFootnote(prop);const top=[over,under,alt,soft].filter(Boolean).join(" ");if(!top&&!ref)return "";return `<div class="best-book-block" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center">${top}${ref?`<div style="flex-basis:100%">${ref}</div>`:""}</div>`}
 function renderPropBestBookTableRow(prop,colspan=7){const block=renderPropBestBookBlock(prop);return block?`<tr class="best-book-row"><td colspan="${colspan}" style="text-align:left;padding:0 8px 8px;border-top:0">${block}</td></tr>`:""}
 function renderBestBookLine(prop,lean){const b=getBestBookForLean(prop,lean);if(!b)return "";const book=formatBookName(b.book);const oddsText=typeof fmtOdds==="function"?fmtOdds(b.odds):String(b.odds);const delta=b.delta!==null&&!b.isDK&&Math.abs(b.delta)>0.05?` <span style="font-weight:800">(${b.delta>0?"+":""}${b.delta.toFixed(1)}pp vs DK${b.delta>=3?" ⭐":""})</span>`:"";const color=b.isDK?"#9ca3af":MULTI_BOOK_ACCENT;return `<div class="best-book-line" style="margin-top:5px;font-size:10px;color:${color};font-weight:700">🏪 Best: ${book} @ ${oddsText}${delta}</div>`}
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
@@ -2367,10 +2381,11 @@ function loadAllData(){
   fetchSheet("Pitcher_Home_Away").catch(()=>[]),
   fetchSheet("Daily_Picks").catch(()=>[]),
   fetchSheet("DK_Player_Props").catch(()=>[]),
+  fetchSheet("All_Books_Props").catch(()=>[]),
   fetchSheet("Batter_vs_SP").catch(()=>[]),
   fetchSheet("Pick_Performance").catch(()=>[]),
   fetchSheet("Pick_Performance_Snapshots").catch(()=>[])
-]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,vsSP,pickPerformance,pickPerformanceSnaps])=>{
+]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,allBooksProps,vsSP,pickPerformance,pickPerformanceSnaps])=>{
   resetDerived();
   st.tonight=normalizeKeys(cleanRows(tonight));
   st.gameLogs=normalizeKeys(cleanRows(logs));
@@ -2391,6 +2406,7 @@ function loadAllData(){
     RUN_NUMBER: toNum(p.RUN_NUMBER||p.run_number||0)
 	  }));
 	  st.props=normalizeKeys(cleanRows(props));
+	  st.allBooksProps=normalizeKeys(cleanRows(allBooksProps||[]));
 	  st.vsSP=normalizeKeys(cleanRows(vsSP));
 	  st.pickPerformance=normalizeKeys(cleanRows(pickPerformance||[]));
 	  st.pickPerformanceSnaps=normalizeKeys(cleanRows(pickPerformanceSnaps||[]));
@@ -2401,12 +2417,14 @@ function loadAllData(){
 	    Daily_Picks: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
 	                  'confidence', 'rationale', 'HIT'],
 	    DK_Player_Props: ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS'],
+	    All_Books_Props: ['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS'],
 	    Tonights_Pitchers: ['team_abbr', 'opp_pitcher_name', 'opp_pitcher_hand'],
 	  };
 	  const _schemaSources = {
 	    Tonights_Batters: st.tonight,
 	    Daily_Picks: st.picks,
 	    DK_Player_Props: st.props,
+	    All_Books_Props: st.allBooksProps,
 	    Tonights_Pitchers: st.pitchers,
 	  };
 	  const _schemaIssues = [];
