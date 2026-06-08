@@ -9,6 +9,7 @@ import re
 import unicodedata
 import os
 import atexit
+import sys
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pytz
@@ -45,6 +46,52 @@ SHEET_NAME = 'MLB_Dashboard_Data'
 SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+SPORT_LABEL = "MLB"
+
+# --- Odds API quota guard ---
+QUOTA_FLOOR_GLOBAL = 2000
+QUOTA_FLOOR_THIS_SPORT = {
+    "MLB": 1000,
+    "NBA": 800,
+    "NHL": 600,
+    "WNBA": 500,
+    "WC": 600,
+}[SPORT_LABEL]
+CACHE_DIR = os.path.expanduser("~/.dfs_engines_cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+CACHE_TTL_SECONDS = {
+    "MLB": 900,
+    "NBA": 900,
+    "NHL": 900,
+    "WNBA": 1800,
+    "WC": 1800,
+}[SPORT_LABEL]
+
+
+def check_quota_or_abort(resp, context: str) -> None:
+    """Read x-requests-remaining from response and abort run if below floor."""
+    try:
+        remaining = int(resp.headers.get('x-requests-remaining', '99999'))
+    except (AttributeError, TypeError, ValueError):
+        return
+    floor = max(QUOTA_FLOOR_GLOBAL, QUOTA_FLOOR_THIS_SPORT)
+    if remaining < floor:
+        print(f"🛑 QUOTA GUARD: {remaining} remaining < floor {floor} ({context}). Aborting run.")
+        sys.exit(0)
+
+
+def cached_odds_fetch(cache_key: str, fetch_fn):
+    """Return cached payload if fresh, else fetch and cache."""
+    path = os.path.join(CACHE_DIR, f"{SPORT_LABEL}_{cache_key}.json")
+    if os.path.exists(path) and (time.time() - os.path.getmtime(path)) < CACHE_TTL_SECONDS:
+        age = int(time.time() - os.path.getmtime(path))
+        with open(path) as f:
+            print(f"💾 Cache hit: {cache_key} (age {age}s)")
+            return json.load(f)
+    data = fetch_fn()
+    with open(path, 'w') as f:
+        json.dump(data, f)
+    return data
 
 SHEET_SCHEMAS = {
     'Tonights_Batters': {
@@ -1460,18 +1507,21 @@ TEAM_NAME_TO_ABBR = {
 }
 
 def fetch_odds(api_key):
-    url = f"https://api.the-odds-api.com/v4/sports/{ODDS_SPORT}/odds/"
-    params = {'apiKey': api_key, 'regions': ODDS_REGIONS, 'markets': ODDS_MARKETS, 'oddsFormat': 'american'}
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        print(f"   API status: {resp.status_code}")
-        print(f"   Quota: {resp.headers.get('x-requests-remaining', '?')} remaining / {resp.headers.get('x-requests-used', '?')} used")
-        if resp.status_code != 200:
+    def _fetch():
+        url = f"https://api.the-odds-api.com/v4/sports/{ODDS_SPORT}/odds/"
+        params = {'apiKey': api_key, 'regions': ODDS_REGIONS, 'markets': ODDS_MARKETS, 'oddsFormat': 'american'}
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            check_quota_or_abort(resp, "MLB game odds")
+            print(f"   API status: {resp.status_code}")
+            print(f"   Quota: {resp.headers.get('x-requests-remaining', '?')} remaining / {resp.headers.get('x-requests-used', '?')} used")
+            if resp.status_code != 200:
+                return []
+            return resp.json()
+        except Exception as e:
+            print(f"   ❌ Odds fetch failed: {e}")
             return []
-        return resp.json()
-    except Exception as e:
-        print(f"   ❌ Odds fetch failed: {e}")
-        return []
+    return cached_odds_fetch("game_odds", _fetch)
 
 def extract_odds(events, preferred_book='draftkings', fallback_book='fanduel'):
     rows = []
@@ -1797,6 +1847,7 @@ df_props = pd.DataFrame(columns=DK_PLAYER_PROPS_COLUMNS)
 df_all_books = pd.DataFrame(columns=ALL_BOOKS_PROPS_COLUMNS)
 try:
     ev_resp = requests.get(f'https://api.the-odds-api.com/v4/sports/{SPORT}/events', params={'apiKey': ODDS_API_KEY}, timeout=15)
+    check_quota_or_abort(ev_resp, "MLB events")
     if ev_resp.status_code != 200:
         print(f"❌ Failed to fetch events: {ev_resp.status_code} — {ev_resp.text[:200]}")
     else:
@@ -1807,6 +1858,9 @@ try:
             if e.get('home_team', '').lower() in tonight_team_names
             or e.get('away_team', '').lower() in tonight_team_names
         ]
+        if not tonight_ids:
+            print(f"⏭️  No {SPORT_LABEL} games scheduled — skipping props pull.")
+            sys.exit(0)
         print(f"🏟️ Found {len(tonight_ids)} events — fetching props from {len(SUPPORTED_BOOKMAKERS)} books...")
 
         all_book_rows = []
@@ -1826,6 +1880,7 @@ try:
                     },
                     timeout=15
                 )
+                check_quota_or_abort(pr, f"MLB event props {eid}")
                 last_resp = pr
                 if pr.status_code != 200:
                     if api_errors < 3:
