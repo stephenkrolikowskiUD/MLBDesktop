@@ -883,6 +883,47 @@ function getDingerBoard(){
   });
 }
 
+function getKsBoard(){
+  return getMemo("ksBoard",()=>{
+  const rows=[];
+  for(const p of st.pTonight){
+    const name=p.player_name;if(!name)continue;
+    const pLogs=getPlayerLogs(name,true);
+    if(!pLogs.length)continue;
+    const most=pLogs[0]||{};
+    const seasSO=pLogs.reduce((s,g)=>s+toNum(g.SO),0);
+    const totalOuts=pLogs.reduce((s,g)=>s+toNum(g.IP_OUTS),0);
+    if(totalOuts===0)continue;
+    const ipEquiv=totalOuts/3;
+    const k9=ipEquiv>0?(seasSO*9)/ipEquiv:0;
+    const gamesStarted=pLogs.length;
+    const soPerStart=gamesStarted>0?seasSO/gamesStarted:0;
+    const l3SO=toNum(most.L3_SO);
+    const l7SO=toNum(most.L7_SO);
+    const seasSOavg=toNum(most.Seas_SO);
+    const soProp=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)==="P_SO");
+    const dkLine=soProp?soProp.DK_LINE:null;
+    const overOdds=soProp?parseInt(soProp.OVER_ODDS)||null:null;
+    let score=0;
+    score+=k9*3;
+    score+=soPerStart*4;
+    score+=l3SO*2.5;
+    score+=l7SO*1.5;
+    if(dkLine&&soPerStart>parseFloat(dkLine))score+=8;
+    if(overOdds&&overOdds<0)score+=5;
+    rows.push({
+      name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
+      venue:p.venue_tonight||"",hand:p.throws||p.player_hand||"?",
+      seasSO,totalOuts,ipEquiv,k9,soPerStart,gamesStarted,
+      l3SO,l7SO,seasSOavg,
+      dkLine,overOdds,score
+    });
+  }
+  rows.sort((a,b)=>b.score-a.score);
+  return rows.slice(0,15);
+  });
+}
+
 // ═══ +EV ENGINE ═══
 function impliedProb(odds){
   if(!odds&&odds!==0)return null;
@@ -1976,6 +2017,33 @@ function render(){
         picksHTML+=`</div></div>`;
       }
     }
+  }else if(st.picksView==="ks"){
+    const kb=getKsBoard();
+    if(!kb.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No Ks data available. Run the engine first.</div>`}
+    else{
+      picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">🎯 Tonight's K Board</div></div>
+      <div class="dinger-desc">Ranked by K/9, recent strikeouts, and DK odds. Top 3 are 🔥.</div>`;
+      picksHTML+=`<div class="cards-grid">`;
+      picksHTML+=kb.map((d,i)=>{
+        const isTop=i<3;
+        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
+        const k9Str=d.k9.toFixed(1);
+        const locked=getLockInfo(d.name,true).started;
+        return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','P_SO','${d.dkLine||""}')">
+          <div class="dinger-left">
+            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"P_SO",d.dkLine||"")}${lockBadge(d.name,true)}</span></div>
+            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}</div>
+            <div class="dinger-meta">${d.seasSO} K in ${d.gamesStarted} GS · L7 avg: ${d.l7SO.toFixed(1)} · L3: ${d.l3SO.toFixed(1)}</div>
+          </div>
+          <div class="dinger-right">
+            <div class="dinger-rate">${k9Str}</div>
+            <div class="dinger-sub">${locked?"started":"K/9 · "+d.soPerStart.toFixed(1)+"/GS"}</div>
+            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
+          </div>
+        </div>`;
+      }).join("");
+      picksHTML+=`</div>`;
+    }
   }else if(st.picksView==="streaks"){
     const allStreaks=getStreaks();
     const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
@@ -2271,6 +2339,7 @@ function render(){
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">🔥 Streaks</div>
       <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">🧊 Due</div>
       <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">💣 Dingers</div>
+      <div class="sub-tab ${st.picksView==="ks"?"active":""}" onclick="switchPicksView('ks')">🎯 Ks</div>
       <div class="sub-tab ${st.picksView==="parlays"?"active":""}" onclick="switchPicksView('parlays')">🎯 Parlays</div>
       <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">🎲 Props</div>
     </div>
