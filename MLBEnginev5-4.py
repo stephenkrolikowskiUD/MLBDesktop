@@ -74,9 +74,12 @@ def check_quota_or_abort(resp, context: str) -> None:
         remaining = int(resp.headers.get('x-requests-remaining', '99999'))
     except (AttributeError, TypeError, ValueError):
         return
-    floor = max(QUOTA_FLOOR_GLOBAL, QUOTA_FLOOR_THIS_SPORT)
+    floor = QUOTA_FLOOR_THIS_SPORT
     if remaining < floor:
-        print(f"🛑 QUOTA GUARD: {remaining} remaining < floor {floor} ({context}). Aborting run.")
+        print(
+            f"🛑 QUOTA GUARD: {remaining} remaining < {SPORT_LABEL} floor {floor} "
+            f"({context}). Aborting run."
+        )
         sys.exit(0)
 
 
