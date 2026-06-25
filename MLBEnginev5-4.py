@@ -52,13 +52,14 @@ _last_odds_credits_remaining = None
 
 # --- Odds API quota guard ---
 QUOTA_FLOOR_GLOBAL = 2000
-QUOTA_FLOOR_THIS_SPORT = {
-    "MLB": 1000,
+DEFAULT_QUOTA_FLOOR_THIS_SPORT = {
+    "MLB": 500,
     "NBA": 800,
     "NHL": 600,
     "WNBA": 500,
     "WC": 600,
 }[SPORT_LABEL]
+QUOTA_FLOOR_THIS_SPORT = int(os.getenv(f"{SPORT_LABEL}_ODDS_CREDIT_FLOOR", DEFAULT_QUOTA_FLOOR_THIS_SPORT))
 CACHE_DIR = os.path.expanduser("~/.dfs_engines_cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_TTL_SECONDS = {
@@ -70,18 +71,26 @@ CACHE_TTL_SECONDS = {
 }[SPORT_LABEL]
 
 
-def check_quota_or_abort(resp, context: str) -> None:
-    """Read x-requests-remaining from response and abort run if below floor."""
+def record_odds_quota(resp) -> int | None:
+    """Capture x-requests-remaining for stdout and Run_Log without enforcing a floor."""
     global _last_odds_credits_remaining
     try:
         remaining = int(resp.headers.get('x-requests-remaining', '99999'))
     except (AttributeError, TypeError, ValueError):
-        return
+        return None
     _last_odds_credits_remaining = remaining
     try:
         runlog.odds_credits_remaining = remaining
     except Exception:
         pass
+    return remaining
+
+
+def check_quota_or_abort(resp, context: str) -> None:
+    """Read x-requests-remaining from paid Odds API responses and abort if below floor."""
+    remaining = record_odds_quota(resp)
+    if remaining is None:
+        return
     floor = QUOTA_FLOOR_THIS_SPORT
     if remaining < floor:
         print(
@@ -1529,7 +1538,8 @@ def fetch_today_event_count(api_key, sport_key='baseball_mlb', today_iso=None):
             params={'apiKey': api_key},
             timeout=15,
         )
-        check_quota_or_abort(resp, "MLB events pre-check")
+        remaining = record_odds_quota(resp)
+        print(f"   Free events pre-check quota header: {remaining if remaining is not None else '?'} remaining")
         if resp.status_code != 200:
             print(f"   ⚠️ Events pre-check failed: {resp.status_code} — {resp.text[:160]}")
             return None
