@@ -5,9 +5,11 @@ on:
   schedule:
     # REDUCED FROM 5x/day to 3x/day on 2026-05-27 for end-of-month quota.
     # Revisit after 6/1 reset — restore the 14:00 and 20:00 runs if quota allows.
-    - cron: "45 5 * * *"
-    - cron: "0 18 * * *"
-    - cron: "0 22 * * *"
+    # - cron: "45 5 * * *"
+    # - cron: "0 18 * * *"
+    # - cron: "0 22 * * *"
+    # CREDIT-CONSERVATION 2026-06-24 → 2026-07-01
+    - cron: "30 21 * * *"
 
 jobs:
   run-mlb-engine:
