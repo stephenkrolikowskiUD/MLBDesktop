@@ -5,11 +5,9 @@ on:
   schedule:
     # REDUCED FROM 5x/day to 3x/day on 2026-05-27 for end-of-month quota.
     # Revisit after 6/1 reset — restore the 14:00 and 20:00 runs if quota allows.
-    # - cron: "45 5 * * *"
-    # - cron: "0 18 * * *"
-    # - cron: "0 22 * * *"
-    # CREDIT-CONSERVATION 2026-06-24 → 2026-07-01
-    - cron: "30 21 * * *"
+    - cron: "45 5 * * *"
+    - cron: "0 18 * * *"
+    - cron: "0 22 * * *"
 
 jobs:
   run-mlb-engine:
@@ -20,6 +18,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
       GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      ENABLE_FANDUEL_FALLBACK: "true"
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
