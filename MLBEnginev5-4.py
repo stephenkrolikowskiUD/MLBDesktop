@@ -53,7 +53,7 @@ _last_odds_credits_remaining = None
 # --- Odds API quota guard ---
 QUOTA_FLOOR_GLOBAL = 2000
 DEFAULT_QUOTA_FLOOR_THIS_SPORT = {
-    "MLB": 500,
+    "MLB": 1000,
     "NBA": 800,
     "NHL": 600,
     "WNBA": 500,
