@@ -558,14 +558,14 @@ function ensureDerived(){
     const key=normalizePlayerName(row?.player_name);
     if(key&&!derived.pTonightByName.has(key))derived.pTonightByName.set(key,row);
   }
-  const allDates=[...new Set((st.picks||[]).map(p=>normalizeDate(p.DATE||p.date)).filter(Boolean))].sort();
+  const allDates=[...new Set((st.picks||[]).map(p=>normalizeDate(rowField(p,"DATE"))).filter(Boolean))].sort();
   derived.latestPickDate=allDates.length?allDates[allDates.length-1]:"";
-  const sameDatePicks=(st.picks||[]).filter(p=>normalizeDate(p.DATE||p.date)===derived.latestPickDate);
-  derived.latestPickRun=sameDatePicks.length?Math.max(...sameDatePicks.map(p=>toNum(p.RUN_NUMBER||p.run_number||0))):0;
+  const sameDatePicks=(st.picks||[]).filter(p=>normalizeDate(rowField(p,"DATE"))===derived.latestPickDate);
+  derived.latestPickRun=sameDatePicks.length?Math.max(...sameDatePicks.map(p=>toNum(rowField(p,"RUN_NUMBER")))):0;
   for(const p of st.picks||[]){
     const key=normalizePlayerName(p?.player);
     if(!key)continue;
-    if(normalizeDate(p.DATE||p.date)===derived.latestPickDate && toNum(p.RUN_NUMBER||p.run_number||0)===derived.latestPickRun && !derived.picksByNameLatest.has(key)){
+    if(normalizeDate(rowField(p,"DATE"))===derived.latestPickDate && toNum(rowField(p,"RUN_NUMBER"))===derived.latestPickRun && !derived.picksByNameLatest.has(key)){
       derived.picksByNameLatest.set(key,p);
     }
   }
@@ -617,6 +617,34 @@ function normalizeKeys(rows){
     }
     return clean;
   });
+}
+
+function canonicalFieldKey(key){
+  return String(key||"")
+    .replace(/^\uFEFF/,'')
+    .replace(/[\u200B-\u200D\uFEFF]/g,'')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g,'$1_$2')
+    .replace(/[^A-Za-z0-9]+/g,'_')
+    .replace(/^_+|_+$/g,'')
+    .toLowerCase();
+}
+
+function rowField(row,...names){
+  if(!row)return "";
+  for(const name of names){
+    if(Object.prototype.hasOwnProperty.call(row,name))return row[name];
+  }
+  const lookup={};
+  for(const [key,value] of Object.entries(row)){
+    const ck=canonicalFieldKey(key);
+    if(ck&&!Object.prototype.hasOwnProperty.call(lookup,ck))lookup[ck]=value;
+  }
+  for(const name of names){
+    const ck=canonicalFieldKey(name);
+    if(Object.prototype.hasOwnProperty.call(lookup,ck))return lookup[ck];
+  }
+  return "";
 }
 
 function fetchSheet(name,attempt=1){
@@ -676,18 +704,18 @@ function getScheduleRow(team,opp){
   const o=String(opp||"").trim().toUpperCase();
   if(!t||!o||!Array.isArray(st.schedule))return null;
   return st.schedule.find(r=>{
-    const home=String(r.home_abbr||r.HOME_ABBR||"").trim().toUpperCase();
-    const away=String(r.away_abbr||r.AWAY_ABBR||"").trim().toUpperCase();
+    const home=String(rowField(r,"home_abbr")).trim().toUpperCase();
+    const away=String(rowField(r,"away_abbr")).trim().toUpperCase();
     return (home===t&&away===o)||(home===o&&away===t);
   })||null;
 }
 function getScheduleStartMs(team,opp){
   const row=getScheduleRow(team,opp)||{};
-  return parseStartMs(row.game_time||row.GAME_TIME||row.commence_time||row.COMMENCE_TIME||row.start_time||row.START_TIME);
+  return parseStartMs(rowField(row,"game_time","commence_time","start_time"));
 }
 function getLockInfo(name,isP){
   const row=getTonightPlayerRow(name,!!isP)||{};
-  const startMs=getScheduleStartMs(row.team_abbr||row.TEAM_ABBR,row.opp_abbr_tonight||row.TONIGHT_OPP||row.opp_abbr||row.OPP_ABBR);
+  const startMs=getScheduleStartMs(rowField(row,"team_abbr"),rowField(row,"opp_abbr_tonight","tonight_opp","opp_abbr"));
   return{started:!!(startMs&&Date.now()>=startMs),startMs,row};
 }
 function lockBadge(name,isP){
@@ -697,10 +725,10 @@ function isTruthyFlag(v){return v===true||v===1||String(v||"").trim().toUpperCas
 function getSampleFlags(name,isP){
   const row=getTonightPlayerRow(name,!!isP)||{};
   return{
-    returning:isTruthyFlag(row.RETURNING??row.returning),
-    limited:isTruthyFlag(row.LIMITED_SAMPLE??row.limited_sample??row.limitedSample),
-    l5Games:toNum(row.L5_GAMES_PLAYED??row.l5_games_played),
-    gamesLast7d:toNum(row.GAMES_LAST_7D??row.games_last_7d)
+    returning:isTruthyFlag(rowField(row,"RETURNING")),
+    limited:isTruthyFlag(rowField(row,"LIMITED_SAMPLE")),
+    l5Games:toNum(rowField(row,"L5_GAMES_PLAYED")),
+    gamesLast7d:toNum(rowField(row,"GAMES_LAST_7D"))
   };
 }
 function riskBadges(name,isP,{showLimited=true}={}){
@@ -726,9 +754,9 @@ function normalizeConfidence(conf){
 }
 function aiAgreesWithBet(aiPick,betLikeObject){
   if(!aiPick||!betLikeObject)return false;
-  return normalizePlayerName(aiPick.player||aiPick.PLAYER||aiPick.Player||aiPick.PLAYER_NAME)===normalizePlayerName(betLikeObject.name||betLikeObject.player)
-    && normalizePropMetric(aiPick.prop_type)===normalizePropMetric(betLikeObject.metric||betLikeObject.prop_type)
-    && normalizeLeanText(aiPick.lean)===normalizeLeanText(betLikeObject.lean);
+  return normalizePlayerName(rowField(aiPick,"player","PLAYER_NAME"))===normalizePlayerName(rowField(betLikeObject,"name","player","PLAYER_NAME"))
+    && normalizePropMetric(rowField(aiPick,"prop_type","METRIC"))===normalizePropMetric(rowField(betLikeObject,"metric","prop_type","METRIC"))
+    && normalizeLeanText(rowField(aiPick,"lean"))===normalizeLeanText(rowField(betLikeObject,"lean"));
 }
 function easternTodayISO(){return new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'})}
 function getPickGuard(latestDate,picksCount){
@@ -773,7 +801,7 @@ function hasLogs(name,isP){return getPlayerLogs(name,isP).length>0}
 function getProps(name){if(!name||!st.props.length)return[];ensureDerived();return derived.propsByName.get(normalizePlayerName(name))||[]}
 function getLatestPickDate(){ensureDerived();return derived.latestPickDate}
 function getLatestPickRun(){ensureDerived();return derived.latestPickRun}
-function getActivePicks(){const latestDate=getLatestPickDate(),latestRun=getLatestPickRun();return (st.picks||[]).filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun)}
+function getActivePicks(){const latestDate=getLatestPickDate(),latestRun=getLatestPickRun();return (st.picks||[]).filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun)}
 function getPick(name){if(!name||!st.picks.length)return null;ensureDerived();return derived.picksByNameLatest.get(normalizePlayerName(name))||null}
 
 function firstValidPlayer(arr){
@@ -1031,7 +1059,7 @@ function getConvictionLegs(){
   const latestDate=getLatestPickDate();
   const latestRun=getLatestPickRun();
   const aiMap=new Map();
-  st.picks.filter(pk=>normalizeDate(pk.DATE||pk.date)===latestDate&&toNum(pk.RUN_NUMBER||pk.run_number||0)===latestRun).forEach(pk=>{if(pk.player)aiMap.set(normalizePlayerName(pk.player),pk)});
+  st.picks.filter(pk=>normalizeDate(rowField(pk,"DATE"))===latestDate&&toNum(rowField(pk,"RUN_NUMBER"))===latestRun).forEach(pk=>{if(pk.player)aiMap.set(normalizePlayerName(pk.player),pk)});
   const streakMap=new Map();
   try{
     const streaks=getStreaks();
@@ -1410,7 +1438,7 @@ function getConvergenceBoard(){
   const board=new Map();
   const latestDate=getLatestPickDate();
   const latestRun=getLatestPickRun();
-  const allowed=new Set(st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun).map(p=>normalizePlayerName(p.player)).filter(Boolean));
+  const allowed=new Set(st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun).map(p=>normalizePlayerName(p.player)).filter(Boolean));
   const add=(name,source,boost=0,meta={})=>{
     if(!name)return;
     const key=normalizePlayerName(name);
@@ -1428,7 +1456,7 @@ function getConvergenceBoard(){
     bestBetMap.set(normalizePlayerName(b.name),b);
     add(b.name,"Best Bets",2+Math.min(b.edge*20,3),{team:b.team,opp:b.opp,detail:`${b.lean} ${b.metric} ${b.dkLine}`});
   });
-  st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun).forEach(pk=>{
+  st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun).forEach(pk=>{
     const bestBet=bestBetMap.get(normalizePlayerName(pk.player));
     if(!aiAgreesWithBet(pk,bestBet))return;
     const conf=normalizeConfidence(pk.confidence);
@@ -1691,17 +1719,17 @@ function entryStartMs(v){if(v===undefined||v===null||String(v).trim()==='')retur
 function entryDisplayTime(v){const ms=entryStartMs(v);if(!Number.isFinite(ms))return '';return new Date(ms).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York',timeZoneName:'short'})}
 function entryAllPicks(){return Array.isArray(st.picks)&&st.picks.length?st.picks:(Array.isArray(st.aiPicks)?st.aiPicks:[])}
 function entryRosterRows(){const rows=[];const add=(arr,type)=>{(arr||[]).forEach(r=>{const player=entryPlayer(r),team=entryTeam(r),opp=entryOpp(r);if(player&&team&&opp)rows.push({player,team,opp,type,row:r,id:entryPairId(team,opp)})})};add(st.tonight,'player');add(st.pTonight,'player');add(st.gTonight,'player');return rows}
-function getEntryGames(){return getMemo('gameEntry:games',()=>{const byId=new Map();const add=(id,label,teams=[],time='')=>{if(!id)return;const sortTime=entryStartMs(time);const timeText=entryDisplayTime(time);const baseLabel=label||teams.join(' vs ');const displayLabel=timeText?`${baseLabel} — ${timeText}`:baseLabel;if(!byId.has(id))byId.set(id,{id,label:displayLabel,baseLabel,teams,time,sortTime});else{const g=byId.get(id);if((baseLabel||'').includes('@')){g.baseLabel=baseLabel;g.label=timeText?`${baseLabel} — ${timeText}`:baseLabel}if(Number.isFinite(sortTime)&&!Number.isFinite(g.sortTime)){g.time=time;g.sortTime=sortTime;g.label=timeText?`${g.baseLabel} — ${timeText}`:g.baseLabel}}};entryLatestPicks().forEach(p=>{const g=entryGameFromText(p.game||p.GAME||p.matchup||p.MATCHUP);if(g)add(g.id,g.label,g.teams,entryStartValue(p))});entryRosterRows().forEach(r=>{if(entryRowIsToday(r.row))add(r.id,`${r.team} vs ${r.opp}`,[r.team,r.opp],entryStartValue(r.row))});(st.schedule||[]).forEach(r=>{if(!entryRowIsToday(r))return;const away=String(entryField(r,['away_team','AWAY_TEAM','away','AWAY','away_abbr','away_team_abbr'])||'').toUpperCase();const home=String(entryField(r,['home_team','HOME_TEAM','home','HOME','home_abbr','home_team_abbr'])||'').toUpperCase();const t=entryStartValue(r);if(away&&home)add(entryPairId(away,home),`${away} @ ${home}`,[away,home],t)});return [...byId.values()].sort((a,b)=>(a.sortTime-b.sortTime)||a.baseLabel.localeCompare(b.baseLabel))})}
+function getEntryGames(){return getMemo('gameEntry:games',()=>{const byId=new Map();const add=(id,label,teams=[],time='')=>{if(!id)return;const sortTime=entryStartMs(time);const timeText=entryDisplayTime(time);const baseLabel=label||teams.join(' vs ');const displayLabel=timeText?`${baseLabel} — ${timeText}`:baseLabel;if(!byId.has(id))byId.set(id,{id,label:displayLabel,baseLabel,teams,time,sortTime});else{const g=byId.get(id);if((baseLabel||'').includes('@')){g.baseLabel=baseLabel;g.label=timeText?`${baseLabel} — ${timeText}`:baseLabel}if(Number.isFinite(sortTime)&&!Number.isFinite(g.sortTime)){g.time=time;g.sortTime=sortTime;g.label=timeText?`${g.baseLabel} — ${timeText}`:g.baseLabel}}};entryLatestPicks().forEach(p=>{const g=entryGameFromText(rowField(p,"game","matchup"));if(g)add(g.id,g.label,g.teams,entryStartValue(p))});entryRosterRows().forEach(r=>{if(entryRowIsToday(r.row))add(r.id,`${r.team} vs ${r.opp}`,[r.team,r.opp],entryStartValue(r.row))});(st.schedule||[]).forEach(r=>{if(!entryRowIsToday(r))return;const away=String(entryField(r,['away_team','AWAY_TEAM','away','AWAY','away_abbr','away_team_abbr'])||'').toUpperCase();const home=String(entryField(r,['home_team','HOME_TEAM','home','HOME','home_abbr','home_team_abbr'])||'').toUpperCase();const t=entryStartValue(r);if(away&&home)add(entryPairId(away,home),`${away} @ ${home}`,[away,home],t)});return [...byId.values()].sort((a,b)=>(a.sortTime-b.sortTime)||a.baseLabel.localeCompare(b.baseLabel))})}
 function setGameEntryGame(gameId){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};st.gameEntry.selectedGame=gameId;st.gameEntry.entry=null;st.dataVersion++;render()}
 function setGameEntryLegs(n){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};st.gameEntry.legCount=Math.max(GAME_ENTRY_MIN_LEGS,Math.min(GAME_ENTRY_MAX_LEGS,parseInt(n)||GAME_ENTRY_DEFAULT_LEGS));st.gameEntry.entry=null;st.dataVersion++;render()}
-function entryLatestPicks(){const rows=entryAllPicks().filter(p=>entryDateISO(p.DATE||p.date)===entryTodayISO());const maxRun=Math.max(0,...rows.map(p=>toNum(p.RUN_NUMBER||p.run_number||0)));return maxRun?rows.filter(p=>toNum(p.RUN_NUMBER||p.run_number||0)===maxRun):rows}
+function entryLatestPicks(){const rows=entryAllPicks().filter(p=>entryDateISO(rowField(p,"DATE"))===entryTodayISO());const maxRun=Math.max(0,...rows.map(p=>toNum(rowField(p,"RUN_NUMBER"))));return maxRun?rows.filter(p=>toNum(rowField(p,"RUN_NUMBER"))===maxRun):rows}
 function entryFindProp(player,metric,line){const pn=normalizePlayerName(player),mn=entryMetric(metric),lt=String(line??'').trim();return (st.props||[]).find(p=>normalizePlayerName(p.PLAYER_NAME)===pn&&entryMetric(p.METRIC)===mn&&(lt===''||String(p.DK_LINE??'').trim()===lt))||(st.props||[]).find(p=>normalizePlayerName(p.PLAYER_NAME)===pn&&entryMetric(p.METRIC)===mn)||null}
 function entryBookName(book){const k=String(book||'').toLowerCase();return {draftkings:'DK',fanduel:'FD',betmgm:'BetMGM',espnbet:'ESPN BET',caesars:'Caesars'}[k]||String(book||'')}
 function entryBestBook(prop,lean){if(!prop)return null;const side=String(lean||'OVER').toUpperCase()==='UNDER'?'UNDER':'OVER';const book=prop[`BEST_${side}_BOOK`];const odds=prop[`BEST_${side}_ODDS`];if(!book||odds==='')return null;const delta=Number(prop[`BEST_${side}_DELTA_PP`]);return {book:String(book),odds,delta:Number.isFinite(delta)?delta:null,isDK:String(book).toLowerCase()==='draftkings'}}
 function renderEntryBestBookLine(prop,lean){const b=entryBestBook(prop,lean);if(!b)return '';const color=b.isDK?'#9ca3af':'#4ade80';const delta=b.delta!==null&&!b.isDK&&Math.abs(b.delta)>0.05?` (${b.delta>0?'+':''}${b.delta.toFixed(1)}pp${b.delta>=3?' ⭐':''})`:'';return `<div style="font-size:10px;color:${color};font-weight:800;margin-top:3px">🏪 Best @ ${entryBookName(b.book)} ${entryFmtOdds(b.odds)}${delta}</div>`}
 function entryBestBookKey(leg){const b=entryBestBook(leg.prop,leg.lean);return b?entryBookName(b.book):''}
-function entryPerfWLB(metric){const mn=entryMetric(metric);const row=(st.pickPerformance||[]).find(r=>String(r.DIMENSION_TYPE||r.dimension_type||'').toLowerCase()==='prop_type_norm'&&entryMetric(r.DIMENSION_VALUE||r.dimension_value)===mn&&String(r.TIME_WINDOW||r.time_window||'')==='all_time'&&String(r.MIN_SAMPLE_FLAG||r.min_sample_flag||'').toUpperCase()==='TRUE');const v=row?Number(row.WILSON_LOWER_95||row.wilson_lower_95):NaN;return Number.isFinite(v)?v:GAME_ENTRY_DEFAULT_WLB}
-function buildCandidatePool(gameId){const games=getEntryGames();const game=games.find(g=>g.id===gameId);if(!game)return {game:null,candidates:[]};const roster=entryRosterRows().filter(r=>r.id===gameId);const playerNames=new Set(roster.map(r=>normalizePlayerName(r.player)));const candidates=[];const seenAI=new Set();entryLatestPicks().forEach(p=>{const g=entryGameFromText(p.game||p.GAME||p.matchup||p.MATCHUP);let inGame=g&&g.id===gameId;if(!inGame&&playerNames.has(normalizePlayerName(p.player)))inGame=true;if(!inGame)return;const prop=entryFindProp(p.player,p.prop_type,p.line);if(!prop)return;const lean=String(p.lean||'OVER').toUpperCase()==='UNDER'?'UNDER':'OVER';const odds=lean==='OVER'?prop.OVER_ODDS:prop.UNDER_ODDS;if(!odds)return;const key=`${normalizePlayerName(p.player)}|${entryMetric(p.prop_type)}|${lean}`;seenAI.add(key);candidates.push({player:p.player,prop_type:entryMetric(p.prop_type),line:p.line||prop.DK_LINE,lean,odds,ai_tier:normalizeConfidence(p.confidence),source:'AI',prop})});(st.props||[]).forEach(prop=>{if(!playerNames.has(normalizePlayerName(prop.PLAYER_NAME)))return;['OVER','UNDER'].forEach(lean=>{const odds=lean==='OVER'?prop.OVER_ODDS:prop.UNDER_ODDS;if(!odds)return;const key=`${normalizePlayerName(prop.PLAYER_NAME)}|${entryMetric(prop.METRIC)}|${lean}`;if(seenAI.has(key))return;candidates.push({player:prop.PLAYER_NAME,prop_type:entryMetric(prop.METRIC),line:prop.DK_LINE,lean,odds,ai_tier:'LEAN',source:'DK',prop})})});return {game,candidates}}
+function entryPerfWLB(metric){const mn=entryMetric(metric);const row=(st.pickPerformance||[]).find(r=>String(rowField(r,"DIMENSION_TYPE")).toLowerCase()==='prop_type_norm'&&entryMetric(rowField(r,"DIMENSION_VALUE"))===mn&&String(rowField(r,"TIME_WINDOW"))==='all_time'&&String(rowField(r,"MIN_SAMPLE_FLAG")).toUpperCase()==='TRUE');const v=row?Number(rowField(row,"WILSON_LOWER_95")):NaN;return Number.isFinite(v)?v:GAME_ENTRY_DEFAULT_WLB}
+function buildCandidatePool(gameId){const games=getEntryGames();const game=games.find(g=>g.id===gameId);if(!game)return {game:null,candidates:[]};const roster=entryRosterRows().filter(r=>r.id===gameId);const playerNames=new Set(roster.map(r=>normalizePlayerName(r.player)));const candidates=[];const seenAI=new Set();entryLatestPicks().forEach(p=>{const player=rowField(p,"player","PLAYER_NAME"),propType=rowField(p,"prop_type","METRIC"),line=rowField(p,"line","DK_LINE"),conf=rowField(p,"confidence"),g=entryGameFromText(rowField(p,"game","matchup"));let inGame=g&&g.id===gameId;if(!inGame&&playerNames.has(normalizePlayerName(player)))inGame=true;if(!inGame)return;const prop=entryFindProp(player,propType,line);if(!prop)return;const lean=String(rowField(p,"lean")||'OVER').toUpperCase()==='UNDER'?'UNDER':'OVER';const odds=lean==='OVER'?prop.OVER_ODDS:prop.UNDER_ODDS;if(!odds)return;const key=`${normalizePlayerName(player)}|${entryMetric(propType)}|${lean}`;seenAI.add(key);candidates.push({player,prop_type:entryMetric(propType),line:line||prop.DK_LINE,lean,odds,ai_tier:normalizeConfidence(conf),source:'AI',prop})});(st.props||[]).forEach(prop=>{if(!playerNames.has(normalizePlayerName(prop.PLAYER_NAME)))return;['OVER','UNDER'].forEach(lean=>{const odds=lean==='OVER'?prop.OVER_ODDS:prop.UNDER_ODDS;if(!odds)return;const key=`${normalizePlayerName(prop.PLAYER_NAME)}|${entryMetric(prop.METRIC)}|${lean}`;if(seenAI.has(key))return;candidates.push({player:prop.PLAYER_NAME,prop_type:entryMetric(prop.METRIC),line:prop.DK_LINE,lean,odds,ai_tier:'LEAN',source:'DK',prop})})});return {game,candidates}}
 function scoreCandidate(c){const tier=normalizeConfidence(c.ai_tier||'LEAN');const tierWeight=GAME_ENTRY_TIER_WEIGHTS[tier]||GAME_ENTRY_TIER_WEIGHTS.LEAN;const wlb=entryPerfWLB(c.prop_type);return {...c,ai_tier:tier,tier_weight:tierWeight,wlb,leg_score:tierWeight*wlb}}
 function selectTopN(candidates,n){const sorted=candidates.map(scoreCandidate).sort((a,b)=>b.leg_score-a.leg_score);const used=new Set(),perPlayer=new Map(),out=[];for(const c of sorted){const playerKey=normalizePlayerName(c.player),key=`${playerKey}|${entryMetric(c.prop_type)}`;if(used.has(key))continue;if((perPlayer.get(playerKey)||0)>=GAME_ENTRY_MAX_LEGS_PER_PLAYER)continue;used.add(key);perPlayer.set(playerKey,(perPlayer.get(playerKey)||0)+1);out.push(c);if(out.length>=n)break}return out}
 function entryAmericanToDecimal(odds){const o=Number(String(odds).replace(/[^0-9+\-.]/g,''));if(!Number.isFinite(o)||o===0)return 1;return o>0?1+o/100:1+100/Math.abs(o)}
@@ -1954,27 +1982,28 @@ function render(){
     // Only show most recent date's picks
     const latestDate=getLatestPickDate();
     const latestRun=getLatestPickRun();
-    const todayPicks=latestDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===latestDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestRun):st.picks;
+    const todayPicks=latestDate?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun):st.picks;
     const pickGuard=st.pickGuard;
     if(!todayPicks.length){picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
     else{
-      const hits=todayPicks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="YES"||h==="TRUE"}).length;
-      const miss=todayPicks.filter(p=>{const h=(p.HIT||"").toString().toUpperCase();return h==="NO"||h==="FALSE"}).length;
+      const hits=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="YES"||h==="TRUE"}).length;
+      const miss=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="NO"||h==="FALSE"}).length;
       const smash=todayPicks.filter(p=>normalizeConfidence(p.confidence)==="SMASH").length;
       const tracked=hits+miss;
       picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"#22c55e":"#ef4444"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:#6b8f7b">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
       picksHTML+=`<div class="cards-grid">`;
       picksHTML+=todayPicks.map(pk=>{
         const c=normalizeConfidence(pk.confidence),cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"";
-        const h=(pk.HIT||"").toString().toUpperCase();
-        const hasR=pk.ACTUAL_STAT!=null&&pk.ACTUAL_STAT!==""&&!isNaN(pk.ACTUAL_STAT);
+        const h=String(rowField(pk,"HIT")).toUpperCase();
+        const actualStat=rowField(pk,"ACTUAL_STAT");
+        const hasR=actualStat!=null&&actualStat!==""&&!isNaN(actualStat);
         const injCtx=(pk.injury_context||"").toString();
         const hasLineupRisk=injCtx.toUpperCase().startsWith("LINEUP RISK");
         const riskHTML=hasLineupRisk?`<div class="lineup-risk-badge">⚠️ LINEUP RISK</div><div class="lineup-risk-text">${esc(injCtx)}</div>`:"";
         const flags=getSampleFlags(pk.player,(pk.prop_type||"").startsWith("P_"));
         const badges=riskBadges(pk.player,(pk.prop_type||"").startsWith("P_"));
         let rHTML="";
-        if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${pk.ACTUAL_STAT}</span>`:""}</div>`}
+        if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${actualStat}</span>`:""}</div>`}
         const isPitch=(pk.prop_type||"").startsWith("P_");
         const locked=getLockInfo(pk.player,isPitch).started;
         const pickProp=findPropForPick(pk.player,pk.prop_type,pk.line);
@@ -2468,12 +2497,12 @@ function loadAllData(){
   st.pSplits=normalizeKeys(cleanRows(pSplits));
   st.picks=normalizeKeys(cleanRows(picks)).map(p=>({
     ...p,
-    player: cleanName(p.player||p.PLAYER||p.Player||p.PLAYER_NAME),
-    prop_type: normalizePropMetric(p.prop_type||p.PROP_TYPE||p.Prop_Type),
-    lean: normalizeLeanText(p.lean||p.LEAN||p.Lean),
-    confidence: normalizeConfidence(p.confidence||p.CONFIDENCE||p.Confidence),
-    DATE: normalizeDate(p.DATE||p.date||p.Date),
-    RUN_NUMBER: toNum(p.RUN_NUMBER||p.run_number||0)
+    player: cleanName(rowField(p,"player","PLAYER_NAME")),
+    prop_type: normalizePropMetric(rowField(p,"prop_type","METRIC")),
+    lean: normalizeLeanText(rowField(p,"lean")),
+    confidence: normalizeConfidence(rowField(p,"confidence")),
+    DATE: normalizeDate(rowField(p,"DATE")),
+    RUN_NUMBER: toNum(rowField(p,"RUN_NUMBER"))
 	  }));
 	  st.props=normalizeKeys(cleanRows(props));
 	  st.allBooksProps=normalizeKeys(cleanRows(allBooksProps||[]));
@@ -2514,7 +2543,7 @@ function loadAllData(){
 	  st.dataVersion+=1;
   st.latestPickDate=getLatestPickDate();
   const latestPickRun=getLatestPickRun();
-  const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(p.DATE||p.date)===st.latestPickDate&&toNum(p.RUN_NUMBER||p.run_number||0)===latestPickRun):[];
+  const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===st.latestPickDate&&toNum(rowField(p,"RUN_NUMBER"))===latestPickRun):[];
   st.pickGuard=getPickGuard(st.latestPickDate,latestPicks.length);
   st.loading=false;st.loadedAt=new Date().toLocaleTimeString();
 
