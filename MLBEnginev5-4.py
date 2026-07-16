@@ -47,6 +47,7 @@ SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
 SPORT_LABEL = "MLB"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
 _last_odds_credits_remaining = None
 
@@ -93,11 +94,18 @@ def check_quota_or_abort(resp, context: str) -> None:
         return
     floor = QUOTA_FLOOR_THIS_SPORT
     if remaining < floor:
-        print(
+        msg = (
             f"🛑 QUOTA GUARD: {remaining} remaining < {SPORT_LABEL} floor {floor} "
             f"({context}). Aborting run."
         )
-        sys.exit(0)
+        print(msg)
+        try:
+            runlog.status = "ABORT"
+            runlog.error = msg
+            runlog.warn(msg)
+        except Exception:
+            pass
+        sys.exit(2)
 
 
 def cached_odds_fetch(cache_key: str, fetch_fn):
@@ -253,6 +261,8 @@ def load_secret(name, prompt_text=None, allow_missing=False):
         pass
     if allow_missing:
         return None
+    if os.environ.get("GITHUB_ACTIONS", "").lower() == "true" or not sys.stdin.isatty():
+        raise RuntimeError(f"Missing required secret {name}; refusing interactive prompt in non-interactive run.")
     import getpass
     return getpass.getpass(prompt_text or f"Paste your {name}: ")
 
@@ -766,7 +776,7 @@ else:
 
 # --- 2. FETCH ALL MLB TEAMS ---
 print("\nFetching MLB teams...")
-teams_resp = requests.get(f"{MLB_API}/teams?sportId=1&season={SEASON}").json()
+teams_resp = requests.get(f"{MLB_API}/teams?sportId=1&season={SEASON}", timeout=10).json()
 team_list = []
 for team in teams_resp.get('teams', []):
     team_list.append({
@@ -786,7 +796,7 @@ print("⚡ Using parallel fetching...")
 
 def get_qualified_batters(season):
     url = f"{MLB_API}/stats?stats=season&group=hitting&sportId=1&season={season}&limit=300"
-    resp = requests.get(url).json()
+    resp = requests.get(url, timeout=10).json()
     batters = []
     days_into_season = (now_est - OPENING_DAY).days if now_est >= OPENING_DAY else 0
     min_pa = 1 if days_into_season <= 14 else min(max(days_into_season, 1), 100)
@@ -1136,7 +1146,7 @@ DOMED_VENUES = {
 
 try:
     sched_url = f"{MLB_API}/schedule?sportId=1&date={schedule_date}&hydrate=probablePitcher,team,venue&gameType=R"
-    sched_resp = requests.get(sched_url).json()
+    sched_resp = requests.get(sched_url, timeout=10).json()
 
     for date in sched_resp.get('dates', []):
         for game in date.get('games', []):
@@ -1529,9 +1539,17 @@ TEAM_NAME_TO_ABBR = {
 skip_odds_api_props = False
 
 
-def fetch_today_event_count(api_key, sport_key='baseball_mlb', today_iso=None):
-    """Return count of events scheduled for today's UTC date via the 0-credit events endpoint."""
-    today_iso = today_iso or datetime.utcnow().strftime('%Y-%m-%d')
+def odds_event_eastern_date(commence_time):
+    try:
+        kickoff = datetime.fromisoformat(str(commence_time).replace('Z', '+00:00'))
+        return kickoff.astimezone(eastern).strftime('%Y-%m-%d')
+    except Exception:
+        return ""
+
+
+def fetch_today_event_count(api_key, sport_key='baseball_mlb', schedule_date_iso=None):
+    """Return count of events scheduled for the engine's Eastern schedule date."""
+    schedule_date_iso = schedule_date_iso or schedule_date
     try:
         resp = requests.get(
             f"https://api.the-odds-api.com/v4/sports/{sport_key}/events",
@@ -1544,7 +1562,10 @@ def fetch_today_event_count(api_key, sport_key='baseball_mlb', today_iso=None):
             print(f"   ⚠️ Events pre-check failed: {resp.status_code} — {resp.text[:160]}")
             return None
         events = resp.json()
-        return sum(1 for event in events if str(event.get('commence_time', '')).startswith(today_iso))
+        return sum(
+            1 for event in events
+            if odds_event_eastern_date(event.get('commence_time', '')) == schedule_date_iso
+        )
     except Exception as e:
         print(f"   ⚠️ Events pre-check unavailable: {e}")
         return None
@@ -1597,7 +1618,7 @@ def extract_odds(events, preferred_book='draftkings', fallback_book='fanduel'):
 
 if (now_est >= OPENING_DAY or now_est.month >= 4) and ODDS_API_KEY:
     print("\nFetching betting odds...")
-    today_event_count = fetch_today_event_count(ODDS_API_KEY, ODDS_SPORT)
+    today_event_count = fetch_today_event_count(ODDS_API_KEY, ODDS_SPORT, schedule_date)
     if today_event_count == 0:
         print("⛔ No MLB events today — aborting Odds API odds/props fetch to preserve credits.")
         skip_odds_api_props = True
@@ -2116,15 +2137,19 @@ def generate_gemini_picks():
         if not props_df.empty:
             props_df['PLAYER_NORM'] = props_df['PLAYER_NAME'].map(normalize_player_name)
             props_df['PROMPT_METRIC'] = props_df['METRIC'].map(normalize_prop_metric)
+            allowed_batter_prompt_metrics = {'H', 'R'}
+            allowed_pitcher_prompt_metrics = {'P_SO', 'P_ER', 'P_BB'}
             df_batter_props = props_df[
                 props_df['PLAYER_NAME'].notna() &
                 props_df['METRIC'].notna() &
-                ~props_df['METRIC'].astype(str).str.startswith('P_')
+                ~props_df['METRIC'].astype(str).str.startswith('P_') &
+                props_df['PROMPT_METRIC'].isin(allowed_batter_prompt_metrics)
             ].copy()
             df_pitcher_props = props_df[
                 props_df['PLAYER_NAME'].notna() &
                 props_df['METRIC'].notna() &
-                props_df['METRIC'].astype(str).str.startswith('P_')
+                props_df['METRIC'].astype(str).str.startswith('P_') &
+                props_df['PROMPT_METRIC'].isin(allowed_pitcher_prompt_metrics)
             ].copy()
             for _, row in pd.concat([df_batter_props, df_pitcher_props], ignore_index=True).iterrows():
                 key = (row['PLAYER_NORM'], row['PROMPT_METRIC'])
@@ -2401,7 +2426,7 @@ RULES:
 - For batters, only use: H, R.
 - For pitchers, only use: P_SO, P_ER, P_BB.
 - Any prop type NOT in the allowed list above is excluded — do not invent picks for them.
-- Do NOT pick H OVER lines above 0.5 — H OVER 1.5 is a consistent losing pick
+- Do NOT pick H OVER lines above 0.5.
 - Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
 - Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
 - DIVERSIFY prop types where the sportsbook offers enough valid markets.
@@ -2424,7 +2449,7 @@ ANALYSIS FACTORS:
 - For pitchers, use Statcast whiff/CSW for K props and xwOBA/barrel/hard-hit allowed for ER/H risk.
 - Prefer props with strong listed hit-rate / EV signals when the market and matchup agree.
 For each pick provide:
-- rank (1-14)
+- rank (1-20)
 - player (exact name from data)
 - team (abbreviation)
 - game (e.g. "NYY @ TOR")
@@ -2437,27 +2462,41 @@ For each pick provide:
 - rationale (1 sentence, under 15 words)
 - injury_context (under 10 words)
 OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no explanation:
-[{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":1.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy."}}]"""
+[{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":0.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy."}}]"""
 
         consensus_pick_lists = []
         consensus_temps = [0.35, 0.55, 0.75]
         for run_idx, temp in enumerate(consensus_temps, start=1):
             gen_config = types.GenerateContentConfig(temperature=temp, max_output_tokens=8192, response_mime_type="application/json")
-            print(f"🤖 Calling Gemini API run {run_idx}/3 (temp={temp:.2f})...")
-            raw = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
-                contents=prompt,
-                config=gen_config
-            ).text.strip()
             try:
+                print(f"🤖 Calling Gemini API run {run_idx}/3 with {GEMINI_MODEL} (temp={temp:.2f})...")
+                raw = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=gen_config
+                ).text.strip()
                 run_picks = parse_gemini_json_array(raw)
                 print(f"   ↳ {len(run_picks)} picks returned")
                 consensus_pick_lists.append(run_picks)
             except json.JSONDecodeError:
                 print(f"   ⚠️ Run {run_idx} returned malformed JSON — ignoring that pass")
+            except Exception as e:
+                msg = f"Gemini run {run_idx}/3 failed: {type(e).__name__}: {str(e)[:180]}"
+                print(f"   ⚠️ {msg}")
+                try:
+                    runlog.warn(msg)
+                except Exception:
+                    pass
         picks_data = build_consensus_pick_pool(consensus_pick_lists)
         consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
         print(f"🤝 Consensus merge: {len(picks_data)} unique picks, {consensus_hits} appearing in 2+ runs")
+        if not consensus_pick_lists:
+            msg = "All Gemini consensus runs failed or returned unusable output"
+            print(f"   ⚠️ {msg}")
+            try:
+                runlog.warn(msg)
+            except Exception:
+                pass
 
         picks_before_filter = len(picks_data)
         print(f"   Gemini picks before post-filter: {picks_before_filter}")
@@ -2476,7 +2515,7 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             if not player_meta:
                 dropped_reasons.append(f"{pk.get('player')} — player not in Gemini pool")
                 continue
-            if prompt_metric in {'SB', '2B', '1B', 'BB', 'TB', 'HR', 'RBI', 'P_H', 'P_OUTS'}:
+            if prompt_metric in {'SB', '2B', '1B', 'BB', 'SO', 'TB', 'HR', 'RBI', 'P_H', 'P_OUTS'}:
                 dropped_reasons.append(f"{pk.get('player')} — {prompt_metric} removed from slate")
                 continue
             if prompt_metric == 'H':
@@ -2506,6 +2545,9 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
                 line_matches['DK_LINE'].astype(float).sub(desired_line).abs().idxmin(), 'DK_LINE'
             ]
             pk['line'] = float(matched_line)
+            if prompt_metric == 'H' and float(pk['line']) > 0.5:
+                dropped_reasons.append(f"{pk.get('player')} H {float(pk['line']):g} — snapped to banned H line")
+                continue
             if prompt_metric == 'SO':
                 pk['prop_type'] = 'Batter_SO'
                 metric_cap_key = 'Batter_SO'
@@ -2681,7 +2723,7 @@ p_ha_pivot = pd.DataFrame()
 
 def get_qualified_pitchers(season):
     url = f"{MLB_API}/stats?stats=season&group=pitching&sportId=1&season={season}&limit=300"
-    resp = requests.get(url).json()
+    resp = requests.get(url, timeout=10).json()
     pitchers_list = []
     days_into_season = (now_est - OPENING_DAY).days if now_est >= OPENING_DAY else 0
     min_ip = 0.1 if days_into_season <= 14 else min(max(days_into_season * 0.3, 1), 50)
@@ -3046,12 +3088,27 @@ def safe_upload(spreadsheet, sheet_name, df, max_retries=3):
                 print(f"   ⏳ Rate limited on {sheet_name} — waiting {wait}s (attempt {attempt+1}/{max_retries})")
                 time.sleep(wait)
             else:
+                msg = f"{sheet_name} upload failed: {e}"
                 print(f"   ❌ {sheet_name}: {e}")
+                try:
+                    runlog.warn(msg)
+                except Exception:
+                    pass
                 return
         except Exception as e:
+            msg = f"{sheet_name} upload failed: {e}"
             print(f"   ❌ {sheet_name}: {e}")
+            try:
+                runlog.warn(msg)
+            except Exception:
+                pass
             return
+    msg = f"{sheet_name} upload failed after {max_retries} retries"
     print(f"   ❌ {sheet_name}: Failed after {max_retries} retries")
+    try:
+        runlog.warn(msg)
+    except Exception:
+        pass
 
 SHEETS_TO_WRITE = {
     'Batter_Game_Logs': df_logs,
