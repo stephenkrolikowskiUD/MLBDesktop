@@ -2878,6 +2878,16 @@ Do not explain anything outside the JSON array.
                 for restored_row in restored:
                     existing_ctx = str(restored_row.get('injury_context', '') or '').strip()
                     restored_row['injury_context'] = f"RERUN DUPLICATE. {existing_ctx}".strip()
+            if len(dedup_keep) < MIN_DAILY_PICKS:
+                shortfall_msg = (
+                    f"Final picks ({len(dedup_keep)}) below MIN_DAILY_PICKS floor "
+                    f"({MIN_DAILY_PICKS}) — insufficient distinct Gemini output or validated markets"
+                )
+                print(f"   🚨 {shortfall_msg}")
+                try:
+                    runlog.warn(shortfall_msg)
+                except Exception:
+                    pass
             if duplicate_drop_msgs:
                 dropped_reasons.extend(duplicate_drop_msgs)
             df_picks = pd.DataFrame(dedup_keep)
