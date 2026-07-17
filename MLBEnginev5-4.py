@@ -50,6 +50,8 @@ SPORT_LABEL = "MLB"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
 _last_odds_credits_remaining = None
+GEMINI_TARGET_PICKS = 14
+MIN_DAILY_PICKS = 9
 
 # --- Odds API quota guard ---
 QUOTA_FLOOR_GLOBAL = 2000
@@ -2210,6 +2212,119 @@ def generate_gemini_picks():
             if row.get('_player_norm')
         }
 
+        # Keep a deterministic, real-market safety net outside the Gemini pool.
+        # Gemini is useful for judgment, but a short or malformed response must
+        # never be allowed to reduce a full slate to only a few picks.
+        fallback_player_map = {
+            row['_player_norm']: row
+            for _, row in combined_prop_pool.iterrows()
+            if row.get('_player_norm')
+        }
+
+        def build_validated_fallback_candidates():
+            """Rank real sportsbook props for backfill when Gemini under-delivers."""
+            candidates = []
+
+            def clean_text(value, default=''):
+                if value is None:
+                    return default
+                try:
+                    if pd.isna(value):
+                        return default
+                except (TypeError, ValueError):
+                    pass
+                text = str(value).strip()
+                return text if text else default
+
+            allowed_metrics = {'H', 'R', 'P_SO', 'P_ER', 'P_BB'}
+            stat_fields = {
+                'H': ('Seas_H', 'L7_H'),
+                'R': ('Seas_R', 'L7_R'),
+                'P_SO': ('Seas_SO', 'L3_SO'),
+                'P_ER': ('Seas_ER', 'L3_ER'),
+                'P_BB': ('Seas_BB', 'L3_BB'),
+            }
+            edge_fields = {
+                'H': 'H_EDGE_SCORE',
+                'R': 'H_EDGE_SCORE',
+                'P_SO': 'P_SO_EDGE_SCORE',
+                'P_ER': 'P_ER_RISK_SCORE',
+                'P_BB': 'P_SO_EDGE_SCORE',
+            }
+            for (player_norm, metric), prop_rows in prop_rows_by_key.items():
+                if metric not in allowed_metrics or player_norm not in fallback_player_map:
+                    continue
+                prop_frame = pd.DataFrame(prop_rows)
+                if prop_frame.empty or 'DK_LINE' not in prop_frame.columns:
+                    continue
+                prop_frame['DK_LINE'] = pd.to_numeric(prop_frame['DK_LINE'], errors='coerce')
+                prop_frame = prop_frame.dropna(subset=['DK_LINE']).sort_values('DK_LINE')
+                if prop_frame.empty:
+                    continue
+                prop = prop_frame.iloc[0]
+                line = float(prop['DK_LINE'])
+                if metric == 'H' and line > 0.5:
+                    continue
+
+                source = fallback_player_map[player_norm]
+                player_meta = valid_player_map.get(player_norm, {
+                    'player_name': source.get('player_name', ''),
+                    'role': source.get('ROLE', 'BATTER'),
+                    'team': source.get('team_abbr', ''),
+                    'opp': source.get('opp_abbr_tonight', ''),
+                    'opp_pitcher': source.get('opp_pitcher_name', source.get('opp_starter', 'TBD')),
+                    'venue': source.get('venue_tonight', ''),
+                    'lineup_risk_note': source.get('LINEUP_PROTECTION_NOTE', ''),
+                    'H_EDGE_SCORE': source.get('H_EDGE_SCORE', np.nan),
+                    'POWER_EDGE_SCORE': source.get('POWER_EDGE_SCORE', np.nan),
+                    'P_SO_EDGE_SCORE': source.get('P_SO_EDGE_SCORE', np.nan),
+                    'P_ER_RISK_SCORE': source.get('P_ER_RISK_SCORE', np.nan),
+                })
+                season_col, recent_col = stat_fields[metric]
+                season_avg = pd.to_numeric(source.get(season_col), errors='coerce')
+                recent_avg = pd.to_numeric(source.get(recent_col), errors='coerce')
+                is_under = metric in {'P_ER', 'P_BB'}
+                lean = 'UNDER' if is_under else 'OVER'
+                season_gap = (line - season_avg) if is_under else (season_avg - line)
+                recent_gap = (line - recent_avg) if is_under else (recent_avg - line)
+                season_gap = float(season_gap) if pd.notna(season_gap) else 0.0
+                recent_gap = float(recent_gap) if pd.notna(recent_gap) else 0.0
+                edge = pd.to_numeric(source.get(edge_fields[metric]), errors='coerce')
+                edge = float(edge) if pd.notna(edge) else 0.0
+                score = (season_gap * 4.0) + (recent_gap * 2.0) + (edge * 0.03)
+                player_name = clean_text(player_meta.get('player_name') or source.get('player_name', ''))
+                team = clean_text(player_meta.get('team') or source.get('team_abbr', ''))
+                opponent = clean_text(player_meta.get('opp') or source.get('opp_abbr_tonight', ''))
+                opp_pitcher = clean_text(player_meta.get('opp_pitcher'), 'TBD')
+                venue = clean_text(player_meta.get('venue') or source.get('venue_tonight', ''))
+                lineup_risk_note = clean_text(player_meta.get('lineup_risk_note'))
+                candidates.append({
+                    'rank': 999,
+                    'player': player_name,
+                    'team': team,
+                    'game': f"{team} @ {opponent}",
+                    'opponent': opponent,
+                    'opp_pitcher': opp_pitcher,
+                    'prop_type': metric,
+                    'line': line,
+                    'lean': lean,
+                    'confidence': 'LEAN',
+                    'rationale': 'Validated sportsbook market fallback after Gemini under-delivery.',
+                    'injury_context': lineup_risk_note,
+                    'venue': venue,
+                    'weather_note': weather_note_for_venue(venue),
+                    'H_EDGE_SCORE': player_meta.get('H_EDGE_SCORE', np.nan),
+                    'POWER_EDGE_SCORE': player_meta.get('POWER_EDGE_SCORE', np.nan),
+                    'P_SO_EDGE_SCORE': player_meta.get('P_SO_EDGE_SCORE', np.nan),
+                    'P_ER_RISK_SCORE': player_meta.get('P_ER_RISK_SCORE', np.nan),
+                    'CONSENSUS_COUNT': 0,
+                    'CONSENSUS_RUNS': '',
+                    'CONSENSUS_TAG': 'VALIDATED FALLBACK',
+                    '_fallback_score': score,
+                })
+            candidates.sort(key=lambda row: row['_fallback_score'], reverse=True)
+            return candidates
+
         streak_ctx = ""
         player_streak_map = {}
         try:
@@ -2412,7 +2527,7 @@ ACTIVE PROP STREAKS:
 {streak_ctx}
 RULES:
 - CRITICAL: ONLY pick players from the PLAYER DATA list above.
-- Return EXACTLY 20 ranked candidate picks as a JSON array. The engine will keep the top 14 valid picks after sportsbook validation.
+- Return EXACTLY {GEMINI_TARGET_PICKS + 6} ranked candidate picks as a JSON array. The engine will keep the top {GEMINI_TARGET_PICKS} valid picks after sportsbook validation.
 - Confidence tiers: SMASH (top 3-4 highest conviction only), STRONG (next 4-5), LEAN (rest).
 - STRONG requires ALL of: (a) season hit rate >55% on the prop type for this player, (b) EV% >5%, (c) supportive matchup or split context (vs pitcher handedness, opponent rank, park factor, weather). Any pick missing even one of these is LEAN, not STRONG.
 - LEAN is the default tier when only 1-2 signals are positive. Use LEAN liberally — it should be the most common tier in the slate.
@@ -2497,6 +2612,45 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
                 runlog.warn(msg)
             except Exception:
                 pass
+
+        # Give Gemini one focused recovery pass when all three consensus calls
+        # under-deliver. The deterministic market backfill below remains the
+        # final guarantee, so this cannot turn into an unbounded retry loop.
+        if len(picks_data) < MIN_DAILY_PICKS:
+            print(f"⚠️ Gemini under-delivered ({len(picks_data)} unique picks); requesting one recovery pass...")
+            recovery_prompt = prompt + f"""
+
+RECOVERY REQUIREMENT:
+The previous response returned too few usable candidates. Return at least {MIN_DAILY_PICKS} distinct picks now.
+Use only exact real props listed in PLAYER DATA. Include LEAN picks when the evidence is merely adequate.
+Do not explain anything outside the JSON array.
+"""
+            try:
+                recovery_config = types.GenerateContentConfig(
+                    temperature=0.45,
+                    max_output_tokens=8192,
+                    response_mime_type="application/json",
+                )
+                print(f"🤖 Calling Gemini recovery pass with {GEMINI_MODEL}...")
+                recovery_raw = client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=recovery_prompt,
+                    config=recovery_config,
+                ).text.strip()
+                recovery_picks = parse_gemini_json_array(recovery_raw)
+                print(f"   ↳ Recovery returned {len(recovery_picks)} picks")
+                if recovery_picks:
+                    consensus_pick_lists.append(recovery_picks)
+                    picks_data = build_consensus_pick_pool(consensus_pick_lists)
+                    consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
+                    print(f"   ↳ Recovery merge: {len(picks_data)} unique picks, {consensus_hits} appearing in 2+ passes")
+            except Exception as e:
+                msg = f"Gemini recovery pass failed: {type(e).__name__}: {str(e)[:180]}"
+                print(f"   ⚠️ {msg}")
+                try:
+                    runlog.warn(msg)
+                except Exception:
+                    pass
 
         picks_before_filter = len(picks_data)
         print(f"   Gemini picks before post-filter: {picks_before_filter}")
@@ -2596,6 +2750,57 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
                 break
         picks_data = filtered
 
+        # Backfill only from props that were actually returned by the books.
+        # This is deliberately conservative: fallback picks are LEAN, retain
+        # the same market caps, and never invent a line or a player.
+        fresh_pick_keys = set()
+        for pick in picks_data:
+            pick_key = (
+                normalize_player_name(pick.get('player', '')),
+                str(pick.get('prop_type', '')).strip().upper(),
+                str(pick.get('lean', '')).strip().upper(),
+            )
+            if pick_key not in seen_pick_keys:
+                fresh_pick_keys.add(pick_key)
+
+        fallback_added = 0
+        if len(fresh_pick_keys) < MIN_DAILY_PICKS:
+            fallback_candidates = build_validated_fallback_candidates()
+            for fallback_pick in fallback_candidates:
+                if len(fresh_pick_keys) >= MIN_DAILY_PICKS:
+                    break
+                metric = fallback_pick['prop_type']
+                pick_key = (
+                    normalize_player_name(fallback_pick['player']),
+                    metric,
+                    fallback_pick['lean'],
+                )
+                if pick_key in seen_pick_keys or pick_key in fresh_pick_keys:
+                    continue
+                if metric == 'H' and hit_count >= 10:
+                    continue
+                per_type_cap = 4 if metric == 'P_SO' else 3
+                if metric != 'H' and prop_type_counts.get(metric, 0) >= per_type_cap:
+                    continue
+                if metric == 'R' and run_prop_count >= 2:
+                    continue
+                if metric.startswith('P_') and pitcher_pick_count >= 4:
+                    continue
+                picks_data.append(fallback_pick)
+                fresh_pick_keys.add(pick_key)
+                prop_type_counts[metric] = prop_type_counts.get(metric, 0) + 1
+                if metric == 'H':
+                    hit_count += 1
+                if metric == 'R':
+                    run_prop_count += 1
+                if metric.startswith('P_'):
+                    pitcher_pick_count += 1
+                fallback_added += 1
+            if fallback_added:
+                print(f"   🧰 Added {fallback_added} validated sportsbook fallback pick(s) to reach {len(fresh_pick_keys)} fresh picks")
+            if len(fresh_pick_keys) < MIN_DAILY_PICKS:
+                print(f"   ⚠️ Only {len(fresh_pick_keys)} fresh picks were available after Gemini recovery and market backfill")
+
         print(f"   Gemini picks after post-filter: {len(picks_data)}")
         if dropped_reasons:
             print(f"   🚫 Dropped hallucinated/invalid picks: {len(dropped_reasons)}")
@@ -2649,7 +2854,6 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
                 df_picks['CONSENSUS_RUNS'] = '1'
             if 'CONSENSUS_TAG' not in df_picks.columns:
                 df_picks['CONSENSUS_TAG'] = ''
-            MIN_DAILY_PICKS = 9
             dedup_keep = []
             duplicate_drop_msgs = []
             duplicate_reserve = []
