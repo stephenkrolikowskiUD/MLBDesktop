@@ -158,14 +158,26 @@ body.light-theme .props-returning td,body.light-theme .muted-risk{opacity:.6}
 .tab-btn.active{color:var(--accent);border-top:2px solid var(--accent)}
 .page{display:none}
 .page.active{display:block}
-.log-controls{padding:12px 16px}
+.log-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:18px 16px 12px;background:linear-gradient(135deg,var(--surface-1),var(--surface-0));border-bottom:1px solid var(--border-1)}
+.log-kicker{color:var(--accent);font-size:var(--t-xs);font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.log-heading{font-family:"Barlow Condensed",system-ui,sans-serif;color:var(--ink-0);font-size:var(--t-lg);font-weight:800;line-height:1;margin-top:3px}
+.log-context{color:var(--ink-muted);font-size:var(--t-xs);margin-top:5px}
+.log-stat-chip{display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding:7px 10px;border:1px solid var(--accent-line);border-radius:var(--r-md);background:var(--accent-bg);color:var(--accent-soft);font-size:var(--t-xs);font-weight:800;white-space:nowrap}
+.log-stat-chip strong{font-family:"Barlow Condensed",system-ui,sans-serif;color:var(--ink-0);font-size:var(--t-md);line-height:1}
+.log-controls{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border-1);background:var(--surface-0)}
+.log-controls label{color:var(--ink-muted);font-size:var(--t-xs);font-weight:700;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.log-controls select{width:auto;min-width:180px;padding:7px 10px;font-size:var(--t-sm)}
 .log-table-wrap{overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 180px);padding:0 16px 80px}
 table{width:100%;border-collapse:collapse;font-size:var(--t-xs);min-width:360px}
 thead{position:sticky;top:0;z-index:5}
-th{background:var(--surface-1);color:var(--accent);font-weight:700;padding:6px 4px;text-align:center;border-bottom:1px solid var(--border-1);white-space:nowrap}
-th.hl{background:var(--surface-2)}
-td{padding:5px 4px;text-align:center;color:var(--ink-1);border-bottom:1px solid var(--surface-2);white-space:nowrap}
-td.hl{color:var(--accent);font-weight:700}
+th{background:var(--surface-1);color:var(--accent);font-weight:800;padding:9px 6px;text-align:center;border-bottom:1px solid var(--border-1);white-space:nowrap;letter-spacing:.04em}
+th.hl{background:var(--accent-bg);color:var(--accent-soft);box-shadow:inset 1px 0 var(--accent-line),inset -1px 0 var(--accent-line)}
+td{padding:8px 6px;text-align:center;color:var(--ink-1);border-bottom:1px solid var(--surface-2);white-space:nowrap;transition:background var(--dur-fast)}
+tbody tr:nth-child(even) td{background:color-mix(in srgb,var(--surface-1) 55%,transparent)}
+tbody tr:hover td{background:var(--surface-2)}
+td.hl{background:var(--accent-bg);color:var(--accent-soft);font-weight:800;box-shadow:inset 1px 0 var(--accent-line),inset -1px 0 var(--accent-line)}
+tbody tr:nth-child(even) td.hl{background:color-mix(in srgb,var(--accent-bg) 82%,var(--surface-1))}
+tbody tr:hover td.hl{background:var(--accent-bg)}
 td.hit{color:var(--over);font-weight:700}
 td.miss{color:var(--under);font-weight:700}
 td.push{color:var(--push);font-weight:700}
@@ -471,8 +483,9 @@ td.push{color:var(--push);font-weight:700}
   .dash-props .label{margin-bottom:10px}
   table{font-size:var(--t-sm)}
   th,td{padding:8px 6px}
+  .log-intro{padding:20px 24px 14px}
+  .log-controls{padding:10px 24px}
   .log-table-wrap{padding:0 24px 24px;max-height:calc(100vh - 140px)}
-  .log-controls{padding:12px 24px;max-width:300px}
   .pick-card,.dinger-card,.streak-card,.draft-card{margin:0 0 8px}
   .cards-wrap{padding:0 24px}
   .picks-summary{padding:0 24px 12px}
@@ -2440,7 +2453,7 @@ function render(){
   </div>
 
   <div id="pg-log" class="page ${activeTab==="gamelog"?"active":""}">
-    ${!pHasLogs?`<div class="early-banner"><div class="msg">No Game Logs Yet</div><div class="sub">Check the Lookup tab for career stats.</div></div>`:`<div class="log-controls"><select id="oppFilter">${oppOpts}</select></div><div class="log-table-wrap"><table><thead><tr><th>DATE</th><th>OPP</th><th>H/A</th>${tHeaders}</tr></thead><tbody>${tRows}</tbody></table></div>`}
+    ${!pHasLogs?`<div class="early-banner"><div class="msg">No Game Logs Yet</div><div class="sub">Check the Lookup tab for career stats.</div></div>`:`<div class="log-intro"><div><div class="log-kicker">Game Log</div><div class="log-heading">${esc(player)}</div><div class="log-context">${metric} results across recent games</div></div><div class="log-stat-chip"><strong>${fLogs.length}</strong><span>games shown</span></div></div><div class="log-controls"><label for="oppFilter">Opponent</label><select id="oppFilter">${oppOpts}</select></div><div class="log-table-wrap"><table><thead><tr><th>DATE</th><th>OPP</th><th>H/A</th>${tHeaders}</tr></thead><tbody>${tRows}</tbody></table></div>`}
   </div>
 
   <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
