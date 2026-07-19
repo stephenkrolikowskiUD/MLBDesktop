@@ -192,12 +192,40 @@ td.push{color:var(--push);font-weight:700}
 .prop-odds{font-size:var(--t-xs);font-weight:600}
 .prop-over{color:var(--over)}
 .prop-under{color:var(--under)}
-.pick-card{background:var(--surface-1);border-radius:10px;padding:12px 14px;margin:0 16px 10px;border-left:3px solid var(--border-1);transition:transform var(--dur-fast),box-shadow var(--dur-fast)}
-.pick-card.smash{border-left-color:var(--over);background:#16302a}
+.pick-card{background:var(--surface-1);border-radius:10px;padding:14px 16px;margin:0 16px 10px;border-left:2px solid var(--border-1);transition:transform var(--dur-fast),box-shadow var(--dur-fast);min-width:0}
+.pick-card.smash{border-left-color:var(--over);background:color-mix(in srgb,var(--over) 8%,var(--surface-1))}
 .pick-card.strong{border-left-color:var(--strong)}
-.pick-rank{display:inline-block;background:var(--surface-2);color:var(--accent);font-size:var(--t-xs);font-weight:700;padding:2px 6px;border-radius:4px;margin-right:6px}
-.pick-player{font-weight:700;font-size:var(--t-md)}
-.pick-matchup{color:var(--accent-soft);font-size:var(--t-xs);margin-top:2px}
+.pick-card.lean{border-left-color:var(--border-1)}
+.pick-card.locked-card{opacity:.72}
+.pick-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.pick-rank{display:inline-block;color:var(--ink-muted);font-size:var(--t-xs);font-weight:700;letter-spacing:.04em}
+.pick-tier{display:flex;align-items:center;gap:6px;margin-left:auto}
+.pick-tier-dot{width:6px;height:6px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.pick-tier-label{font-size:var(--t-xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.pick-tier.smash .pick-tier-dot{background:var(--over)}
+.pick-tier.smash .pick-tier-label{color:var(--over)}
+.pick-tier.strong .pick-tier-dot{background:var(--strong)}
+.pick-tier.strong .pick-tier-label{color:var(--strong)}
+.pick-tier.lean .pick-tier-dot{background:var(--push)}
+.pick-tier.lean .pick-tier-label{color:var(--push)}
+.pick-player{font-weight:700;font-size:var(--t-md);line-height:1.15}
+.pick-matchup{color:var(--accent-soft);font-size:var(--t-xs);margin-top:4px;margin-bottom:14px;line-height:1.35}
+.pick-hero{display:flex;align-items:baseline;gap:8px;margin-bottom:9px;min-width:0}
+.pick-hero-num{font-family:"Barlow Condensed",system-ui,sans-serif;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.pick-card.smash .pick-hero-num{font-size:28px;color:var(--over)}
+.pick-card.strong .pick-hero-num{font-size:23px;color:var(--strong)}
+.pick-card.lean .pick-hero-num{font-size:19px;color:var(--ink-0)}
+.pick-hero-action{font-size:var(--t-sm);font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.pick-hero-action.over{color:var(--over)}
+.pick-hero-action.under{color:var(--under)}
+.pick-hero-label{color:var(--accent-soft);font-size:var(--t-xs);text-transform:lowercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-line-rule{border-top:1px solid var(--accent-line);margin-bottom:8px;opacity:.8}
+.pick-rationale{color:var(--push);font-size:var(--t-xs);margin-top:10px;line-height:1.5}
+.pick-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:10px;margin-top:10px;border-top:1px solid var(--border-1);color:var(--push);font-size:var(--t-xs);line-height:1.35}
+.pick-footer .locked-badge,.pick-footer .risk-badge{display:inline-flex;align-items:center;gap:4px;background:none;border:0;border-radius:0;padding:0;margin:0;color:var(--ink-muted);font-size:var(--t-xs);font-weight:700}
+.pick-footer .risk-returning{color:var(--warn)}
+.pick-footer .risk-limited{color:var(--ink-muted)}
+.pick-footer-note{color:var(--warn);font-weight:600}
 .pick-prop{display:flex;align-items:center;gap:8px;margin-top:8px}
 .pick-type{background:var(--surface-2);border:1px solid var(--border-1);border-radius:6px;padding:3px 8px;font-size:var(--t-xs);font-weight:700;color:var(--accent)}
 .pick-lean{font-size:var(--t-md);font-weight:700}
@@ -205,9 +233,9 @@ td.push{color:var(--push);font-weight:700}
 .pick-lean.under{color:var(--under)}
 .pick-conf{font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:10px;margin-left:auto}
 .pick-conf.smash{background:var(--over-soft);color:var(--over);border:1px solid var(--over-line)}
-.pick-conf.strong{background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong);border:1px solid color-mix(in srgb, var(--strong) 27%, transparent)}
+.pick-conf.strong{background:color-mix(in srgb,var(--strong) 13%,transparent);color:var(--strong);border:1px solid color-mix(in srgb,var(--strong) 27%,transparent)}
 .pick-conf.lean{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line)}
-.pick-rationale{color:var(--push);font-size:var(--t-xs);margin-top:6px;font-style:italic} .pick-card.lineup-risk{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:var(--warn);background:#2a2418} .lineup-risk-badge{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:var(--warn);font-size:var(--t-xs);margin-top:4px;font-weight:600}
+.pick-card.lineup-risk{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:var(--warn);background:#2a2418} .lineup-risk-badge{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:var(--warn);font-size:var(--t-xs);margin-top:4px;font-weight:600}
 .pick-result{display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-1)}
 .result-badge{font-size:var(--t-xs);font-weight:700;padding:2px 8px;border-radius:10px}
 .result-hit{background:var(--over-soft);color:var(--over);border:1px solid var(--over-line)}
@@ -422,6 +450,12 @@ td.push{color:var(--push);font-weight:700}
   .pick-card{margin:0 10px 8px;padding:10px 12px;border-left-width:3px}
   .pick-player{font-size:var(--t-sm);line-height:1.2}
   .pick-matchup{font-size:var(--t-xs);line-height:1.2;margin-top:2px}
+  .pick-card.smash .pick-hero-num{font-size:26px}
+  .pick-card.strong .pick-hero-num{font-size:22px}
+  .pick-card.lean .pick-hero-num{font-size:18px}
+  .pick-hero{gap:7px;margin-bottom:8px}
+  .pick-hero-action{font-size:var(--t-xs)}
+  .pick-footer{gap:6px;padding-top:8px;margin-top:8px}
   .pick-prop{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;margin-top:4px}
   .pick-rationale{font-size:var(--t-xs);line-height:1.25;margin-top:4px}
   .lineup-risk-badge,.lineup-risk-text{font-size:var(--t-xs);line-height:1.2}
@@ -583,7 +617,7 @@ let st={
   picks:[],props:[],allBooksProps:[],
   pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
   mode:"batter",
-  player:"",metric:"H",line:"",activeTab:"dashboard",oppFilter:"",
+  player:"",metric:"H",line:"",activeTab:"picks",oppFilter:"",
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,loadedAt:null,latestPickDate:"",pickGuard:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",
@@ -2090,7 +2124,8 @@ function render(){
       picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
       picksHTML+=`<div class="cards-grid">`;
       picksHTML+=todayPicks.map(pk=>{
-        const c=normalizeConfidence(pk.confidence),cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"";
+        const c=normalizeConfidence(pk.confidence),tierClass=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";
+        const leanText=String(pk.lean||"").trim().toUpperCase(),leanClass=leanText==="UNDER"?"under":"over";
         const h=String(rowField(pk,"HIT")).toUpperCase();
         const actualStat=rowField(pk,"ACTUAL_STAT");
         const hasR=actualStat!=null&&actualStat!==""&&!isNaN(actualStat);
@@ -2104,7 +2139,7 @@ function render(){
         const isPitch=(pk.prop_type||"").startsWith("P_");
         const locked=getLockInfo(pk.player,isPitch).started;
         const pickProp=findPropForPick(pk.player,pk.prop_type,pk.line);
-        return`<div class="pick-card ${cls}${hasLineupRisk?" lineup-risk":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div><span class="pick-rank">#${pk.rank||"—"}</span><span class="pick-player">${playerLink(pk.player,pk.prop_type||"",pk.line||"")}${badges}${lockBadge(pk.player,isPitch)}</span></div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-prop"><div class="pick-type">${pk.prop_type||""}</div><div class="pick-lean ${(pk.lean||"").toLowerCase()}">${pk.lean||""} ${pk.line||""}</div><div class="pick-conf ${cls}">${c||"LEAN"}</div></div>${renderBestBookLine(pickProp,pk.lean)}${pk.rationale?`<div class="pick-rationale">"${esc(pk.rationale)}"</div>`:""}${flags.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${riskHTML}${rHTML}</div>`;
+        return`<div class="pick-card ${tierClass}${hasLineupRisk?" lineup-risk":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div class="pick-card-head"><span class="pick-rank">#${pk.rank||"—"}</span><div class="pick-tier ${tierClass}"><span class="pick-tier-dot"></span><span class="pick-tier-label">${c||"LEAN"}</span></div></div><div class="pick-player">${playerLink(pk.player,pk.prop_type||"",pk.line||"")}</div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-hero"><span class="pick-hero-num">${esc(pk.line||"—")}</span><span class="pick-hero-action ${leanClass}">${esc(leanText||"PICK")}</span><span class="pick-hero-label">${esc(String(pk.prop_type||"").toLowerCase())}</span></div><div class="pick-line-rule" aria-hidden="true"></div>${renderBestBookLine(pickProp,pk.lean)}${pk.rationale?`<div class="pick-rationale">${esc(pk.rationale)}</div>`:""}<div class="pick-footer">${lockBadge(pk.player,isPitch)}${badges}${flags.returning?`<span class="pick-footer-note">Returning from absence — season averages may not reflect current form.</span>`:""}</div>${riskHTML}${rHTML}</div>`;
       }).join("");
       picksHTML+=`</div>`;
     }

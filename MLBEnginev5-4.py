@@ -2526,36 +2526,15 @@ PLAYER DATA (batters and pitchers, with season/recent averages, matchup context,
 ACTIVE PROP STREAKS:
 {streak_ctx}
 RULES:
-- CRITICAL: ONLY pick players from the PLAYER DATA list above.
-- Return EXACTLY {GEMINI_TARGET_PICKS + 6} ranked candidate picks as a JSON array. The engine will keep the top {GEMINI_TARGET_PICKS} valid picks after sportsbook validation.
-- Confidence tiers: SMASH (top 3-4 highest conviction only), STRONG (next 4-5), LEAN (rest).
-- STRONG requires ALL of: (a) season hit rate >55% on the prop type for this player, (b) EV% >5%, (c) supportive matchup or split context (vs pitcher handedness, opponent rank, park factor, weather). Any pick missing even one of these is LEAN, not STRONG.
-- LEAN is the default tier when only 1-2 signals are positive. Use LEAN liberally — it should be the most common tier in the slate.
-- Players flagged RETURNING have depressed lines due to injury/absence. Their season averages are NOT reliable short-term predictors. Treat with extreme caution — do NOT SMASH these players.
-- Players flagged with LINEUP RISK / weak lineup protection may be pitched around late. Lower confidence on H/R props when that warning appears unless the edge is overwhelming.
-- STAR players are the top 20 by season UD fantasy points in tonight's valid prop pool.
-- Prefer at least 4 of your 14 picks to come from STAR players. Non-stars should fill the remaining slots only when they have exceptional edges or matchup context.
-- Available prop types: ONLY the real DK props listed next to each player in PLAYER DATA.
-- Batters can only get batter props. Pitchers can only get pitcher props.
-- Allowed prop types for this slate: {allowed_prompt_props_str}.
-- For batters, only use: H, R.
-- For pitchers, only use: P_SO, P_ER, P_BB.
-- Any prop type NOT in the allowed list above is excluded — do not invent picks for them.
-- Do NOT pick H OVER lines above 0.5.
-- Prioritize H OVER 0.5 and P_SO — highest cumulative hit rates (59% and 73% respectively)
-- Do NOT pick UD_FP or H+R+RBI — stick to single-stat props.
-- DIVERSIFY prop types where the sportsbook offers enough valid markets.
-- UNDER props are profitable in MLB (observed ~59% hit rate, n=145). Evaluate UNDER opportunities on overlined batters and pitchers when L5/L10 form and matchup support it. Soft target: 3-5 UNDERs per 14-pick slate, no LEAN UNDERs.
-- On H/P_SO-heavy slates, you may return up to 10 H props and up to 4 pitcher props.
-- P_SO is the preferred pitcher market. Include at least 1 pitcher strikeouts (P_SO) pick per slate when a strong pitcher matchup exists.
-- H props have a 53% hit rate. Prioritize H OVER 0.5 as the core of every slate.
-- When edges are close, prioritize H props over every other batter market.
-- Prefer 8-10 H props when valid H markets exist.
-- Keep R props secondary to H. Use R only when matchup, lineup spot, and recent form strongly agree.
-- Include a mix across H, R, P_SO, P_ER, and P_BB when supported by the listed real markets.
-- CRITICAL: Every pick must match one of the listed REAL DK props for that exact player and line.
-- Lines must be real sportsbook lines from the listed REAL DK props. Do NOT invent lines or use player averages.
-- Use DK lines when available. NEVER return null for line.
+- CRITICAL: ONLY pick players from the PLAYER DATA list above, and every pick must match one of that player's listed REAL DK props exactly (same prop type and line). Do NOT invent lines or use season/recent averages as a line. NEVER return null for line.
+- Return EXACTLY {GEMINI_TARGET_PICKS + 6} ranked candidate picks. These are draft candidates for the engine to validate, not final bets — breadth matters more than certainty. If you're unsure whether a pick clears STRONG, mark it LEAN and include it rather than leaving it out. Do not stop early because you've run out of high-confidence picks.
+- Batters: only H or R props. Pitchers: only P_SO, P_ER, or P_BB props. Allowed prop types for this slate: {allowed_prompt_props_str}. Never pick UD_FP or combined props like H+R+RBI.
+- Confidence tiers: SMASH = top 3-4 highest conviction only. STRONG = next 4-5, requires ALL of (a) season hit rate >55% on this prop type for this player, (b) EV% >5%, (c) supportive matchup/split context. LEAN = everything else with 1-2 positive signals — use it liberally; it should be the most common tier.
+- Players flagged RETURNING: season averages aren't reliable short-term predictors. Cap at STRONG — never SMASH.
+- Players flagged LINEUP RISK / weak lineup protection: lower confidence on H/R props unless the edge is overwhelming.
+- STAR players are the top 20 by season UD fantasy points in tonight's valid prop pool. Prefer at least 4 of your {GEMINI_TARGET_PICKS} final picks from STARs; non-stars fill remaining slots only with exceptional edges.
+- Prop weighting (soft preferences, not exclusionary — a strong-signal R, P_ER, or P_BB pick should never be dropped to chase these targets): favor H OVER 0.5 and P_SO as the highest-value markets (historical hit rates ~59%/73%) — aim for roughly 8-10 H picks and at least 1 strong P_SO matchup. Keep R secondary to H, used only when lineup spot, recent form, and matchup all agree. Diversify across H, R, P_SO, P_ER, P_BB when the market supports it.
+- UNDERs are historically profitable in MLB (~59% hit rate, n=145) — include 3-5 UNDER picks (never at LEAN tier) when an overlined batter/pitcher's recent form and matchup support it.
 ANALYSIS FACTORS:
 - Batter vs LHP/RHP splits, recent form, active prop streaks, home/away split, weather, park, and pitcher quality.
 - Statcast L14 quality: xBA/xwOBA, hard-hit rate, barrel rate, exit velocity, whiff/chase/CSW, and model edge scores.
