@@ -30,7 +30,9 @@
   --under-soft: #c94a4a22;
   --under-line: #c94a4a44;
   --push: #9a9a8f;
-  --smash: #4a9b5f;
+  --smash: #9b6bd1;
+  --smash-soft: #9b6bd122;
+  --smash-line: #9b6bd155;
   --strong: #3d7db3;
   --lean: #b8813a;
   --warn: #c89452;
@@ -67,6 +69,9 @@ body.light-theme {
   --accent: #2f7548;
   --accent-soft: #4a9b5f;
   --accent-bg: #e6f0e9;
+  --smash: #7c4db0;
+  --smash-soft: #7c4db022;
+  --smash-line: #7c4db055;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--surface-0);color:var(--ink-0);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:var(--t-sm);line-height:1.4;max-width:480px;margin:0 auto;padding-bottom:60px}
@@ -193,7 +198,7 @@ td.push{color:var(--push);font-weight:700}
 .prop-over{color:var(--over)}
 .prop-under{color:var(--under)}
 .pick-card{background:var(--surface-1);border-radius:10px;padding:14px 16px;margin:0 16px 10px;border-left:2px solid var(--border-1);transition:transform var(--dur-fast),box-shadow var(--dur-fast);min-width:0}
-.pick-card.smash{border-left-color:var(--over);background:color-mix(in srgb,var(--over) 8%,var(--surface-1))}
+.pick-card.smash{border-left-color:var(--smash);background:color-mix(in srgb,var(--smash) 8%,var(--surface-1))}
 .pick-card.strong{border-left-color:var(--strong)}
 .pick-card.lean{border-left-color:var(--border-1)}
 .pick-card.locked-card{opacity:.72}
@@ -202,8 +207,8 @@ td.push{color:var(--push);font-weight:700}
 .pick-tier{display:flex;align-items:center;gap:6px;margin-left:auto}
 .pick-tier-dot{width:6px;height:6px;border-radius:50%;display:inline-block;flex:0 0 auto}
 .pick-tier-label{font-size:var(--t-xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.pick-tier.smash .pick-tier-dot{background:var(--over)}
-.pick-tier.smash .pick-tier-label{color:var(--over)}
+.pick-tier.smash .pick-tier-dot{background:var(--smash)}
+.pick-tier.smash .pick-tier-label{color:var(--smash)}
 .pick-tier.strong .pick-tier-dot{background:var(--strong)}
 .pick-tier.strong .pick-tier-label{color:var(--strong)}
 .pick-tier.lean .pick-tier-dot{background:var(--push)}
@@ -212,7 +217,7 @@ td.push{color:var(--push);font-weight:700}
 .pick-matchup{color:var(--accent-soft);font-size:var(--t-xs);margin-top:4px;margin-bottom:14px;line-height:1.35}
 .pick-hero{display:flex;align-items:baseline;gap:8px;margin-bottom:9px;min-width:0}
 .pick-hero-num{font-family:"Barlow Condensed",system-ui,sans-serif;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
-.pick-card.smash .pick-hero-num{font-size:28px;color:var(--over)}
+.pick-card.smash .pick-hero-num{font-size:28px;color:var(--smash)}
 .pick-card.strong .pick-hero-num{font-size:23px;color:var(--strong)}
 .pick-card.lean .pick-hero-num{font-size:19px;color:var(--ink-0)}
 .pick-hero-action{font-size:var(--t-sm);font-weight:800;letter-spacing:.06em;text-transform:uppercase}
@@ -220,11 +225,12 @@ td.push{color:var(--push);font-weight:700}
 .pick-hero-action.under{color:var(--under)}
 .pick-hero-label{color:var(--accent-soft);font-size:var(--t-xs);text-transform:lowercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-line-rule{border-top:1px solid var(--accent-line);margin-bottom:8px;opacity:.8}
-.pick-rationale{color:var(--push);font-size:var(--t-xs);margin-top:10px;line-height:1.5}
+.pick-rationale{color:var(--push);font-size:var(--t-xs);margin-top:10px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pick-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:10px;margin-top:10px;border-top:1px solid var(--border-1);color:var(--push);font-size:var(--t-xs);line-height:1.35}
 .pick-footer .locked-badge,.pick-footer .risk-badge{display:inline-flex;align-items:center;gap:4px;background:none;border:0;border-radius:0;padding:0;margin:0;color:var(--ink-muted);font-size:var(--t-xs);font-weight:700}
 .pick-footer .risk-returning{color:var(--warn)}
 .pick-footer .risk-limited{color:var(--ink-muted)}
+.pick-footer-status{color:var(--ink-muted);font-weight:400}
 .pick-footer-note{color:var(--warn);font-weight:600}
 .pick-prop{display:flex;align-items:center;gap:8px;margin-top:8px}
 .pick-type{background:var(--surface-2);border:1px solid var(--border-1);border-radius:6px;padding:3px 8px;font-size:var(--t-xs);font-weight:700;color:var(--accent)}
@@ -232,7 +238,7 @@ td.push{color:var(--push);font-weight:700}
 .pick-lean.over{color:var(--over)}
 .pick-lean.under{color:var(--under)}
 .pick-conf{font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:10px;margin-left:auto}
-.pick-conf.smash{background:var(--over-soft);color:var(--over);border:1px solid var(--over-line)}
+.pick-conf.smash{background:var(--smash-soft);color:var(--smash);border:1px solid var(--smash-line)}
 .pick-conf.strong{background:color-mix(in srgb,var(--strong) 13%,transparent);color:var(--strong);border:1px solid color-mix(in srgb,var(--strong) 27%,transparent)}
 .pick-conf.lean{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line)}
 .pick-card.lineup-risk{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:var(--warn);background:#2a2418} .lineup-risk-badge{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:var(--warn);font-size:var(--t-xs);margin-top:4px;font-weight:600}
@@ -241,6 +247,7 @@ td.push{color:var(--push);font-weight:700}
 .result-hit{background:var(--over-soft);color:var(--over);border:1px solid var(--over-line)}
 .result-miss{background:var(--under-soft);color:var(--under);border:1px solid var(--under-line)}
 .result-push{background:color-mix(in srgb, var(--push) 13%, transparent);color:var(--push);border:1px solid color-mix(in srgb, var(--push) 27%, transparent)}
+.pick-result .result-push{background:none;border:0;border-radius:0;padding:0;font-weight:400}
 .result-actual{color:var(--accent-soft);font-size:var(--t-xs)}
 .props-filter{display:flex;gap:6px;padding:8px 16px;overflow-x:auto}
 .pf-btn{padding:6px 12px;font-size:var(--t-xs);font-weight:600;color:var(--ink-muted);background:var(--surface-2);border:1px solid var(--border-1);border-radius:16px;cursor:pointer;white-space:nowrap;flex-shrink:0}
@@ -321,7 +328,7 @@ td.push{color:var(--push);font-weight:700}
 .draft-card{background:var(--surface-1);border-radius:10px;padding:10px 14px;margin:0 16px 6px;border-left:3px solid var(--border-1);display:flex;align-items:center;gap:10px;cursor:pointer;transition:transform var(--dur-fast),box-shadow var(--dur-fast),opacity var(--dur-fast)}
 .draft-card:active{transform:scale(.98)}
 .draft-card.drafted{opacity:.3;text-decoration:line-through}
-.draft-card.smash{border-left-color:var(--over)}
+.draft-card.smash{border-left-color:var(--smash)}
 .draft-card.tier1{border-left-color:var(--accent)}
 .draft-card.tier2{border-left-color:var(--strong)}
 .draft-card.tier3{border-left-color:#8b5cf6}
@@ -552,7 +559,7 @@ td.push{color:var(--push);font-weight:700}
 /* ═══ DESKTOP (1024px+) ═══ */
 @media(min-width:1024px){
   .header-controls{margin-top:0;width:auto;flex:1;justify-content:flex-end}
-  .cards-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
   .cards-grid .draft-tier-label{grid-column:1/-1}
   .combo-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .matchup-stats{grid-template-columns:repeat(4,1fr);gap:10px}
@@ -868,12 +875,25 @@ function riskBadges(name,isP,{showLimited=true}={}){
   if(showLimited&&f.limited)out.push(`<span class="risk-badge risk-limited">${icon('warn')}LIMITED SAMPLE</span>`);
   return out.join("");
 }
+function pickFooterStatus(locked,flags,pending){
+  const states=[];
+  if(locked)states.push("LOCKED");
+  if(flags.returning)states.push("RETURNING");
+  if(flags.limited)states.push("LIMITED SAMPLE");
+  if(pending)states.push("PENDING");
+  return states.length?`<div class="pick-footer"><span class="pick-footer-status">${states.join(" · ")}</span></div>`:"";
+}
 function normalizePlayerName(name){
   return cleanName(name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’'`\.]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
 }
 function normalizePropMetric(metric){
   const m=String(metric||"").trim().toUpperCase().replace(/\s+/g,"");
   return m==="BATTER_SO"?"SO":m;
+}
+function propTypeLabel(metric){
+  const m=String(metric||"").trim().toUpperCase();
+  const labels={H:"hits",R:"runs",P_SO:"strikeouts",P_ER:"earned runs",P_BB:"walks"};
+  return labels[m]||m.toLowerCase();
 }
 function normalizeLeanText(lean){
   const l=String(lean||"").trim().toUpperCase();
@@ -1891,7 +1911,7 @@ function detectDrifts(rows,threshold=0.10){const all=(rows||[]).filter(r=>String
 function renderDriftAlerts(rows){const drifts=detectDrifts(rows);if(!drifts.length)return '';const shown=drifts.slice(0,5);return `<div style="padding:0 16px 8px"><div style="color:var(--warn);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Drift Alerts</div>${shown.map(d=>`<div class="card" style="border-color:var(--warn-line);margin-bottom:6px"><div style="font-size:var(--t-sm);color:var(--warn);font-weight:800">⚠️ DRIFT — ${esc(String(d.dimension_value||d.dimension_type))}</div><div style="font-size:var(--t-xs);color:var(--ink-1);margin-top:4px">last 30d ${statPct(d.hit_rate_last_30d)} vs all-time ${statPct(d.hit_rate_all_time)} (${d.delta>0?'+':''}${Math.round(d.delta*100)}pp on n=${Math.round(d.n)})</div></div>`).join('')}${drifts.length>5?`<div style="color:var(--push);font-size:var(--t-xs);padding:2px 4px">... and ${drifts.length-5} more</div>`:''}</div>`}
 function renderOverallCard(rows,w){const r=getMetricsForSlice(rows,'overall','',w);if(!r)return `<div class="empty">No overall stats for ${statsWindowLabel(w)}.</div>`;const low=!statBool(r,'MIN_SAMPLE_FLAG');return `<div class="card" style="margin:0 16px 10px;border-color:color-mix(in srgb, var(--accent) 27%, transparent)"><div class="card-title">OVERALL — ${statsWindowLabel(w)} ${low?'<span style="font-size:var(--t-xs);color:var(--warn)">(low sample)</span>':''}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end"><div><div style="font-size:34px;font-weight:900;color:var(--accent)">${statPct(statNum(r,'HIT_RATE'))}</div><div style="font-size:var(--t-xs);color:var(--push)">Push-adjusted hit rate</div><div style="font-size:var(--t-sm);color:var(--ink-1);margin-top:6px">${Math.round(statNum(r,'N_PICKS_DECISIVE'))} decisive / ${Math.round(statNum(r,'N_PICKS'))} picks</div></div><div style="text-align:right"><div style="font-size:var(--t-lg);font-weight:800;color:${statNum(r,'ROI_PER_PICK')>=0?'var(--over)':'var(--under)'}">ROI/pick ${statSigned(statNum(r,'ROI_PER_PICK'))}</div><div style="font-size:var(--t-xs);color:var(--push)">Flat -115 model</div></div></div></div>`}
 function hitBar(rate){const r=Math.max(0,Math.min(1,Number(rate)||0));const w=Math.round(r*100);const good=r>=STATS_BREAK_EVEN;return `<div style="height:7px;background:#26313a;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:${w}%;background:${good?'var(--over)':'var(--under)'}"></div></div><div style="font-size:var(--t-xs);color:var(--push);margin-top:2px">break-even 52.4%</div>`}
-function renderTierBreakdown(rows,w){const tiers=['SMASH','STRONG','LEAN'];const found=tiers.map(t=>getMetricsForSlice(rows,'confidence_norm',t,w)).filter(Boolean);if(!found.length)return '';const rates=found.map(r=>statNum(r,'HIT_RATE'));const collapse=found.length>=2&&rates.some((a,i)=>rates.some((b,j)=>j>i&&Math.abs(a-b)<=0.01));return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Confidence Tiers ${collapse?'<span style="color:var(--warn);font-size:var(--t-xs)">⚠️ tier collapse</span>':''}</div>${tiers.map(t=>{const r=getMetricsForSlice(rows,'confidence_norm',t,w);if(!r)return '';const rate=statNum(r,'HIT_RATE');const color=t==='SMASH'?'var(--over)':t==='STRONG'?'var(--warn)':'var(--push)';return `<div class="card" style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:10px"><div><span style="background:${color}22;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 7px;font-size:var(--t-xs);font-weight:800">${t}</span><div style="font-size:var(--t-xs);color:var(--push);margin-top:5px">n=${Math.round(statNum(r,'N_PICKS_DECISIVE'))} · ROI/p ${statSigned(statNum(r,'ROI_PER_PICK'))}</div></div><div style="font-size:var(--t-lg);font-weight:900;color:${color}">${statPct(rate)}</div></div>${hitBar(rate)}</div>`}).join('')}</div>`}
+function renderTierBreakdown(rows,w){const tiers=['SMASH','STRONG','LEAN'];const found=tiers.map(t=>getMetricsForSlice(rows,'confidence_norm',t,w)).filter(Boolean);if(!found.length)return '';const rates=found.map(r=>statNum(r,'HIT_RATE'));const collapse=found.length>=2&&rates.some((a,i)=>rates.some((b,j)=>j>i&&Math.abs(a-b)<=0.01));return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Confidence Tiers ${collapse?'<span style="color:var(--warn);font-size:var(--t-xs)">⚠️ tier collapse</span>':''}</div>${tiers.map(t=>{const r=getMetricsForSlice(rows,'confidence_norm',t,w);if(!r)return '';const rate=statNum(r,'HIT_RATE');const color=t==='SMASH'?'var(--smash)':t==='STRONG'?'var(--warn)':'var(--push)';return `<div class="card" style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:10px"><div><span style="background:${color}22;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 7px;font-size:var(--t-xs);font-weight:800">${t}</span><div style="font-size:var(--t-xs);color:var(--push);margin-top:5px">n=${Math.round(statNum(r,'N_PICKS_DECISIVE'))} · ROI/p ${statSigned(statNum(r,'ROI_PER_PICK'))}</div></div><div style="font-size:var(--t-lg);font-weight:900;color:${color}">${statPct(rate)}</div></div>${hitBar(rate)}</div>`}).join('')}</div>`}
 function renderLeanBreakdown(rows,w){const over=getMetricsForSlice(rows,'lean_norm','OVER',w),under=getMetricsForSlice(rows,'lean_norm','UNDER',w);if(!over&&!under)return '';let call='';if(over&&under&&statBool(over,'MIN_SAMPLE_FLAG')&&statBool(under,'MIN_SAMPLE_FLAG')){const diff=statNum(under,'HIT_RATE')-statNum(over,'HIT_RATE');if(Math.abs(diff)>=0.05)call=`<div class="card" style="border-color:#60a5fa55;margin-bottom:6px;color:#bfdbfe;font-size:var(--t-xs)">💡 ${diff>0?'UNDERs':'OVERs'} outperforming by ${Math.abs(diff*100).toFixed(1)}pp — consider review.</div>`}return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Lean Breakdown</div>${call}${['OVER','UNDER'].map(v=>{const r=v==='OVER'?over:under;if(!r)return '';return `<div class="card" style="margin-bottom:6px"><div style="display:flex;justify-content:space-between"><div style="font-weight:800;color:var(--ink-1)">${v}<div style="font-size:var(--t-xs);color:var(--push)">n=${Math.round(statNum(r,'N_PICKS_DECISIVE'))} · ROI/p ${statSigned(statNum(r,'ROI_PER_PICK'))}</div></div><div style="font-size:var(--t-lg);font-weight:900;color:${statNum(r,'HIT_RATE')>=STATS_BREAK_EVEN?'var(--over)':'var(--under)'}">${statPct(statNum(r,'HIT_RATE'))}</div></div></div>`}).join('')}</div>`}
 function renderCLVSummary(rows,w){const pos=getMetricsForSlice(rows,'clv_bucket','positive',w),neg=getMetricsForSlice(rows,'clv_bucket','negative',w);if(!pos&&!neg)return '';const cell=(label,r)=>`<div class="card"><div style="font-size:var(--t-xs);color:var(--push);text-transform:uppercase">${label}</div><div style="font-size:var(--t-lg);font-weight:900;color:${label.includes('Positive')?'var(--over)':'var(--under)'}">${r?statPct(statNum(r,'HIT_RATE')):'—'}</div><div style="font-size:var(--t-xs);color:var(--ink-1)">n=${r?Math.round(statNum(r,'N_PICKS_DECISIVE')):0}</div></div>`;return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">CLV Summary</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${cell('Positive CLV',pos)}${cell('Negative CLV',neg)}</div></div>`}
 function renderPropTypeList(rows,w,ranking='best',limit=5){const arr=statsRowsForWindow(rows,w).filter(r=>statField(r,'DIMENSION_TYPE')==='prop_type_norm'&&statBool(r,'MIN_SAMPLE_FLAG')).sort((a,b)=>ranking==='best'?statNum(b,'WILSON_LOWER_95')-statNum(a,'WILSON_LOWER_95'):statNum(a,'WILSON_LOWER_95')-statNum(b,'WILSON_LOWER_95')).slice(0,limit);if(!arr.length)return '';const good=ranking==='best';return `<div style="padding:0 16px 10px"><div style="color:${good?'var(--over)':'var(--under)'};font-size:var(--t-sm);font-weight:800;margin-bottom:6px">${good?'Top':'Worst'} Prop Types</div><div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:var(--t-xs)"><thead><tr style="color:var(--push)"><th style="text-align:left;padding:8px">PROP</th><th>HIT</th><th>n</th><th>ROI/p</th><th>WLB</th></tr></thead><tbody>${arr.map(r=>`<tr style="border-top:1px solid #26313a"><td style="padding:8px;font-weight:800;color:var(--ink-1)">${esc(statField(r,'DIMENSION_VALUE'))}</td><td style="text-align:center;color:${statNum(r,'HIT_RATE')>=STATS_BREAK_EVEN?'var(--over)':'var(--under)'};font-weight:800">${statPct0(statNum(r,'HIT_RATE'))}</td><td style="text-align:center">${Math.round(statNum(r,'N_PICKS_DECISIVE'))}</td><td style="text-align:center">${statSigned(statNum(r,'ROI_PER_PICK'))}</td><td style="text-align:center">${statNum(r,'WILSON_LOWER_95').toFixed(3)}</td></tr>`).join('')}</tbody></table></div></div>`}
@@ -2001,7 +2021,7 @@ function render(){
     const c=pPick.confidence||"",cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";
     const pInjCtx=(pPick.injury_context||"").toString();
     const pHasRisk=pInjCtx.toUpperCase().startsWith("LINEUP RISK");
-    const borderColor=pHasRisk?"var(--warn)":(c==="SMASH"?"var(--over)":"var(--strong)");
+    const borderColor=pHasRisk?"var(--warn)":(c==="SMASH"?"var(--smash)":"var(--strong)");
     const pRiskHTML=pHasRisk?`<div class="lineup-risk-badge">${icon('warn')}LINEUP RISK</div><div class="lineup-risk-text">${esc(pInjCtx)}</div>`:"";
     pickBanner=`<div class="section"><div class="card" style="border-left:3px solid ${borderColor}${pHasRisk?";background:#2a2418":""}"><div class="card-title">Model pick</div><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="pick-type">${pPick.prop_type||""}</div><div class="pick-lean ${(pPick.lean||"").toLowerCase()}">${pPick.lean||""} ${pPick.line||""}</div><div class="pick-conf ${cls}">${c}</div></div><div class="pick-rationale">${esc(pPick.rationale||"")}</div>${pRiskHTML}</div></div>`;
   }
@@ -2134,12 +2154,12 @@ function render(){
         const riskHTML=hasLineupRisk?`<div class="lineup-risk-badge">${icon('warn')}LINEUP RISK</div><div class="lineup-risk-text">${esc(injCtx)}</div>`:"";
         const flags=getSampleFlags(pk.player,(pk.prop_type||"").startsWith("P_"));
         const badges=riskBadges(pk.player,(pk.prop_type||"").startsWith("P_"));
-        let rHTML="";
-        if(hasR||h){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${actualStat}</span>`:""}</div>`}
+        const pendingStatus=!!h&&!["YES","TRUE","NO","FALSE"].includes(h)&&!hasR;let rHTML="";
+        if((hasR||h)&&!pendingStatus){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${actualStat}</span>`:""}</div>`}
         const isPitch=(pk.prop_type||"").startsWith("P_");
         const locked=getLockInfo(pk.player,isPitch).started;
         const pickProp=findPropForPick(pk.player,pk.prop_type,pk.line);
-        return`<div class="pick-card ${tierClass}${hasLineupRisk?" lineup-risk":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div class="pick-card-head"><span class="pick-rank">#${pk.rank||"—"}</span><div class="pick-tier ${tierClass}"><span class="pick-tier-dot"></span><span class="pick-tier-label">${c||"LEAN"}</span></div></div><div class="pick-player">${playerLink(pk.player,pk.prop_type||"",pk.line||"")}</div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-hero"><span class="pick-hero-num">${esc(pk.line||"—")}</span><span class="pick-hero-action ${leanClass}">${esc(leanText||"PICK")}</span><span class="pick-hero-label">${esc(String(pk.prop_type||"").toLowerCase())}</span></div><div class="pick-line-rule" aria-hidden="true"></div>${renderBestBookLine(pickProp,pk.lean)}${pk.rationale?`<div class="pick-rationale">${esc(pk.rationale)}</div>`:""}<div class="pick-footer">${lockBadge(pk.player,isPitch)}${badges}${flags.returning?`<span class="pick-footer-note">Returning from absence — season averages may not reflect current form.</span>`:""}</div>${riskHTML}${rHTML}</div>`;
+return`<div class="pick-card ${tierClass}${hasLineupRisk?" lineup-risk":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div class="pick-card-head"><span class="pick-rank">#${pk.rank||"—"}</span><div class="pick-tier ${tierClass}"><span class="pick-tier-dot"></span><span class="pick-tier-label">${c||"LEAN"}</span></div></div><div class="pick-player">${playerLink(pk.player,pk.prop_type||"",pk.line||"")}</div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-hero"><span class="pick-hero-num">${esc(pk.line||"—")}</span><span class="pick-hero-action ${leanClass}">${esc(leanText||"PICK")}</span><span class="pick-hero-label">${esc(propTypeLabel(pk.prop_type))}</span></div><div class="pick-line-rule" aria-hidden="true"></div>${renderBestBookLine(pickProp,pk.lean)}${pk.rationale?`<div class="pick-rationale">${esc(pk.rationale)}</div>`:""}${pickFooterStatus(locked,flags,pendingStatus)}${riskHTML}${rHTML}</div>`;
       }).join("");
       picksHTML+=`</div>`;
     }
@@ -2354,7 +2374,7 @@ function render(){
         const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
         const tierChanged=tier.label!==lastTier;lastTier=tier.label;
         let tags=[];
-        if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">SMASH</span>`);
+        if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--smash-soft);color:var(--smash)">SMASH</span>`);
         if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
         else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">👁️ PATIENT</span>`)}
         if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
