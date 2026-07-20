@@ -243,15 +243,47 @@ td.push{color:var(--push);font-weight:700}
 .pick-conf.lean{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line)}
 .pick-card.lineup-risk{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:var(--warn);background:#2a2418} .lineup-risk-badge{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:var(--warn);font-size:var(--t-xs);margin-top:4px;font-weight:600}
 .pick-result{display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-1)}
-.players-day-grid .pick-card{padding:12px 14px}
-.players-day-grid .pick-card-head{margin-bottom:6px}
-.players-day-grid .pick-player,.players-day-grid .pick-matchup{line-height:1.2}
-.players-day-grid .pick-matchup{margin-top:2px;margin-bottom:8px}
-.players-day-grid .pick-hero{gap:6px;margin-bottom:6px}
-.players-day-grid .pick-line-rule{margin-bottom:0}
-.players-day-grid .best-book-line{margin-top:6px!important;font-size:11px!important}
-.players-day-grid .pick-rationale{margin-top:8px;line-height:1.3}
-.players-day-grid .pick-footer{padding-top:8px;margin-top:8px}
+.pick-editorial{padding:0 16px 16px}
+.pick-feature{background:var(--surface-1);border:1px solid var(--border-1);border-left:4px solid var(--smash);border-radius:6px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color var(--dur-fast),background var(--dur-fast)}
+.pick-feature.strong{border-left-color:var(--strong)}
+.pick-feature.lean{border-left-color:var(--push)}
+.pick-feature-kicker{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;color:var(--ink-muted);font-size:var(--t-xs);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.pick-feature-main{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end}
+.pick-feature-name{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:28px;line-height:1;font-weight:800;letter-spacing:.01em}
+.pick-feature-matchup{color:var(--ink-muted);font-size:var(--t-xs);margin-top:5px;line-height:1.3}
+.pick-feature-call{text-align:right;white-space:nowrap}
+.pick-feature-line{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:32px;font-weight:800;line-height:1}
+.pick-feature-line.over{color:var(--over)}
+.pick-feature-line.under{color:var(--under)}
+.pick-feature-market{color:var(--ink-muted);font-size:var(--t-xs);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.pick-feature-evidence{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border-1)}
+.pick-board{border-top:1px solid var(--border-1)}
+.pick-board-head,.pick-board-row{display:grid;grid-template-columns:34px minmax(180px,1.35fr) 86px minmax(150px,1fr) 112px;gap:12px;align-items:center}
+.pick-board-head{padding:8px 10px;color:var(--ink-quiet);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.pick-board-row{padding:10px;border-bottom:1px solid var(--border-1);cursor:pointer;transition:background var(--dur-fast)}
+.pick-board-row:hover{background:var(--surface-1)}
+.pick-board-row.locked-card{opacity:.6}
+.pick-board-rank{font-family:"Barlow Condensed",system-ui,sans-serif;color:var(--ink-quiet);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.pick-board-player{min-width:0}
+.pick-board-name{font-size:var(--t-sm);font-weight:750;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-board-meta{color:var(--ink-muted);font-size:10px;line-height:1.25;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick-board-form{display:flex;align-items:flex-end;gap:3px;height:28px}
+.pick-form-bar{width:7px;min-height:3px;background:var(--accent);opacity:.8}
+.pick-form-bar.hit{background:var(--over)}
+.pick-form-bar.miss{background:var(--under);opacity:.65}
+.pick-form-empty{color:var(--ink-quiet);font-size:10px}
+.pick-evidence{display:flex;flex-wrap:wrap;gap:4px 10px;color:var(--ink-muted);font-size:10px;line-height:1.25}
+.pick-evidence strong{color:var(--ink-1);font-weight:700}
+.pick-board-decision{text-align:right;white-space:nowrap}
+.pick-board-call{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:19px;font-weight:800;line-height:1}
+.pick-board-call.over{color:var(--over)}
+.pick-board-call.under{color:var(--under)}
+.pick-board-tier{font-size:10px;color:var(--ink-muted);margin-top:4px;text-transform:uppercase;letter-spacing:.06em}
+.pick-board-tier.smash{color:var(--smash)}
+.pick-board-tier.strong{color:var(--strong)}
+.pick-board-rationale{grid-column:2/-1;color:var(--ink-muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:-5px}
+.pick-board-status{grid-column:2/-1;color:var(--warn);font-size:10px;margin-top:-5px}
+.pick-feature .best-book-line,.pick-board-row .best-book-line{font-size:10px!important;font-weight:600!important}
 .result-badge{font-size:var(--t-xs);font-weight:700;padding:2px 8px;border-radius:10px}
 .result-hit{background:var(--over-soft);color:var(--over);border:1px solid var(--over-line)}
 .result-miss{background:var(--under-soft);color:var(--under);border:1px solid var(--under-line)}
@@ -292,6 +324,11 @@ td.push{color:var(--push);font-weight:700}
 .ps-card{flex:1;background:var(--surface-1);border-radius:8px;padding:10px;text-align:center}
 .ps-val{font-size:var(--t-lg);font-weight:800;color:var(--accent)}
 .ps-lbl{font-size:var(--t-xs);color:var(--accent-soft);margin-top:2px}
+.page#pg-picks .picks-summary{gap:0;margin:0 16px 10px;padding:0;border-top:1px solid var(--border-1);border-bottom:1px solid var(--border-1)}
+.page#pg-picks .ps-card{background:transparent;border-radius:0;padding:8px 12px;text-align:left}
+.page#pg-picks .ps-card+.ps-card{border-left:1px solid var(--border-1)}
+.page#pg-picks .ps-val{font-size:18px;line-height:1}
+.page#pg-picks .ps-lbl{font-size:9px;letter-spacing:.08em;text-transform:uppercase}
 .dinger-card{background:var(--surface-1);border-radius:10px;padding:12px 14px;margin:0 16px 8px;border-left:3px solid var(--warn);display:flex;align-items:center;justify-content:space-between;transition:transform var(--dur-fast),box-shadow var(--dur-fast)}
 .dinger-card.top3{border-left-color:var(--under);background:#1a2024}
 .dinger-left{flex:1}
@@ -475,6 +512,16 @@ td.push{color:var(--push);font-weight:700}
   .pick-prop{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;margin-top:4px}
   .pick-rationale{font-size:var(--t-xs);line-height:1.25;margin-top:4px}
   .lineup-risk-badge,.lineup-risk-text{font-size:var(--t-xs);line-height:1.2}
+  .pick-editorial{padding:0 10px 12px}
+  .pick-feature{padding:13px}
+  .pick-feature-name{font-size:24px}
+  .pick-feature-line{font-size:27px}
+  .pick-feature-evidence{align-items:flex-start;flex-direction:column;gap:8px}
+  .pick-board-head{display:none}
+  .pick-board-row{grid-template-columns:28px minmax(0,1fr) 88px;gap:8px;padding:10px 6px}
+  .pick-board-form{display:none}
+  .pick-evidence{grid-column:2/4}
+  .pick-board-rationale,.pick-board-status{grid-column:2/4}
 }
 
 /* ═══ TABLET+ (768px) ═══ */
@@ -563,14 +610,12 @@ td.push{color:var(--push);font-weight:700}
   .weather-card{padding:16px 18px}
   .split-card{padding:16px}
   .card{padding:16px 18px}
-  .players-day-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 }
 
 /* ═══ DESKTOP (1024px+) ═══ */
 @media(min-width:1024px){
   .header-controls{margin-top:0;width:auto;flex:1;justify-content:flex-end}
   .cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-  .players-day-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .cards-grid .draft-tier-label{grid-column:1/-1}
   .combo-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
   .matchup-stats{grid-template-columns:repeat(4,1fr);gap:10px}
@@ -1635,13 +1680,13 @@ function renderConvergenceHTML(){
   const board=getConvergenceBoard();
   if(!board.length)return"";
   const top=board[0];
-  return `<div class="convergence-shell"><details class="convergence-details"><summary class="convergence-toggle"><div class="convergence-title"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:700">🏆 Players of the Day</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">Cross-tab convergence from Best Bets, AI, Streaks, Due, and Dingers.</div></div><div class="convergence-kpis"><span class="convergence-chip"><strong style="color:var(--accent)">${top.sourceCount}</strong> top</span><span class="convergence-chip"><strong>${board.length}</strong> 2+</span><span class="convergence-chip"><strong style="color:var(--over)">${board.filter(p=>p.sourceCount>=3).length}</strong> 3+</span></div></summary><div class="convergence-body"><div class="bet-summary">
+  return `<div class="convergence-shell"><details class="convergence-details"><summary class="convergence-toggle"><div class="convergence-title"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:700">${icon("picks")}Players of the Day</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">Cross-tab convergence from Best Bets, model picks, Streaks, Due, and Dingers.</div></div><div class="convergence-kpis"><span class="convergence-chip"><strong style="color:var(--accent)">${top.sourceCount}</strong> top</span><span class="convergence-chip"><strong>${board.length}</strong> 2+</span><span class="convergence-chip"><strong style="color:var(--over)">${board.filter(p=>p.sourceCount>=3).length}</strong> 3+</span></div></summary><div class="convergence-body"><div class="bet-summary">
     <div class="bs-card"><div class="bs-val" style="color:var(--accent)">${top.sourceCount}</div><div class="bs-lbl">TOP SIGNALS</div></div>
     <div class="bs-card"><div class="bs-val">${board.length}</div><div class="bs-lbl">2+ SURFACES</div></div>
     <div class="bs-card"><div class="bs-val" style="color:var(--over)">${board.filter(p=>p.sourceCount>=3).length}</div><div class="bs-lbl">3+ MATCHES</div></div>
   </div>
   <div class="cards-grid">
-    ${board.map((p,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:pointer;border-color:${i===0?"var(--accent)":"var(--border-1)"}" onclick="streakToDash('${esc(p.name)}')"><div class="bet-left"><div class="bet-name">${i===0?"🏆 ":""}${playerLink(p.name)}</div><div class="bet-meta">${esc(p.team||"")} ${p.opp?`vs ${esc(p.opp)}`:""}</div>${p.detail?`<div class="bet-prop"><span class="prop-metric" style="font-size:var(--t-xs)">Lead</span><span style="color:var(--ink-1);font-size:var(--t-xs)">${esc(p.detail)}</span></div>`:""}<div class="draft-tags" style="margin-top:6px">${p.sourceList.map(s=>`<span class="draft-tag" style="background:var(--surface-2);color:${s==="AI"?"var(--accent)":s==="Best Bets"?"var(--accent-soft)":s==="Streaks"?"#ffaa00":s==="Due"?"#38bdf8":"var(--under)"}">${esc(s)}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${p.sourceCount}x</div><div class="bet-sub">signals</div></div></div>`).join("")}
+    ${board.map((p,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:pointer;border-color:${i===0?"var(--accent)":"var(--border-1)"}" onclick="streakToDash('${esc(p.name)}')"><div class="bet-left"><div class="bet-name">${playerLink(p.name)}</div><div class="bet-meta">${esc(p.team||"")} ${p.opp?`vs ${esc(p.opp)}`:""}</div>${p.detail?`<div class="bet-prop"><span class="prop-metric" style="font-size:var(--t-xs)">Lead</span><span style="color:var(--ink-1);font-size:var(--t-xs)">${esc(p.detail)}</span></div>`:""}<div class="draft-tags" style="margin-top:6px">${p.sourceList.map(s=>`<span class="draft-tag" style="background:var(--surface-2);color:${s==="AI"?"var(--accent)":s==="Best Bets"?"var(--accent-soft)":s==="Streaks"?"#ffaa00":s==="Due"?"#38bdf8":"var(--under)"}">${esc(s==="AI"?"Model":s)}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${p.sourceCount}x</div><div class="bet-sub">signals</div></div></div>`).join("")}
   </div></div></details></div>`;
 }
 
@@ -1945,7 +1990,65 @@ function renderSoftLineTooltip(result){if(!result)return "";const sides=[result.
 function renderSoftLinePill(prop){const result=evaluateSoftLineForProp(prop);if(!result||(!result.over&&!result.under))return "";const side=result.over&&result.under?'BOTH':result.over?'OVER':'UNDER';const open=window.__softLineOpen===result.key;return `<span onclick="event.stopPropagation();window.__softLineOpen=${open?'null':JSON.stringify(result.key)};render()" class="soft-line-pill" title="Tap for soft DK math" style="display:inline-flex;align-items:center;border:1px solid color-mix(in srgb, var(--warn) 47%, transparent);background:var(--warn-soft);color:var(--warn);border-radius:999px;padding:2px 7px;font-size:var(--t-xs);font-weight:900;white-space:nowrap;cursor:pointer">🚨 Soft DK (${side})</span>${open?renderSoftLineTooltip(result):""}`}
 function renderPropBestBookBlock(prop){if(!prop)return "";const over=renderBestBookPill(prop,'OVER'),under=renderBestBookPill(prop,'UNDER'),alt=renderAltLineFlag(prop),soft=renderSoftLinePill(prop),ref=renderReferenceFootnote(prop);const top=[over,under,alt,soft].filter(Boolean).join(" ");if(!top&&!ref)return "";return `<div class="best-book-block" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center">${top}${ref?`<div style="flex-basis:100%">${ref}</div>`:""}</div>`}
 function renderPropBestBookTableRow(prop,colspan=7){const block=renderPropBestBookBlock(prop);return block?`<tr class="best-book-row"><td colspan="${colspan}" style="text-align:left;padding:0 8px 8px;border-top:0">${block}</td></tr>`:""}
-function renderBestBookLine(prop,lean){const b=getBestBookForLean(prop,lean);if(!b)return "";const book=formatBookName(b.book);const oddsText=typeof fmtOdds==="function"?fmtOdds(b.odds):String(b.odds);const delta=b.delta!==null&&!b.isDK&&Math.abs(b.delta)>0.05?` <span style="font-weight:800">(${b.delta>0?"+":""}${b.delta.toFixed(1)}pp vs DK${b.delta>=3?" ⭐":""})</span>`:"";const color=b.isDK?"var(--push)":MULTI_BOOK_ACCENT;return `<div class="best-book-line" style="margin-top:5px;font-size:var(--t-xs);color:${color};font-weight:700">🏪 Best: ${book} @ ${oddsText}${delta}</div>`}
+function renderBestBookLine(prop,lean){const b=getBestBookForLean(prop,lean);if(!b)return "";const book=formatBookName(b.book);const oddsText=typeof fmtOdds==="function"?fmtOdds(b.odds):String(b.odds);const delta=b.delta!==null&&!b.isDK&&Math.abs(b.delta)>0.05?` <span style="font-weight:800">(${b.delta>0?"+":""}${b.delta.toFixed(1)}pp vs DK${b.delta>=3?" · edge":""})</span>`:"";const color=b.isDK?"var(--push)":MULTI_BOOK_ACCENT;return `<div class="best-book-line" style="margin-top:5px;font-size:var(--t-xs);color:${color};font-weight:700">Best: ${book} @ ${oddsText}${delta}</div>`}
+function pickLogMetric(metric){return {P_SO:"SO",P_ER:"ER",P_BB:"BB",P_H:"H"}[String(metric||"").toUpperCase()]||String(metric||"").toUpperCase()}
+function getPickRecentForm(pk){
+  const isP=String(pk.prop_type||"").startsWith("P_");
+  const field=pickLogMetric(pk.prop_type),line=Number(pk.line),lean=normalizeLeanText(pk.lean);
+  const values=getPlayerLogs(pk.player,isP).slice(0,5).reverse().map(g=>toNum(rowField(g,field)));
+  const decisive=values.filter(v=>Number.isFinite(v)&&Number.isFinite(line)&&v!==line);
+  const hits=decisive.filter(v=>lean==="UNDER"?v<line:v>line).length;
+  const avg=values.length?values.reduce((s,v)=>s+v,0)/values.length:null;
+  return{values,line,lean,hits,decisive:decisive.length,avg};
+}
+function renderPickFormBars(form){
+  if(!form.values.length)return `<span class="pick-form-empty">No L5</span>`;
+  const max=Math.max(1,form.line||0,...form.values);
+  return form.values.map(v=>{const hit=Number.isFinite(form.line)&&(form.lean==="UNDER"?v<form.line:v>form.line);const push=Number.isFinite(form.line)&&v===form.line;const height=Math.max(3,Math.round((v/max)*25));return `<span class="pick-form-bar ${push?"":hit?"hit":"miss"}" style="height:${height}px" title="${v}"></span>`}).join("");
+}
+function pickEvidenceHTML(model){
+  const bits=[];
+  if(model.form.decisive)bits.push(`<span><strong>L5 ${model.form.hits}/${model.form.decisive}</strong> hit</span>`);
+  if(model.form.avg!==null)bits.push(`<span>avg <strong>${model.form.avg.toFixed(1)}</strong></span>`);
+  const book=getBestBookForLean(model.pickProp,model.leanText);
+  if(book?.delta!==null&&!book.isDK&&Math.abs(book.delta)>0.05)bits.push(`<span><strong>${book.delta>0?"+":""}${book.delta.toFixed(1)}pp</strong> book edge</span>`);
+  if(model.flags.returning)bits.push(`<span>returning</span>`);
+  if(model.flags.limited)bits.push(`<span>limited sample</span>`);
+  return bits.join("");
+}
+function getPickDisplayModel(pk){
+  const confidence=normalizeConfidence(pk.confidence),tierClass=confidence==="SMASH"?"smash":confidence==="STRONG"?"strong":"lean";
+  const leanText=normalizeLeanText(pk.lean),leanClass=leanText==="UNDER"?"under":"over";
+  const isPitch=String(pk.prop_type||"").startsWith("P_");
+  const flags=getSampleFlags(pk.player,isPitch),locked=getLockInfo(pk.player,isPitch).started;
+  const hit=String(rowField(pk,"HIT")).toUpperCase(),actual=rowField(pk,"ACTUAL_STAT");
+  const hasActual=actual!=null&&actual!==""&&!isNaN(actual),pending=!!hit&&!["YES","TRUE","NO","FALSE"].includes(hit)&&!hasActual;
+  const result=hit==="YES"||hit==="TRUE"?"HIT":hit==="NO"||hit==="FALSE"?"MISS":hasActual?"PUSH":"";
+  const injury=String(pk.injury_context||""),lineupRisk=injury.toUpperCase().startsWith("LINEUP RISK");
+  const pickProp=findPropForPick(pk.player,pk.prop_type,pk.line);
+  const model={pk,confidence,tierClass,leanText,leanClass,isPitch,flags,locked,actual,hasActual,pending,result,injury,lineupRisk,pickProp};
+  model.form=getPickRecentForm(pk);
+  return model;
+}
+function pickStatusLine(model){
+  const states=[];
+  if(model.locked)states.push("LOCKED");
+  if(model.flags.returning)states.push("RETURNING");
+  if(model.flags.limited)states.push("LIMITED SAMPLE");
+  if(model.pending)states.push("PENDING");
+  if(model.result)states.push(model.result+(model.hasActual?` ${model.actual}`:""));
+  if(model.lineupRisk)states.push("LINEUP RISK");
+  return states.join(" · ");
+}
+function pickClick(model){return `streakToDash(${[model.pk.player,model.pk.prop_type||"",model.pk.line||""].map(v=>esc(JSON.stringify(String(v)))).join(",")})`}
+function renderFeaturedPick(model){
+  const p=model.pk,status=pickStatusLine(model),evidence=pickEvidenceHTML(model);
+  return `<section class="pick-feature ${model.tierClass}${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-feature-kicker"><span>${icon("picks")}Top recommendation</span><span style="color:var(--${model.tierClass==="smash"?"smash":model.tierClass==="strong"?"strong":"push"})">${model.confidence}</span></div><div class="pick-feature-main"><div><div class="pick-feature-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-feature-matchup">${esc(p.game||"")} · vs ${esc(p.opp_pitcher||"TBD")} · ${esc(p.venue||"")}</div></div><div class="pick-feature-call"><div class="pick-feature-line ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-feature-market">${esc(propTypeLabel(p.prop_type))}</div></div></div><div class="pick-feature-evidence"><div><div class="pick-evidence">${evidence||"Model-ranked slate leader"}</div>${renderBestBookLine(model.pickProp,model.leanText)}${p.rationale?`<div class="pick-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}</div><div class="pick-board-form" aria-label="Last five results">${renderPickFormBars(model.form)}</div></div>${status?`<div class="pick-board-status" style="grid-column:auto;margin-top:8px">${esc(status)}</div>`:""}${model.lineupRisk?`<div class="lineup-risk-text">${esc(model.injury)}</div>`:""}</section>`;
+}
+function renderPickBoardRow(model,index){
+  const p=model.pk,status=pickStatusLine(model),evidence=pickEvidenceHTML(model);
+  return `<div class="pick-board-row${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-board-rank">${String(p.rank||index+2).padStart(2,"0")}</div><div class="pick-board-player"><div class="pick-board-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-board-meta">${esc(p.game||"")} · ${esc(propTypeLabel(p.prop_type))}</div></div><div class="pick-board-form" aria-label="Last five results">${renderPickFormBars(model.form)}</div><div class="pick-evidence">${evidence||"No recent sample"}</div><div class="pick-board-decision"><div class="pick-board-call ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-board-tier ${model.tierClass}">${model.confidence}</div></div>${p.rationale?`<div class="pick-board-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}${status?`<div class="pick-board-status">${esc(status)}</div>`:""}</div>`;
+}
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
 
@@ -2153,26 +2256,9 @@ function render(){
       const smash=todayPicks.filter(p=>normalizeConfidence(p.confidence)==="SMASH").length;
       const tracked=hits+miss;
       picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
-      picksHTML+=`<div class="cards-grid players-day-grid">`;
-      picksHTML+=todayPicks.map(pk=>{
-        const c=normalizeConfidence(pk.confidence),tierClass=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";
-        const leanText=String(pk.lean||"").trim().toUpperCase(),leanClass=leanText==="UNDER"?"under":"over";
-        const h=String(rowField(pk,"HIT")).toUpperCase();
-        const actualStat=rowField(pk,"ACTUAL_STAT");
-        const hasR=actualStat!=null&&actualStat!==""&&!isNaN(actualStat);
-        const injCtx=(pk.injury_context||"").toString();
-        const hasLineupRisk=injCtx.toUpperCase().startsWith("LINEUP RISK");
-        const riskHTML=hasLineupRisk?`<div class="lineup-risk-badge">${icon('warn')}LINEUP RISK</div><div class="lineup-risk-text">${esc(injCtx)}</div>`:"";
-        const flags=getSampleFlags(pk.player,(pk.prop_type||"").startsWith("P_"));
-        const badges=riskBadges(pk.player,(pk.prop_type||"").startsWith("P_"));
-        const pendingStatus=!!h&&!["YES","TRUE","NO","FALSE"].includes(h)&&!hasR;let rHTML="";
-        if((hasR||h)&&!pendingStatus){const rC=h==="YES"||h==="TRUE"?"result-hit":h==="NO"||h==="FALSE"?"result-miss":"result-push";const rL=h==="YES"||h==="TRUE"?"✅ HIT":h==="NO"||h==="FALSE"?"❌ MISS":"⏳ Pending";rHTML=`<div class="pick-result"><span class="result-badge ${rC}">${rL}</span>${hasR?`<span class="result-actual">Actual: ${actualStat}</span>`:""}</div>`}
-        const isPitch=(pk.prop_type||"").startsWith("P_");
-        const locked=getLockInfo(pk.player,isPitch).started;
-        const pickProp=findPropForPick(pk.player,pk.prop_type,pk.line);
-return`<div class="pick-card ${tierClass}${hasLineupRisk?" lineup-risk":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(pk.player)}','${pk.prop_type||""}','${pk.line||""}')"><div class="pick-card-head"><span class="pick-rank">#${pk.rank||"—"}</span><div class="pick-tier ${tierClass}"><span class="pick-tier-dot"></span><span class="pick-tier-label">${c||"LEAN"}</span></div></div><div class="pick-player">${playerLink(pk.player,pk.prop_type||"",pk.line||"")}</div><div class="pick-matchup">${esc(pk.game||"")} · vs ${esc(pk.opp_pitcher||"TBD")} · ${esc(pk.venue||"")}</div><div class="pick-hero"><span class="pick-hero-num">${esc(pk.line||"—")}</span><span class="pick-hero-action ${leanClass}">${esc(leanText||"PICK")}</span><span class="pick-hero-label">${esc(propTypeLabel(pk.prop_type))}</span></div><div class="pick-line-rule" aria-hidden="true"></div>${renderBestBookLine(pickProp,pk.lean)}${pk.rationale?`<div class="pick-rationale">${esc(pk.rationale)}</div>`:""}${pickFooterStatus(locked,flags,pendingStatus)}${riskHTML}${rHTML}</div>`;
-      }).join("");
-      picksHTML+=`</div>`;
+      const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
+      const pickModels=rankedPicks.map(getPickDisplayModel),featured=pickModels[0],remaining=pickModels.slice(1);
+      picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L5</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;
     }
   }else if(st.picksView==="dingers"){
     const db=getDingerBoard();
