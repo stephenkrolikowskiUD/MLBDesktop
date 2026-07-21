@@ -180,6 +180,19 @@ SHEET_SCHEMAS = {
         'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
         'recommended': ['SC_L14_whiff_pct', 'SC_L14_csw_pct', 'SC_L14_xwOBA', 'SC_L14_barrel_pct'],
     },
+    'Team_Rankings': {
+        'required': [
+            'SEASON', 'TEAM_ID', 'TEAM', 'TEAM_ABBR', 'GAMES_PLAYED',
+            'OFF_PA', 'OFF_SO', 'OFF_K_PCT', 'OFF_HR', 'OFF_HR_PER_GAME',
+            'PIT_HR_ALLOWED', 'PIT_HR9', 'PIT_RUNS_ALLOWED_PER_GAME',
+            'OFF_K_PCT_MOST_RANK', 'PIT_HR_ALLOWED_MOST_RANK', 'LAST_UPDATED',
+        ],
+        'recommended': [
+            'OFF_OPS', 'OFF_RUNS_PER_GAME', 'OFF_HR_MOST_RANK',
+            'PIT_ERA', 'PIT_WHIP', 'PIT_K9', 'PIT_BB9',
+            'PIT_RUNS_ALLOWED_MOST_RANK', 'PIT_BB9_MOST_RANK',
+        ],
+    },
 }
 
 now_est = datetime.now(pytz.timezone('US/Eastern'))
@@ -791,6 +804,136 @@ for team in teams_resp.get('teams', []):
 df_teams = pd.DataFrame(team_list)
 team_id_to_abbr = dict(zip(df_teams['team_id'], df_teams['team_abbr']))
 print(f"✅ Loaded {len(df_teams)} MLB teams")
+
+
+def fetch_team_rankings(season):
+    """Fetch exact league-wide team hitting and pitching rates from MLB Stats API."""
+    print("\nFetching MLB team rankings...")
+
+    def fetch_group(group):
+        url = f"{MLB_API}/teams/stats"
+        response = requests.get(
+            url,
+            params={'stats': 'season', 'group': group, 'season': season, 'sportIds': 1},
+            timeout=20,
+        )
+        response.raise_for_status()
+        stats = response.json().get('stats', [])
+        return stats[0].get('splits', []) if stats else []
+
+    def number(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    try:
+        hitting = fetch_group('hitting')
+        pitching = fetch_group('pitching')
+    except Exception as exc:
+        print(f"⚠️ Team rankings fetch failed: {exc}")
+        try:
+            runlog.warn(f"Team rankings fetch failed: {exc}")
+        except Exception:
+            pass
+        return pd.DataFrame()
+
+    rows = {}
+    for split in hitting:
+        team = split.get('team', {})
+        stat = split.get('stat', {})
+        team_id = team.get('id')
+        if not team_id:
+            continue
+        games = number(stat.get('gamesPlayed'))
+        pa = number(stat.get('plateAppearances'))
+        rows[team_id] = {
+            'SEASON': season,
+            'TEAM_ID': team_id,
+            'TEAM': team.get('name', ''),
+            'TEAM_ABBR': team_id_to_abbr.get(team_id, ''),
+            'GAMES_PLAYED': int(games),
+            'OFF_PA': int(pa),
+            'OFF_AB': int(number(stat.get('atBats'))),
+            'OFF_RUNS': int(number(stat.get('runs'))),
+            'OFF_HITS': int(number(stat.get('hits'))),
+            'OFF_HR': int(number(stat.get('homeRuns'))),
+            'OFF_SO': int(number(stat.get('strikeOuts'))),
+            'OFF_BB': int(number(stat.get('baseOnBalls'))),
+            'OFF_SB': int(number(stat.get('stolenBases'))),
+            'OFF_AVG': number(stat.get('avg')),
+            'OFF_OBP': number(stat.get('obp')),
+            'OFF_SLG': number(stat.get('slg')),
+            'OFF_OPS': number(stat.get('ops')),
+            'OFF_K_PCT': round(number(stat.get('strikeOuts')) / pa * 100, 2) if pa else np.nan,
+            'OFF_BB_PCT': round(number(stat.get('baseOnBalls')) / pa * 100, 2) if pa else np.nan,
+            'OFF_HR_PER_GAME': round(number(stat.get('homeRuns')) / games, 3) if games else np.nan,
+            'OFF_RUNS_PER_GAME': round(number(stat.get('runs')) / games, 3) if games else np.nan,
+        }
+
+    for split in pitching:
+        team = split.get('team', {})
+        stat = split.get('stat', {})
+        team_id = team.get('id')
+        if not team_id:
+            continue
+        row = rows.setdefault(team_id, {
+            'SEASON': season,
+            'TEAM_ID': team_id,
+            'TEAM': team.get('name', ''),
+            'TEAM_ABBR': team_id_to_abbr.get(team_id, ''),
+        })
+        games = number(stat.get('gamesPlayed'))
+        row.update({
+            'GAMES_PLAYED': int(row.get('GAMES_PLAYED') or games),
+            'PIT_IP': number(stat.get('inningsPitched')),
+            'PIT_RUNS_ALLOWED': int(number(stat.get('runs'))),
+            'PIT_ER': int(number(stat.get('earnedRuns'))),
+            'PIT_HITS_ALLOWED': int(number(stat.get('hits'))),
+            'PIT_HR_ALLOWED': int(number(stat.get('homeRuns'))),
+            'PIT_SO': int(number(stat.get('strikeOuts'))),
+            'PIT_BB': int(number(stat.get('baseOnBalls'))),
+            'PIT_ERA': number(stat.get('era')),
+            'PIT_WHIP': number(stat.get('whip')),
+            'PIT_K9': number(stat.get('strikeoutsPer9Inn')),
+            'PIT_BB9': number(stat.get('walksPer9Inn')),
+            'PIT_H9': number(stat.get('hitsPer9Inn')),
+            'PIT_HR9': number(stat.get('homeRunsPer9')),
+            'PIT_HR_ALLOWED_PER_GAME': round(number(stat.get('homeRuns')) / games, 3) if games else np.nan,
+            'PIT_RUNS_ALLOWED_PER_GAME': round(number(stat.get('runs')) / games, 3) if games else np.nan,
+        })
+
+    df = pd.DataFrame(rows.values())
+    if df.empty:
+        print("⚠️ Team rankings API returned no rows")
+        return df
+
+    rank_specs = {
+        'OFF_K_PCT_MOST_RANK': ('OFF_K_PCT', False),
+        'OFF_HR_MOST_RANK': ('OFF_HR_PER_GAME', False),
+        'OFF_RUNS_MOST_RANK': ('OFF_RUNS_PER_GAME', False),
+        'OFF_OPS_BEST_RANK': ('OFF_OPS', False),
+        'PIT_HR_ALLOWED_MOST_RANK': ('PIT_HR_ALLOWED_PER_GAME', False),
+        'PIT_HR9_MOST_RANK': ('PIT_HR9', False),
+        'PIT_RUNS_ALLOWED_MOST_RANK': ('PIT_RUNS_ALLOWED_PER_GAME', False),
+        'PIT_BB9_MOST_RANK': ('PIT_BB9', False),
+        'PIT_K9_BEST_RANK': ('PIT_K9', False),
+        'PIT_ERA_BEST_RANK': ('PIT_ERA', True),
+        'PIT_WHIP_BEST_RANK': ('PIT_WHIP', True),
+    }
+    for rank_col, (value_col, ascending) in rank_specs.items():
+        df[rank_col] = pd.to_numeric(df[value_col], errors='coerce').rank(
+            method='min', ascending=ascending, na_option='bottom'
+        ).astype('Int64')
+
+    df['SOURCE'] = 'MLB Stats API team season totals'
+    df['LAST_UPDATED'] = timestamp_est
+    df = df.sort_values(['OFF_K_PCT_MOST_RANK', 'TEAM_ABBR']).reset_index(drop=True)
+    print(f"✅ Team rankings built for {len(df)} clubs (2 free MLB Stats API calls)")
+    return df
+
+
+df_team_rankings = fetch_team_rankings(SEASON)
 
 # --- 3. FETCH BATTER GAME LOGS (PARALLEL) ---
 print(f"\nFetching batter game logs for {SEASON} season...")
@@ -3318,6 +3461,7 @@ SHEETS_TO_WRITE = {
     'DK_Player_Props': df_props if len(df_props) > 0 else pd.DataFrame(),
     'All_Books_Props': df_all_books if len(df_all_books) > 0 else pd.DataFrame(),
     'Teams': df_teams,
+    'Team_Rankings': df_team_rankings if len(df_team_rankings) > 0 else pd.DataFrame(),
     'Pitcher_Game_Logs': df_pitcher_logs if len(df_pitcher_logs) > 0 else pd.DataFrame(),
     'Tonights_Starters': df_pitcher_tonight if len(df_pitcher_tonight) > 0 else pd.DataFrame(),
     'Pitcher_Home_Away': p_ha_pivot if len(p_ha_pivot) > 0 else pd.DataFrame(),
@@ -3421,6 +3565,7 @@ print(f"⚾ Pitchers tracked: {len(df_pitcher_logs) if len(df_pitcher_logs) > 0 
 print(f"🎯 Tonight's SPs:    {len(df_pitcher_tonight) if len(df_pitcher_tonight) > 0 else 0}")
 print(f"📊 Batter game logs: {len(df_logs)}")
 print(f"📊 Pitcher game logs:{len(df_pitcher_logs) if len(df_pitcher_logs) > 0 else 0}")
+print(f"🏟️  Team rankings:    {len(df_team_rankings) if len(df_team_rankings) > 0 else 0}")
 print(f"🌤️  Venues w/ weather: {len(df_weather)}")
 print(f"🎰 Odds:             {'✅ ' + str(len(df_odds)) + ' games' if len(df_odds) > 0 else 'Skipped'}")
 if len(df_props) > 0:
