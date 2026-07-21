@@ -483,6 +483,65 @@ td.push{color:var(--push);font-weight:700}
 .mode-toggle{display:flex;gap:8px}
 .mode-btn{flex:1;padding:6px;text-align:center;font-size:var(--t-sm);font-weight:700;border-radius:6px;cursor:pointer;border:1px solid var(--border-1)}
 .ctrl-row{display:flex;gap:8px}
+.analysis-shell{padding:0 16px 18px}
+.analysis-hero{padding:18px 0 14px;border-bottom:1px solid var(--border-1)}
+.analysis-hero-top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}
+.analysis-eyebrow{color:var(--ink-muted);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.analysis-player{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:34px;font-weight:800;line-height:1;letter-spacing:.01em}
+.analysis-context{color:var(--ink-muted);font-size:var(--t-xs);margin-top:6px}
+.analysis-focus{text-align:right}
+.analysis-focus-value{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:28px;font-weight:800;line-height:1;color:var(--accent)}
+.analysis-focus-label{color:var(--ink-muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+.analysis-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:16px;border-top:1px solid var(--border-1);border-bottom:1px solid var(--border-1)}
+.analysis-kpi{padding:9px 12px}
+.analysis-kpi+.analysis-kpi{border-left:1px solid var(--border-1)}
+.analysis-kpi-value{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:20px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.analysis-kpi-label{color:var(--ink-muted);font-size:9px;letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
+.analysis-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,.8fr);gap:22px;margin-top:18px}
+.analysis-primary,.analysis-rail{min-width:0}
+.analysis-section{padding:0 0 18px;margin-bottom:18px;border-bottom:1px solid var(--border-1)}
+.analysis-section:last-child{margin-bottom:0}
+.analysis-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
+.analysis-section-title{color:var(--ink-0);font-size:var(--t-sm);font-weight:750}
+.analysis-section-meta{color:var(--ink-muted);font-size:10px}
+.analysis-chart{background:var(--surface-1);border:1px solid var(--border-1);border-radius:6px;padding:14px 12px 10px}
+.analysis-chart .bar-chart{height:145px}
+.analysis-chart .line-indicator{margin-top:8px}
+.analysis-decision{border-left:4px solid var(--strong);background:var(--surface-1);padding:14px 16px;border-radius:4px}
+.analysis-decision.smash{border-left-color:var(--smash)}
+.analysis-decision.lean{border-left-color:var(--push)}
+.analysis-decision-risk{border-left-color:var(--warn)!important}
+.analysis-decision-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.analysis-decision-call{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:28px;font-weight:800;line-height:1}
+.analysis-decision-call.over{color:var(--over)}
+.analysis-decision-call.under{color:var(--under)}
+.analysis-decision-market{color:var(--ink-muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em;margin-top:5px}
+.analysis-decision-tier{font-size:10px;font-weight:750;letter-spacing:.08em;text-transform:uppercase}
+.analysis-decision-tier.smash{color:var(--smash)}
+.analysis-decision-tier.strong{color:var(--strong)}
+.analysis-decision-tier.lean{color:var(--push)}
+.analysis-decision-reason{color:var(--ink-1);font-size:var(--t-xs);line-height:1.45;margin-top:10px}
+.analysis-market-list{border-top:1px solid var(--border-1)}
+.analysis-market-row{display:grid;grid-template-columns:minmax(90px,1fr) 70px 95px minmax(150px,1.4fr);gap:10px;align-items:center;padding:10px 2px;border-bottom:1px solid var(--border-1)}
+.analysis-market-name{font-size:var(--t-xs);font-weight:700;color:var(--ink-1)}
+.analysis-market-line{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:18px;font-weight:800}
+.analysis-market-odds{font-size:10px;line-height:1.45}
+.analysis-market-best{min-width:0}
+.analysis-market-best .best-book-block{margin-top:0!important}
+.analysis-rail-section{padding:0 0 14px;margin-bottom:14px;border-bottom:1px solid var(--border-1)}
+.analysis-rail-title{color:var(--ink-muted);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+.analysis-rail-heading{font-size:var(--t-md);font-weight:750;line-height:1.2}
+.analysis-rail-sub{color:var(--ink-muted);font-size:10px;line-height:1.4;margin-top:4px}
+.analysis-data-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid var(--border-1);font-size:var(--t-xs)}
+.analysis-data-row:first-of-type{border-top:0}
+.analysis-data-row span:first-child{color:var(--ink-muted)}
+.analysis-data-row strong{font-variant-numeric:tabular-nums}
+.analysis-season-strip{display:flex;gap:14px;overflow-x:auto;padding:10px 0 2px}
+.analysis-season-strip .stat-item{text-align:left;min-width:58px}
+.analysis-season-strip .stat-label{color:var(--ink-muted);letter-spacing:.06em}
+.analysis-season-stat{min-width:48px}
+.analysis-season-stat span{display:block;color:var(--ink-muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em}
+.analysis-season-stat strong{display:block;font-family:"Barlow Condensed",system-ui,sans-serif;font-size:17px;margin-top:2px}
 .dash-grid{}
 .dash-bottom{padding:0 16px}
 .dash-props .prop-card{margin-bottom:6px}
@@ -522,6 +581,17 @@ td.push{color:var(--push);font-weight:700}
   .pick-board-form{display:none}
   .pick-evidence{grid-column:2/4}
   .pick-board-rationale,.pick-board-status{grid-column:2/4}
+  .analysis-shell{padding:0 10px 14px}
+  .analysis-hero{padding-top:14px}
+  .analysis-player{font-size:28px}
+  .analysis-focus-value{font-size:23px}
+  .analysis-kpis{grid-template-columns:repeat(2,1fr)}
+  .analysis-kpi:nth-child(3){border-left:0;border-top:1px solid var(--border-1)}
+  .analysis-kpi:nth-child(4){border-top:1px solid var(--border-1)}
+  .analysis-layout{display:block;margin-top:14px}
+  .analysis-market-row{grid-template-columns:minmax(80px,1fr) 55px 80px;gap:8px}
+  .analysis-market-best{grid-column:1/-1}
+  .analysis-chart .bar-chart{height:118px}
 }
 
 /* ═══ TABLET+ (768px) ═══ */
@@ -553,7 +623,7 @@ td.push{color:var(--push);font-weight:700}
   .top-nav .tab-btn.active{color:var(--accent);background:var(--surface-2)}
   .header{padding:12px 24px;display:flex;flex-wrap:wrap;align-items:center;gap:12px}
   .header-title{font-size:var(--t-lg);margin-bottom:0;margin-right:auto}
-  .header-controls{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px}
+  .header-controls{display:flex;flex-direction:row;align-items:center;gap:10px;width:100%;margin-top:8px}
   .header-controls .mode-toggle{display:flex;gap:6px}
   .header-controls .mode-btn{padding:7px 14px;font-size:var(--t-sm);font-weight:700;border-radius:6px;cursor:pointer;white-space:nowrap;border:1px solid var(--border-1)}
   .header-controls .search-wrap{flex:1;max-width:300px}
@@ -2129,16 +2199,25 @@ function render(){
   const pProps=getProps(player);
   const pPick=getPick(player);
   let propsHTML="";
-  if(pProps.length>0){propsHTML=`<div class="section"><div class="label">DraftKings Props</div>${pProps.map(p=>`<div class="prop-card" style="display:block"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div class="prop-left"><div class="prop-metric">${p.METRIC}</div><div class="prop-line">${p.DK_LINE}</div></div><div class="prop-right"><div class="prop-odds prop-over">O ${fmtOdds(p.OVER_ODDS)}</div><div class="prop-odds prop-under">U ${fmtOdds(p.UNDER_ODDS)}</div></div></div>${renderPropBestBookBlock(p)}</div>`).join("")}</div>`}
+  if(pProps.length>0){propsHTML=`<div class="analysis-market-list">${pProps.map(p=>`<div class="analysis-market-row"><div class="analysis-market-name">${esc(propTypeLabel(p.METRIC))}</div><div class="analysis-market-line">${esc(p.DK_LINE)}</div><div class="analysis-market-odds"><span class="prop-over">O ${fmtOdds(p.OVER_ODDS)}</span><br><span class="prop-under">U ${fmtOdds(p.UNDER_ODDS)}</span></div><div class="analysis-market-best">${renderPropBestBookBlock(p)}</div></div>`).join("")}</div>`}
   let pickBanner="";
   if(pPick){
     const c=pPick.confidence||"",cls=c==="SMASH"?"smash":c==="STRONG"?"strong":"lean";
     const pInjCtx=(pPick.injury_context||"").toString();
     const pHasRisk=pInjCtx.toUpperCase().startsWith("LINEUP RISK");
-    const borderColor=pHasRisk?"var(--warn)":(c==="SMASH"?"var(--smash)":"var(--strong)");
     const pRiskHTML=pHasRisk?`<div class="lineup-risk-badge">${icon('warn')}LINEUP RISK</div><div class="lineup-risk-text">${esc(pInjCtx)}</div>`:"";
-    pickBanner=`<div class="section"><div class="card" style="border-left:3px solid ${borderColor}${pHasRisk?";background:#2a2418":""}"><div class="card-title">Model pick</div><div style="display:flex;align-items:center;gap:8px;margin-top:4px"><div class="pick-type">${pPick.prop_type||""}</div><div class="pick-lean ${(pPick.lean||"").toLowerCase()}">${pPick.lean||""} ${pPick.line||""}</div><div class="pick-conf ${cls}">${c}</div></div><div class="pick-rationale">${esc(pPick.rationale||"")}</div>${pRiskHTML}</div></div>`;
+    const decisionLean=normalizeLeanText(pPick.lean),decisionClass=decisionLean==="UNDER"?"under":"over";
+    pickBanner=`<div class="analysis-decision ${cls}${pHasRisk?" analysis-decision-risk":""}"><div class="analysis-decision-top"><div><div class="analysis-eyebrow">Model recommendation</div><div class="analysis-decision-call ${decisionClass}">${esc(decisionLean)} ${esc(pPick.line||"—")}</div><div class="analysis-decision-market">${esc(propTypeLabel(pPick.prop_type))}</div></div><div class="analysis-decision-tier ${cls}">${esc(c||"LEAN")}</div></div>${pPick.rationale?`<div class="analysis-decision-reason">${esc(pPick.rationale)}</div>`:""}${pRiskHTML}</div>`;
   }
+  const vsp=getVsSP(player);
+  const matchupAnalysisHTML=isP
+    ?`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(pT.opp_abbr_tonight||"—")}</div><div class="analysis-rail-sub">${esc(pT.home_away_tonight||"—")} · ${esc(pT.venue_tonight||"—")} · opposing starter ${esc(pT.opp_starter||"TBD")}</div>`
+    :`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(oppP)}</div><div class="analysis-rail-sub">${esc(pT.opp_abbr_tonight||"—")} · ${esc(oppH)}HP · ${esc(venue||"Venue TBD")}</div>${vsp&&toNum(vsp.AB)?`<div style="margin-top:9px"><div class="analysis-data-row"><span>Career matchup</span><strong>${vsp.H||0}-for-${vsp.AB||0}</strong></div><div class="analysis-data-row"><span>Average</span><strong>${vsp.AVG||"—"}</strong></div><div class="analysis-data-row"><span>Home runs</span><strong>${vsp.HR||0}</strong></div></div>`:""}`;
+  const hitRateAnalysisHTML=lineNum&&pHasLogs?`<div class="analysis-data-row"><span>L5</span><strong>${hL5}/5</strong></div><div class="analysis-data-row"><span>L10</span><strong>${hL10}/10</strong></div><div class="analysis-data-row"><span>Season</span><strong>${hSeas}/${allLogs.length} · ${sRate!==null?(sRate*100).toFixed(0):"—"}%</strong></div>`:"";
+  const splitAnalysisHTML=isP
+    ?`<div class="analysis-data-row"><span>ERA</span><strong>${sT.ERA||"—"}</strong></div><div class="analysis-data-row"><span>WHIP</span><strong>${sT.WHIP||"—"}</strong></div><div class="analysis-data-row"><span>K/9</span><strong>${sT.K9||"—"}</strong></div>`
+    :`<div class="analysis-data-row"><span>vs ${esc(oppH)}HP AVG</span><strong>${vsAvg?vsAvg.toFixed(3):"—"}</strong></div><div class="analysis-data-row"><span>vs ${esc(oppH)}HP OPS</span><strong>${vsOps?vsOps.toFixed(3):"—"}</strong></div><div class="analysis-data-row"><span>HR / SO</span><strong>${vsHr||0} / ${vsSo||0}</strong></div>`;
+  const weatherAnalysisHTML=wx.temp_f?`<div class="analysis-data-row"><span>Temperature</span><strong>${wx.temp_f}°F</strong></div><div class="analysis-data-row"><span>Wind</span><strong>${wx.wind_mph} mph ${esc(wx.wind_dir||"")}</strong></div><div class="analysis-data-row"><span>Conditions</span><strong>${esc(wx.description||"—")}</strong></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="analysis-data-row"><span>Venue</span><strong>Dome</strong></div>`:""}`:"";
 
   const opps=[...new Set(allLogs.map(g=>g.opp_abbr).filter(Boolean))].sort();
   const oppOpts=`<option value="">All Opponents</option>`+opps.map(o=>`<option value="${o}" ${oppFilter===o?"selected":""}>${o}</option>`).join("");
@@ -2585,21 +2664,26 @@ function render(){
   </div>
 
   <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
-    ${earlyBanner}
-    ${pHasLogs?`<div class="stats-strip"><div class="stats-strip-inner">${statStrip}</div></div>`:""}
-    <div class="dash-grid">
-    ${pHasLogs?`<div class="section"><div class="label">Game Log — ${metric}</div><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Line: ${lineNum}</div>`:""}</div>`:""}
-    ${pHasLogs?`<div class="section"><div class="label">Averages</div><div class="avg-cards">${avgs}</div></div>`:""}
-    <div class="section"><div class="split-row">
-      ${isP?`<div class="split-card"><span class="split-title">Season Rates</span>${pHasLogs?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${sT.ERA||"—"}</div><div class="lbl">ERA</div></div><div class="matchup-stat"><div class="val">${sT.WHIP||"—"}</div><div class="lbl">WHIP</div></div><div class="matchup-stat"><div class="val">${sT.K9||"—"}</div><div class="lbl">K/9</div></div><div class="matchup-stat"><div class="val">${sT.SO||"—"}</div><div class="lbl">K</div></div></div>`:`<div class="no-data">No stats yet</div>`}</div>`:`<div class="split-card"><span class="split-title">vs ${oppH}HP Splits</span>${vsAvg||vsOps?`<div class="matchup-stats"><div class="matchup-stat"><div class="val">${vsAvg?vsAvg.toFixed(3):"—"}</div><div class="lbl">AVG</div></div><div class="matchup-stat"><div class="val">${vsOps?vsOps.toFixed(3):"—"}</div><div class="lbl">OPS</div></div><div class="matchup-stat"><div class="val">${vsHr||"—"}</div><div class="lbl">HR</div></div><div class="matchup-stat"><div class="val">${vsSo||"—"}</div><div class="lbl">SO</div></div></div>`:`<div class="no-data">No split data yet</div>`}</div>`}
-      <div class="split-card"><span class="split-title">Home / Away</span><div class="mini-bars-container">${haBars}</div></div>
-    </div></div>
-    <div class="section"><div class="matchup-card">${isP?`<div class="matchup-header">vs ${pT.opp_abbr_tonight||"—"}</div><div class="matchup-sub">${pT.home_away_tonight||"—"} · ${pT.venue_tonight||"—"} · vs ${pT.opp_starter||"TBD"}</div>`:`<div class="matchup-header">vs ${oppP}</div><div class="matchup-sub">${pT.opp_abbr_tonight||"—"} · ${oppH}HP · ${venue}</div>${(()=>{const vsp=getVsSP(player);if(!vsp||!toNum(vsp.AB))return"";return`<div class="matchup-stats" style="margin-top:8px"><div class="matchup-stat"><div class="val">${vsp.AVG||"—"}</div><div class="lbl">Career AVG</div></div><div class="matchup-stat"><div class="val">${vsp.AB||"—"}</div><div class="lbl">AB</div></div><div class="matchup-stat"><div class="val">${vsp.H||"—"}</div><div class="lbl">H</div></div><div class="matchup-stat"><div class="val">${vsp.HR||"—"}</div><div class="lbl">HR</div></div></div><div style="color:var(--ink-muted);font-size:var(--t-xs);margin-top:4px">Career: ${vsp.H||0}-for-${vsp.AB||0}${toNum(vsp.HR)?" · "+vsp.HR+" HR":""}${toNum(vsp.BB)?" · "+vsp.BB+" BB":""}${toNum(vsp.SO)?" · "+vsp.SO+" K":""}</div>`})()}`}</div></div>
-    ${wx.temp_f?`<div class="section"><div class="weather-card"><div class="card-title">Weather</div><div class="weather-row"><span class="weather-key">Temp</span><span class="weather-val">${wx.temp_f}°F (feels ${wx.feels_like_f}°F)</span></div><div class="weather-row"><span class="weather-key">Wind</span><span class="weather-val">${wx.wind_mph} mph ${wx.wind_dir}</span></div><div class="weather-row"><span class="weather-key">Condition</span><span class="weather-val">${wx.description||"—"}</span></div>${wx.is_dome===true||wx.is_dome==="TRUE"||wx.is_dome==="True"?`<div class="weather-row"><span class="weather-key">Venue</span><span class="weather-val" style="color:var(--accent)">Dome — weather irrelevant</span></div>`:""}</div></div>`:""}
-    ${lineNum&&pHasLogs?`<div class="section dash-full"><div class="card"><div class="card-title">Hit Rates — ${metric} > ${lineNum}</div><div class="hit-row" style="border:none;padding-top:0"><span class="hit-key">L5</span><span class="hit-val">${hL5}/5</span></div><div class="hit-row"><span class="hit-key">L10</span><span class="hit-val">${hL10}/10</span></div><div class="hit-row"><span class="hit-key">Season</span><span class="hit-val">${hSeas}/${allLogs.length} (${sRate!==null?(sRate*100).toFixed(0):"—"}%)</span></div></div></div>`:""}
-    </div>
-    ${pickBanner?`<div class="dash-bottom">${pickBanner}</div>`:""}
-    ${propsHTML?`<div class="dash-bottom dash-props">${propsHTML}</div>`:""}
+    ${player?`<div class="analysis-shell">
+      ${earlyBanner}
+      <header class="analysis-hero">
+        <div class="analysis-hero-top"><div><div class="analysis-eyebrow">${isP?"Pitcher analysis":"Batter analysis"}</div><div class="analysis-player">${esc(player)}</div><div class="analysis-context">${esc(pT.team_abbr||"Team TBD")} · ${esc(pT.home_away_tonight||"—")} vs ${esc(pT.opp_abbr_tonight||"—")} · ${esc(venue||pT.venue_tonight||"Venue TBD")}</div></div><div class="analysis-focus"><div class="analysis-focus-value">${esc(metric)}</div><div class="analysis-focus-label">${lineNum?`Prop line ${lineNum}`:"Selected metric"}</div></div></div>
+        ${pHasLogs?`<div class="analysis-kpis"><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(seasAvg,lineNum)}">${seasAvg.toFixed(2)}</div><div class="analysis-kpi-label">Season</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(midAvg,lineNum)}">${midAvg.toFixed(2)}</div><div class="analysis-kpi-label">${midLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(shortAvg,lineNum)}">${shortAvg.toFixed(2)}</div><div class="analysis-kpi-label">${shortLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(lastGame,lineNum)}">${lastGame.toFixed(2)}</div><div class="analysis-kpi-label">Last game</div></div></div><div class="analysis-season-strip">${statStrip}</div>`:""}
+      </header>
+      <div class="analysis-layout">
+        <main class="analysis-primary">
+          ${pHasLogs?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Last 10 · ${esc(propTypeLabel(metric))}</div><div class="analysis-section-meta">${last10.length} games · green clears line</div></div><div class="analysis-chart"><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Reference line ${lineNum}</div>`:""}</div></section>`:""}
+          ${pickBanner?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Decision</div><div class="analysis-section-meta">Model-ranked recommendation</div></div>${pickBanner}</section>`:""}
+          ${propsHTML?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Sportsbook markets</div><div class="analysis-section-meta">Live comparison by book</div></div>${propsHTML}</section>`:""}
+        </main>
+        <aside class="analysis-rail">
+          <section class="analysis-rail-section"><div class="analysis-rail-title">Tonight's matchup</div>${matchupAnalysisHTML}</section>
+          ${hitRateAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Hit rates · ${esc(metric)} ${lineNum?`over ${lineNum}`:""}</div>${hitRateAnalysisHTML}</section>`:""}
+          ${pHasLogs?`<section class="analysis-rail-section"><div class="analysis-rail-title">${isP?"Season rates":`Handedness split · ${esc(oppH)}HP`}</div>${splitAnalysisHTML}</section><section class="analysis-rail-section"><div class="analysis-rail-title">Home / away</div><div class="mini-bars-container">${haBars}</div></section>`:""}
+          ${weatherAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Weather</div>${weatherAnalysisHTML}</section>`:""}
+        </aside>
+      </div>
+    </div>`:`<div class="empty" style="padding:70px 20px">Select a player above to open the analysis workspace.</div>`}
     <div class="timestamp">As of: ${fmtNowEastern()} · Last Refreshed: ${lastUp}</div>
     <div class="timestamp" style="color:var(--border-1);font-size:var(--t-xs);padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
   </div>
