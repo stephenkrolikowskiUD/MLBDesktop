@@ -267,8 +267,8 @@ td.push{color:var(--push);font-weight:700}
 .pick-board-player{min-width:0}
 .pick-board-name{font-size:var(--t-sm);font-weight:750;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pick-board-meta{color:var(--ink-muted);font-size:10px;line-height:1.25;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pick-board-form{display:flex;align-items:flex-end;gap:3px;height:28px}
-.pick-form-bar{width:7px;min-height:3px;background:var(--accent);opacity:.8}
+.pick-board-form{display:flex;align-items:flex-end;gap:2px;height:28px}
+.pick-form-bar{width:5px;min-height:3px;background:var(--accent);opacity:.8}
 .pick-form-bar.hit{background:var(--over)}
 .pick-form-bar.miss{background:var(--under);opacity:.65}
 .pick-form-empty{color:var(--ink-quiet);font-size:10px}
@@ -1995,20 +1995,20 @@ function pickLogMetric(metric){return {P_SO:"SO",P_ER:"ER",P_BB:"BB",P_H:"H"}[St
 function getPickRecentForm(pk){
   const isP=String(pk.prop_type||"").startsWith("P_");
   const field=pickLogMetric(pk.prop_type),line=Number(pk.line),lean=normalizeLeanText(pk.lean);
-  const values=getPlayerLogs(pk.player,isP).slice(0,5).reverse().map(g=>toNum(rowField(g,field)));
+  const values=getPlayerLogs(pk.player,isP).slice(0,10).reverse().map(g=>toNum(rowField(g,field)));
   const decisive=values.filter(v=>Number.isFinite(v)&&Number.isFinite(line)&&v!==line);
   const hits=decisive.filter(v=>lean==="UNDER"?v<line:v>line).length;
   const avg=values.length?values.reduce((s,v)=>s+v,0)/values.length:null;
   return{values,line,lean,hits,decisive:decisive.length,avg};
 }
 function renderPickFormBars(form){
-  if(!form.values.length)return `<span class="pick-form-empty">No L5</span>`;
+  if(!form.values.length)return `<span class="pick-form-empty">No L10</span>`;
   const max=Math.max(1,form.line||0,...form.values);
   return form.values.map(v=>{const hit=Number.isFinite(form.line)&&(form.lean==="UNDER"?v<form.line:v>form.line);const push=Number.isFinite(form.line)&&v===form.line;const height=Math.max(3,Math.round((v/max)*25));return `<span class="pick-form-bar ${push?"":hit?"hit":"miss"}" style="height:${height}px" title="${v}"></span>`}).join("");
 }
 function pickEvidenceHTML(model){
   const bits=[];
-  if(model.form.decisive)bits.push(`<span><strong>L5 ${model.form.hits}/${model.form.decisive}</strong> hit</span>`);
+  if(model.form.decisive)bits.push(`<span><strong>L10 ${model.form.hits}/${model.form.decisive}</strong> hit</span>`);
   if(model.form.avg!==null)bits.push(`<span>avg <strong>${model.form.avg.toFixed(1)}</strong></span>`);
   const book=getBestBookForLean(model.pickProp,model.leanText);
   if(book?.delta!==null&&!book.isDK&&Math.abs(book.delta)>0.05)bits.push(`<span><strong>${book.delta>0?"+":""}${book.delta.toFixed(1)}pp</strong> book edge</span>`);
@@ -2043,11 +2043,11 @@ function pickStatusLine(model){
 function pickClick(model){return `streakToDash(${[model.pk.player,model.pk.prop_type||"",model.pk.line||""].map(v=>esc(JSON.stringify(String(v)))).join(",")})`}
 function renderFeaturedPick(model){
   const p=model.pk,status=pickStatusLine(model),evidence=pickEvidenceHTML(model);
-  return `<section class="pick-feature ${model.tierClass}${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-feature-kicker"><span>${icon("picks")}Top recommendation</span><span style="color:var(--${model.tierClass==="smash"?"smash":model.tierClass==="strong"?"strong":"push"})">${model.confidence}</span></div><div class="pick-feature-main"><div><div class="pick-feature-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-feature-matchup">${esc(p.game||"")} · vs ${esc(p.opp_pitcher||"TBD")} · ${esc(p.venue||"")}</div></div><div class="pick-feature-call"><div class="pick-feature-line ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-feature-market">${esc(propTypeLabel(p.prop_type))}</div></div></div><div class="pick-feature-evidence"><div><div class="pick-evidence">${evidence||"Model-ranked slate leader"}</div>${renderBestBookLine(model.pickProp,model.leanText)}${p.rationale?`<div class="pick-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}</div><div class="pick-board-form" aria-label="Last five results">${renderPickFormBars(model.form)}</div></div>${status?`<div class="pick-board-status" style="grid-column:auto;margin-top:8px">${esc(status)}</div>`:""}${model.lineupRisk?`<div class="lineup-risk-text">${esc(model.injury)}</div>`:""}</section>`;
+  return `<section class="pick-feature ${model.tierClass}${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-feature-kicker"><span>${icon("picks")}Top recommendation</span><span style="color:var(--${model.tierClass==="smash"?"smash":model.tierClass==="strong"?"strong":"push"})">${model.confidence}</span></div><div class="pick-feature-main"><div><div class="pick-feature-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-feature-matchup">${esc(p.game||"")} · vs ${esc(p.opp_pitcher||"TBD")} · ${esc(p.venue||"")}</div></div><div class="pick-feature-call"><div class="pick-feature-line ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-feature-market">${esc(propTypeLabel(p.prop_type))}</div></div></div><div class="pick-feature-evidence"><div><div class="pick-evidence">${evidence||"Model-ranked slate leader"}</div>${renderBestBookLine(model.pickProp,model.leanText)}${p.rationale?`<div class="pick-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}</div><div class="pick-board-form" aria-label="Last ten results">${renderPickFormBars(model.form)}</div></div>${status?`<div class="pick-board-status" style="grid-column:auto;margin-top:8px">${esc(status)}</div>`:""}${model.lineupRisk?`<div class="lineup-risk-text">${esc(model.injury)}</div>`:""}</section>`;
 }
 function renderPickBoardRow(model,index){
   const p=model.pk,status=pickStatusLine(model),evidence=pickEvidenceHTML(model);
-  return `<div class="pick-board-row${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-board-rank">${String(p.rank||index+2).padStart(2,"0")}</div><div class="pick-board-player"><div class="pick-board-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-board-meta">${esc(p.game||"")} · ${esc(propTypeLabel(p.prop_type))}</div></div><div class="pick-board-form" aria-label="Last five results">${renderPickFormBars(model.form)}</div><div class="pick-evidence">${evidence||"No recent sample"}</div><div class="pick-board-decision"><div class="pick-board-call ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-board-tier ${model.tierClass}">${model.confidence}</div></div>${p.rationale?`<div class="pick-board-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}${status?`<div class="pick-board-status">${esc(status)}</div>`:""}</div>`;
+  return `<div class="pick-board-row${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-board-rank">${String(p.rank||index+2).padStart(2,"0")}</div><div class="pick-board-player"><div class="pick-board-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-board-meta">${esc(p.game||"")} · ${esc(propTypeLabel(p.prop_type))}</div></div><div class="pick-board-form" aria-label="Last ten results">${renderPickFormBars(model.form)}</div><div class="pick-evidence">${evidence||"No recent sample"}</div><div class="pick-board-decision"><div class="pick-board-call ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-board-tier ${model.tierClass}">${model.confidence}</div></div>${p.rationale?`<div class="pick-board-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}${status?`<div class="pick-board-status">${esc(status)}</div>`:""}</div>`;
 }
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
@@ -2258,7 +2258,7 @@ function render(){
       picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
       const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
       const pickModels=rankedPicks.map(getPickDisplayModel),featured=pickModels[0],remaining=pickModels.slice(1);
-      picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L5</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;
+      picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L10</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;
     }
   }else if(st.picksView==="dingers"){
     const db=getDingerBoard();
