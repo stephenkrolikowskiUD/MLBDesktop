@@ -47,7 +47,7 @@ SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
 MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
 SPORT_LABEL = "MLB"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
 _last_odds_credits_remaining = None
 GEMINI_TARGET_PICKS = 14
