@@ -1125,29 +1125,6 @@ function setPropsMetric(m){st.propsMetric=m;render()}
 function setDueFilter(f){st.dueFilter=f;render()}
 function setParlayStat(s){st.parlayStat=s;render()}
 
-function getDingerCombos(board,legs){
-  if(board.length<legs)return[];
-  const combos=[];
-  function gen(start,current){
-    if(current.length===legs){
-      const teams=current.map(d=>d.team);
-      if(new Set(teams).size===legs){
-        const score=current.reduce((s,d)=>s+d.score,0);
-        combos.push({players:current.slice(),score,teams});
-      }
-      return;
-    }
-    for(let i=start;i<board.length&&combos.length<500;i++){
-      current.push(board[i]);
-      gen(i+1,current);
-      current.pop();
-    }
-  }
-  gen(0,[]);
-  combos.sort((a,b)=>b.score-a.score);
-  return combos.slice(0,10);
-}
-
 function getDingerBoard(){
   return getMemo("dingerBoard",()=>{
   const rows=[];
@@ -2366,13 +2343,6 @@ function render(){
         </div>`;
       }).join("");
       picksHTML+=`</div>`;
-
-      const combos=getDingerCombos(db,3);
-      if(combos.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg Dinger Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos.slice(0,8).map((c,i)=>`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,"HR",p.dkLine||"")).join(" + ")}</span><span class="combo-score">${c.score.toFixed(0)}</span><div class="combo-teams">${c.teams.join(" · ")}</div></div>`).join("");
-        picksHTML+=`</div></div>`;
-      }
     }
   }else if(st.picksView==="ks"){
     const kb=getKsBoard();
@@ -2466,53 +2436,25 @@ function render(){
       picksHTML+=`</div>`;
     }
   }else if(st.picksView==="parlays"){
-    // ═══ STAT PARLAYS ═══
+    // ═══ DINGER / K PARLAYS ═══
     const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>m!=="Batter_SO");
-    const availStats=["HR","H","RBI","R","TB","SB","BB","P_SO","P_BB","P_OUTS"].filter(s=>allPropStats.includes(s));
+    const availStats=["HR","P_SO"].filter(s=>allPropStats.includes(s));
     const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
     const board=getStatParlayBoard(pStat);
     const combos2=getStatParlayCombos(board,2);
     const combos3=getStatParlayCombos(board,3);
-    const isPitcherStat=isPitcherProp(pStat);
+    const parlayLabel=pStat==="P_SO"?"K":"Dinger";
 
-    picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#818cf8;font-size:var(--t-sm);font-weight:700">Stat Parlays</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">${board.length} players w/ ${pStat} prop</div></div>`;
-    picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Pick a stat, see the best same-stat parlay combos ranked by hit rate + EV edge + matchup.</div>`;
-    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s}</div>`).join("")}</div>`;
+    picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div style="color:#818cf8;font-size:var(--t-sm);font-weight:700">Parlay Builder</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">${board.length} eligible ${parlayLabel.toLowerCase()} candidates</div></div>`;
+    picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Combination recommendations only. Use the Dingers and Ks boards to evaluate individual players.</div>`;
+    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="P_SO"?"K Parlays":"Dinger Parlays"}</div>`).join("")}</div>`;
 
-    if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No DK props available. Run the engine first.</div>`}
-    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${pStat} parlays. Need 3+ games.</div>`}
+    if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No home run or pitcher strikeout props available. Run the engine first.</div>`}
+    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${parlayLabel.toLowerCase()} parlays. Need 3+ games.</div>`}
     else{
-      // Top players board
-      picksHTML+=`<div style="padding:8px 16px 4px;color:var(--accent-soft);font-size:var(--t-xs);font-weight:600">TOP ${pStat} PLAYS — Ranked Board</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=board.slice(0,12).map((d,i)=>{
-        const hrPct=(d.hitRate*100).toFixed(0);
-        const edgePct=d.edge>0?`+${(d.edge*100).toFixed(0)}%`:`${(d.edge*100).toFixed(0)}%`;
-        const isTop=i<3;
-        const locked=getLockInfo(d.name,isPitcherStat).started;
-        return`<div class="due-card ${isTop?"top":""}${locked?" locked-card":""}" onclick="streakToDash('${esc(d.name)}')">
-          <div class="due-left">
-            <div><span style="font-size:var(--t-sm);font-weight:800;color:${isTop?"#818cf8":"#38bdf8"};margin-right:6px">#${i+1}</span><span class="due-name">${playerLink(d.name,pStat,d.dkLine||"")}${lockBadge(d.name,isPitcherStat)}</span></div>
-            <div class="due-meta">${isPitcherStat?`${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}`:`${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP)`}</div>
-            <div class="due-tags">
-              <span class="due-tag" style="background:#1a2a3d;color:#7dd3fc;border:1px solid #2d4a5d">${hrPct}% hit rate</span>
-              ${d.edge>0?`<span class="due-tag matchup">${edgePct} EV</span>`:""}
-              <span class="due-tag prop">DK ${d.dkLine} O:${fmtOdds(d.overOdds)}</span>
-              ${d.matchupScore>=2?`<span class="due-tag matchup">✅ Matchup</span>`:""}
-            </div>
-            <div class="due-meta" style="margin-top:4px">Seas: ${d.seasAvg.toFixed(2)}/g · L7: ${d.l7Avg.toFixed(2)}/g · ${d.hitsOver}/${d.total} over ${d.dkLine}</div>
-          </div>
-          <div class="due-right">
-            <div class="due-score" style="color:${isTop?"#818cf8":"#38bdf8"}">${d.score.toFixed(0)}</div>
-            <div class="due-sub">${locked?"started":"score"}</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-
       // 2-Leg Combos
       if(combos2.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 2-Leg ${pStat} Parlays</div><div class="combo-grid">`;
+        picksHTML+=`<div class="combo-section"><div class="combo-title">Best 2-Leg ${parlayLabel} Parlays</div><div class="combo-grid">`;
         picksHTML+=combos2.map((c,i)=>{
           const avgHR=(c.avgHitRate*100).toFixed(0);
           return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,pStat,p.dkLine||"")).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
@@ -2522,7 +2464,7 @@ function render(){
 
       // 3-Leg Combos
       if(combos3.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">🎰 Best 3-Leg ${pStat} Parlays</div><div class="combo-grid">`;
+        picksHTML+=`<div class="combo-section"><div class="combo-title">Best 3-Leg ${parlayLabel} Parlays</div><div class="combo-grid">`;
         picksHTML+=combos3.map((c,i)=>{
           const avgHR=(c.avgHitRate*100).toFixed(0);
           return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,pStat,p.dkLine||"")).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
