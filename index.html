@@ -2582,7 +2582,8 @@ function render(){
     const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>m!=="Batter_SO");
     const availStats=["HR","P_SO"].filter(s=>allPropStats.includes(s));
     const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
-    const board=getStatParlayBoard(pStat);
+    const rawBoard=getStatParlayBoard(pStat);
+    const board=rawBoard.filter(player=>player.edge>=0.05);
     const combos2=getStatParlayCombos(board,2);
     const combos3=getStatParlayCombos(board,3);
     const parlayLabel=pStat==="P_SO"?"K":"Dinger";
@@ -2592,7 +2593,7 @@ function render(){
     picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="P_SO"?"K Parlays":"Dinger Parlays"}</div>`).join("")}</div>`;
 
     if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No home run or pitcher strikeout props available. Run the engine first.</div>`}
-    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No players with enough game data for ${parlayLabel.toLowerCase()} parlays. Need 3+ games.</div>`}
+    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No positive-edge ${parlayLabel.toLowerCase()} parlay is available. ${rawBoard.length?`All ${rawBoard.length} eligible OVER lines are below the +5% edge floor. Pass this market.`:"Need 3+ games of player data."}</div>`}
     else{
       // 2-Leg Combos
       if(combos2.length){
