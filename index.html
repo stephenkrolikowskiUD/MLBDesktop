@@ -569,7 +569,7 @@ td.push{color:var(--push);font-weight:700}
   .pick-hero-action{font-size:var(--t-xs)}
   .pick-footer{gap:6px;padding-top:8px;margin-top:8px}
   .pick-prop{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;margin-top:4px}
-  .pick-rationale{font-size:var(--t-xs);line-height:1.25;margin-top:4px}
+  .pick-rationale{font-size:var(--t-xs);line-height:1.4;margin-top:4px;white-space:normal;overflow:visible;text-overflow:clip}
   .lineup-risk-badge,.lineup-risk-text{font-size:var(--t-xs);line-height:1.2}
   .pick-editorial{padding:0 10px 12px}
   .pick-feature{padding:13px}
@@ -577,10 +577,28 @@ td.push{color:var(--push);font-weight:700}
   .pick-feature-line{font-size:27px}
   .pick-feature-evidence{align-items:flex-start;flex-direction:column;gap:8px}
   .pick-board-head{display:none}
-  .pick-board-row{grid-template-columns:28px minmax(0,1fr) 88px;gap:8px;padding:10px 6px}
+  .pick-board-row{
+    grid-template-columns:30px minmax(0,1fr);
+    grid-template-areas:
+      "rank player"
+      "rank decision"
+      "rank evidence"
+      "rank rationale"
+      "rank status";
+    column-gap:10px;
+    row-gap:7px;
+    align-items:start;
+    padding:13px 6px
+  }
+  .pick-board-rank{grid-area:rank;padding-top:1px}
+  .pick-board-player{grid-area:player}
   .pick-board-form{display:none}
-  .pick-evidence{grid-column:2/4}
-  .pick-board-rationale,.pick-board-status{grid-column:2/4}
+  .pick-board-decision{grid-area:decision;display:flex;align-items:baseline;justify-content:flex-start;gap:9px;text-align:left;white-space:normal}
+  .pick-board-call{font-size:22px}
+  .pick-board-tier{margin-top:0}
+  .pick-evidence{grid-area:evidence}
+  .pick-board-rationale{grid-area:rationale;margin-top:0;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35}
+  .pick-board-status{grid-area:status;margin-top:0}
   .analysis-shell{padding:0 10px 14px}
   .analysis-hero{padding-top:14px}
   .analysis-player{font-size:28px}
@@ -2209,7 +2227,7 @@ function render(){
   }
   const vsp=getVsSP(player);
   const matchupAnalysisHTML=isP
-    ?`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(pT.opp_abbr_tonight||"—")}</div><div class="analysis-rail-sub">${esc(pT.home_away_tonight||"—")} · ${esc(pT.venue_tonight||"—")} · opposing starter ${esc(pT.opp_starter||"TBD")}</div>`
+    ?`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(pT.opp_abbr_tonight||"—")}</div><div class="analysis-rail-sub">${esc(pT.home_away_tonight||"—")} · ${esc(pT.venue_tonight||"—")}</div>`
     :`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(oppP)}</div><div class="analysis-rail-sub">${esc(pT.opp_abbr_tonight||"—")} · ${esc(oppH)}HP · ${esc(venue||"Venue TBD")}</div>${vsp&&toNum(vsp.AB)?`<div style="margin-top:9px"><div class="analysis-data-row"><span>Career matchup</span><strong>${vsp.H||0}-for-${vsp.AB||0}</strong></div><div class="analysis-data-row"><span>Average</span><strong>${vsp.AVG||"—"}</strong></div><div class="analysis-data-row"><span>Home runs</span><strong>${vsp.HR||0}</strong></div></div>`:""}`;
   const opponentRanking=getTeamRanking(pT.opp_abbr_tonight);
   const opponentProfileHTML=opponentRanking?(isP
@@ -2353,12 +2371,15 @@ function render(){
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
         const ratePct=(d.hrRate*100).toFixed(1);
         const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
+        const opponentRanking=getTeamRanking(d.opp);
+        const teamContext=opponentRanking?`${esc(d.opp)} staff · ${teamRankValue(opponentRanking,"PIT_HR9","PIT_HR9_MOST_RANK",{digits:2,suffix:" HR/9",direction:"most"})}`:"";
         const locked=getLockInfo(d.name,false).started;
         return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','HR','${d.dkLine||""}')">
           <div class="dinger-left">
             <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"HR",d.dkLine||"")}${lockBadge(d.name,false)}</span></div>
             <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
             <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
+            ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
           </div>
           <div class="dinger-right">
             <div class="dinger-rate">${ratePct}%</div>
@@ -2380,12 +2401,15 @@ function render(){
         const isTop=i<3;
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
         const k9Str=d.k9.toFixed(1);
+        const opponentRanking=getTeamRanking(d.opp);
+        const teamContext=opponentRanking?`${esc(d.opp)} offense · ${teamRankValue(opponentRanking,"OFF_K_PCT","OFF_K_PCT_MOST_RANK",{digits:1,suffix:"% K",direction:"most"})}`:"";
         const locked=getLockInfo(d.name,true).started;
         return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','P_SO','${d.dkLine||""}')">
           <div class="dinger-left">
             <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"P_SO",d.dkLine||"")}${lockBadge(d.name,true)}</span></div>
             <div class="dinger-meta">${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}</div>
             <div class="dinger-meta">${d.seasSO} K in ${d.gamesStarted} GS · L7 avg: ${d.l7SO.toFixed(1)} · L3: ${d.l3SO.toFixed(1)}</div>
+            ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
           </div>
           <div class="dinger-right">
             <div class="dinger-rate">${k9Str}</div>
