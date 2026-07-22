@@ -747,7 +747,7 @@ const MLB_API="https://statsapi.mlb.com/api/v1";
 let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
-  picks:[],props:[],allBooksProps:[],
+  picks:[],props:[],allBooksProps:[],teamRankings:[],
   pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
   mode:"batter",
   player:"",metric:"H",line:"",activeTab:"picks",oppFilter:"",
@@ -1124,6 +1124,27 @@ function switchPicksView(v){st.picksView=v;render()}
 function setPropsMetric(m){st.propsMetric=m;render()}
 function setDueFilter(f){st.dueFilter=f;render()}
 function setParlayStat(s){st.parlayStat=s;render()}
+
+function getTeamRanking(teamAbbr){
+  const target=String(teamAbbr||"").trim().toUpperCase();
+  if(!target)return null;
+  return (st.teamRankings||[]).find(row=>String(rowField(row,"TEAM_ABBR","team_abbr")||"").trim().toUpperCase()===target)||null;
+}
+function ordinalRank(value){
+  const n=Math.round(toNum(value));
+  if(!n)return"—";
+  const mod100=n%100;
+  const suffix=mod100>=11&&mod100<=13?"th":n%10===1?"st":n%10===2?"nd":n%10===3?"rd":"th";
+  return`${n}${suffix}`;
+}
+function teamRankValue(row,valueKey,rankKey,{digits=2,suffix="",direction="most"}={}){
+  if(!row)return"—";
+  const raw=rowField(row,valueKey);
+  const value=raw===""||raw===null||raw===undefined?NaN:Number(raw);
+  const shown=Number.isFinite(value)?value.toFixed(digits):"—";
+  const rank=ordinalRank(rowField(row,rankKey));
+  return`${shown}${suffix}${rank!=="—"?` · ${rank} ${direction}`:""}`;
+}
 
 function getDingerBoard(){
   return getMemo("dingerBoard",()=>{
@@ -2190,6 +2211,10 @@ function render(){
   const matchupAnalysisHTML=isP
     ?`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(pT.opp_abbr_tonight||"—")}</div><div class="analysis-rail-sub">${esc(pT.home_away_tonight||"—")} · ${esc(pT.venue_tonight||"—")} · opposing starter ${esc(pT.opp_starter||"TBD")}</div>`
     :`<div class="analysis-rail-heading">${esc(pT.team_abbr||"")} vs ${esc(oppP)}</div><div class="analysis-rail-sub">${esc(pT.opp_abbr_tonight||"—")} · ${esc(oppH)}HP · ${esc(venue||"Venue TBD")}</div>${vsp&&toNum(vsp.AB)?`<div style="margin-top:9px"><div class="analysis-data-row"><span>Career matchup</span><strong>${vsp.H||0}-for-${vsp.AB||0}</strong></div><div class="analysis-data-row"><span>Average</span><strong>${vsp.AVG||"—"}</strong></div><div class="analysis-data-row"><span>Home runs</span><strong>${vsp.HR||0}</strong></div></div>`:""}`;
+  const opponentRanking=getTeamRanking(pT.opp_abbr_tonight);
+  const opponentProfileHTML=opponentRanking?(isP
+    ?`<div class="analysis-rail-heading">${esc(rowField(opponentRanking,"TEAM","TEAM_ABBR")||pT.opp_abbr_tonight)} offense</div><div class="analysis-rail-sub">Season-to-date MLB team rates</div><div style="margin-top:8px"><div class="analysis-data-row"><span>Strikeout rate</span><strong>${teamRankValue(opponentRanking,"OFF_K_PCT","OFF_K_PCT_MOST_RANK",{digits:1,suffix:"%",direction:"most"})}</strong></div><div class="analysis-data-row"><span>OPS</span><strong>${teamRankValue(opponentRanking,"OFF_OPS","OFF_OPS_BEST_RANK",{digits:3,direction:"highest"})}</strong></div><div class="analysis-data-row"><span>Runs</span><strong>${teamRankValue(opponentRanking,"OFF_RUNS_PER_GAME","OFF_RUNS_MOST_RANK",{digits:2,suffix:"/game",direction:"most"})}</strong></div><div class="analysis-data-row"><span>Home runs</span><strong>${teamRankValue(opponentRanking,"OFF_HR_PER_GAME","OFF_HR_MOST_RANK",{digits:2,suffix:"/game",direction:"most"})}</strong></div></div>`
+    :`<div class="analysis-rail-heading">${esc(rowField(opponentRanking,"TEAM","TEAM_ABBR")||pT.opp_abbr_tonight)} pitching</div><div class="analysis-rail-sub">Season-to-date MLB staff rates</div><div style="margin-top:8px"><div class="analysis-data-row"><span>Home runs allowed</span><strong>${teamRankValue(opponentRanking,"PIT_HR9","PIT_HR9_MOST_RANK",{digits:2,suffix:" HR/9",direction:"most"})}</strong></div><div class="analysis-data-row"><span>Runs allowed</span><strong>${teamRankValue(opponentRanking,"PIT_RUNS_ALLOWED_PER_GAME","PIT_RUNS_ALLOWED_MOST_RANK",{digits:2,suffix:"/game",direction:"most"})}</strong></div><div class="analysis-data-row"><span>ERA</span><strong>${teamRankValue(opponentRanking,"PIT_ERA","PIT_ERA_BEST_RANK",{digits:2,direction:"best"})}</strong></div><div class="analysis-data-row"><span>WHIP</span><strong>${teamRankValue(opponentRanking,"PIT_WHIP","PIT_WHIP_BEST_RANK",{digits:2,direction:"best"})}</strong></div></div>`):"";
   const hitRateAnalysisHTML=lineNum&&pHasLogs?`<div class="analysis-data-row"><span>L5</span><strong>${hL5}/5</strong></div><div class="analysis-data-row"><span>L10</span><strong>${hL10}/10</strong></div><div class="analysis-data-row"><span>Season</span><strong>${hSeas}/${allLogs.length} · ${sRate!==null?(sRate*100).toFixed(0):"—"}%</strong></div>`:"";
   const splitAnalysisHTML=isP
     ?`<div class="analysis-data-row"><span>ERA</span><strong>${sT.ERA||"—"}</strong></div><div class="analysis-data-row"><span>WHIP</span><strong>${sT.WHIP||"—"}</strong></div><div class="analysis-data-row"><span>K/9</span><strong>${sT.K9||"—"}</strong></div>`
@@ -2620,6 +2645,7 @@ function render(){
         </main>
         <aside class="analysis-rail">
           <section class="analysis-rail-section"><div class="analysis-rail-title">Tonight's matchup</div>${matchupAnalysisHTML}</section>
+          ${opponentProfileHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Opponent profile</div>${opponentProfileHTML}</section>`:""}
           ${hitRateAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Hit rates · ${esc(metric)} ${lineNum?`over ${lineNum}`:""}</div>${hitRateAnalysisHTML}</section>`:""}
           ${pHasLogs?`<section class="analysis-rail-section"><div class="analysis-rail-title">${isP?"Season rates":`Handedness split · ${esc(oppH)}HP`}</div>${splitAnalysisHTML}</section><section class="analysis-rail-section"><div class="analysis-rail-title">Home / away</div><div class="mini-bars-container">${haBars}</div></section>`:""}
           ${weatherAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Weather</div>${weatherAnalysisHTML}</section>`:""}
@@ -2757,9 +2783,10 @@ function loadAllData(){
   fetchSheet("DK_Player_Props").catch(()=>[]),
   fetchSheet("All_Books_Props").catch(()=>[]),
   fetchSheet("Batter_vs_SP").catch(()=>[]),
+  fetchSheet("Team_Rankings").catch(()=>[]),
   fetchSheet("Pick_Performance").catch(()=>[]),
   fetchSheet("Pick_Performance_Snapshots").catch(()=>[])
-]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,allBooksProps,vsSP,pickPerformance,pickPerformanceSnaps])=>{
+]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,allBooksProps,vsSP,teamRankings,pickPerformance,pickPerformanceSnaps])=>{
   resetDerived();
   st.tonight=normalizeKeys(cleanRows(tonight));
   st.gameLogs=normalizeKeys(cleanRows(logs));
@@ -2782,6 +2809,11 @@ function loadAllData(){
 	  st.props=normalizeKeys(cleanRows(props));
 	  st.allBooksProps=normalizeKeys(cleanRows(allBooksProps||[]));
 	  st.vsSP=normalizeKeys(cleanRows(vsSP));
+	  const teamRankingRows=normalizeKeys(cleanRows(teamRankings||[]));
+	  const teamRankingKeys=new Set(Object.keys(teamRankingRows[0]||{}).map(canonicalFieldKey));
+	  const hasTeamRankingSchema=['team_id','team_abbr','off_k_pct','pit_hr9'].every(key=>teamRankingKeys.has(key));
+	  st.teamRankings=hasTeamRankingSchema?teamRankingRows:[];
+	  if(teamRankingRows.length&&!hasTeamRankingSchema)console.warn('⚠️ Team_Rankings is not populated yet; ignoring GViz fallback data.');
 	  st.pickPerformance=normalizeKeys(cleanRows(pickPerformance||[]));
 	  st.pickPerformanceSnaps=normalizeKeys(cleanRows(pickPerformanceSnaps||[]));
 	  const DASHBOARD_EXPECTS = {
@@ -2793,6 +2825,8 @@ function loadAllData(){
 	    DK_Player_Props: ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS'],
 	    All_Books_Props: ['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS'],
 	    Tonights_Pitchers: ['team_abbr', 'opp_pitcher_name', 'opp_pitcher_hand'],
+	    Team_Rankings: ['TEAM_ABBR', 'OFF_K_PCT', 'OFF_K_PCT_MOST_RANK',
+	                    'PIT_HR9', 'PIT_HR_ALLOWED_MOST_RANK'],
 	  };
 	  const _schemaSources = {
 	    Tonights_Batters: st.tonight,
@@ -2800,6 +2834,7 @@ function loadAllData(){
 	    DK_Player_Props: st.props,
 	    All_Books_Props: st.allBooksProps,
 	    Tonights_Pitchers: st.pitchers,
+	    Team_Rankings: st.teamRankings,
 	  };
 	  const _schemaIssues = [];
 	  for (const [sheet, expectedCols] of Object.entries(DASHBOARD_EXPECTS)) {
@@ -2833,6 +2868,7 @@ function loadAllData(){
   console.log(`🚀 Dashboard loaded — mode:${st.mode}, player:"${st.player}"`);
   console.log(`   Batters: ${st.tonight.length}, Logs: ${st.gameLogs.length}, Pitchers: ${st.pTonight.length}`);
   console.log(`   Props: ${st.props.length}, Picks: ${st.picks.length}, Weather: ${st.weather.length}`);
+  console.log(`   Team rankings: ${st.teamRankings.length}`);
   if(st.pickGuard)console.warn(`⚠️ ${st.pickGuard.text}`);
   if(st.tonight.length>0)console.log(`   Batter row 0 keys:`,Object.keys(st.tonight[0]).slice(0,8));
   if(st.pTonight.length>0)console.log(`   Pitcher row 0 keys:`,Object.keys(st.pTonight[0]).slice(0,8));
