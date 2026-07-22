@@ -802,7 +802,7 @@ let st={
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,loadedAt:null,latestPickDate:"",pickGuard:null,
   picksView:"picks",propsMetric:"ALL",propsSearch:"",propsTeam:"ALL",propsSort:"SCORE",propsMinHit:"0",propsMinEdge:"-100",
-  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",parlayStat:"HR",
+  streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",
   vsSP:[],
   lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
@@ -1175,7 +1175,6 @@ function setPropsSort(v){st.propsSort=v;render()}
 function setPropsMinHit(v){st.propsMinHit=v;render()}
 function setPropsMinEdge(v){st.propsMinEdge=v;render()}
 function setDueFilter(f){st.dueFilter=f;render()}
-function setParlayStat(s){st.parlayStat=s;render()}
 
 function getTeamRanking(teamAbbr){
   const target=String(teamAbbr||"").trim().toUpperCase();
@@ -1977,6 +1976,20 @@ function getStatParlayCombos(board,legs){
   return combos.slice(0,8);
 }
 
+function renderMarketParlays(stat,label){
+  const rawBoard=getStatParlayBoard(stat);
+  const board=rawBoard.filter(player=>player.edge>=0.05);
+  const combos2=getStatParlayCombos(board,2);
+  const combos3=getStatParlayCombos(board,3);
+  let html=`<section class="combo-section" style="margin-top:12px;border-top:1px solid var(--border-1);padding-top:16px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><div class="combo-title">${label} Parlays</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">${board.length} positive-edge candidates</div></div><div style="color:var(--ink-muted);font-size:var(--t-xs);margin:-2px 0 10px">Combination recommendations from this board. Every leg must clear the +5% edge floor.</div>`;
+  if(board.length<2){
+    const reason=rawBoard.length?`${rawBoard.length} OVER candidate${rawBoard.length===1?" is":"s are"} available, but fewer than two clear +5% edge. Pass this market.`:"No eligible player props with 3+ games of data.";
+    return html+`<div class="empty" style="padding:22px 8px">No positive-edge ${label.toLowerCase()} parlay is available. ${reason}</div></section>`;
+  }
+  const renderCombos=(combos,legs)=>combos.length?`<div style="margin-top:12px"><div class="combo-title">Best ${legs}-Leg Combinations</div><div class="combo-grid">${combos.map((combo,i)=>`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${combo.players.map(player=>playerLink(player.name,stat,player.dkLine||"")).join(" + ")}</span><span class="combo-score">${(combo.avgHitRate*100).toFixed(0)}% avg</span><div class="combo-teams">${combo.teams.join(" · ")} · Avg edge: +${(combo.avgEdge*100).toFixed(0)}%</div></div>`).join("")}</div></div>`:"";
+  return html+renderCombos(combos2,2)+renderCombos(combos3,3)+`</section>`;
+}
+
 function getDraftBoard(){
   return getMemo("draftBoard",()=>{
   const board=[];
@@ -2125,7 +2138,7 @@ function calculateParlayMath(legs){const decimal=legs.reduce((p,l)=>p*entryAmeri
 function buildGameEntry(){const ge=st.gameEntry||{};if(!ge.selectedGame)return null;const {game,candidates}=buildCandidatePool(ge.selectedGame);if(!game)return null;const requested=ge.legCount||GAME_ENTRY_DEFAULT_LEGS;const legs=selectTopN(candidates,requested);const math=calculateParlayMath(legs);return {game,requested,legs,candidates,math,score:legs.reduce((s,l)=>s+l.leg_score,0)}}
 function renderGameSelector(games){if(!games.length)return `<div class="section"><div class="card"><div class="card-title">TONIGHT'S GAMES</div><div class="empty" style="padding:24px;text-align:center">No games scheduled tonight.</div></div></div>`;const sel=st.gameEntry?.selectedGame;return `<div class="section"><div class="card"><div class="card-title">TONIGHT'S GAMES</div><div style="display:grid;gap:8px;margin-top:10px">${games.map(g=>`<button onclick='setGameEntryGame(${JSON.stringify(g.id)})' style="text-align:left;border:1px solid ${sel===g.id?'var(--accent)':'#334155'};background:${sel===g.id?'color-mix(in srgb, var(--accent) 13%, transparent)':'transparent'};color:${sel===g.id?'var(--accent)':'inherit'};border-radius:8px;padding:10px 12px;font-weight:800;cursor:pointer">${esc(g.label)}${g.time?` <span style="opacity:.75;font-size:var(--t-xs)">— ${esc(g.time)}</span>`:''}</button>`).join('')}</div></div></div>`}
 function renderLegCountSelector(){const cur=st.gameEntry?.legCount||GAME_ENTRY_DEFAULT_LEGS;return `<div class="section"><div class="card"><div class="card-title">LEGS</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0">${Array.from({length:8},(_,i)=>i+1).map(n=>`<button onclick="setGameEntryLegs(${n})" style="border:1px solid ${cur===n?'var(--accent)':'#334155'};background:${cur===n?'var(--accent)':'transparent'};color:${cur===n?'#07130b':'inherit'};border-radius:999px;padding:7px 12px;font-weight:900;cursor:pointer">${n}</button>`).join('')}</div><div style="font-size:var(--t-xs);color:var(--push)">Underdog Pick'em supports 2-8 legs. 1 leg is a straight bet (informational only).</div></div></div>`}
-function renderEntry(entry){if(!entry)return '';if(!entry.candidates.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}ENTRY</div><div class="empty" style="padding:24px;text-align:center">No props available for this game yet.</div></div></div>`;if(!entry.legs.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}ENTRY</div><div class="empty" style="padding:24px;text-align:center">No usable odds for this game yet.</div></div></div>`;const odds=entry.math.american;const oddsText=odds>0?`+${odds}`:`${odds}`;const books=[...new Set(entry.legs.map(entryBestBookKey).filter(Boolean))];const warning=books.length>=2?`<div style="margin-top:12px;background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid color-mix(in srgb, var(--warn) 33%, transparent);color:var(--warn);border-radius:8px;padding:8px;font-size:var(--t-xs)">${icon('warn')}Cross-book: legs split across ${books.join(', ')}. Single-book parlay may price differently.</div>`:'';const shortage=entry.legs.length<entry.requested?`<div style="margin-top:8px;color:var(--warn);font-size:var(--t-xs)">Only ${entry.legs.length} legs available (you requested ${entry.requested}).</div>`:'';return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}ENTRY — ${esc(entry.game.label)} · ${entry.legs.length} legs</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0"><div class="stat-box"><div class="val">${oddsText}</div><div class="lbl">Combined</div></div><div class="stat-box"><div class="val">$${entry.math.return10.toFixed(0)}</div><div class="lbl">$10 return</div></div><div class="stat-box"><div class="val">${entry.score.toFixed(2)}</div><div class="lbl">Score</div></div></div>${shortage}<div style="height:1px;background:#334155;margin:12px 0"></div>${entry.legs.map((l,i)=>`<div style="padding:10px 0;border-bottom:1px solid #263238"><div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:900">${i+1}. ${typeof playerLink==='function'?playerLink(l.player,l.prop_type,l.line):esc(l.player)} — ${l.prop_type} ${l.lean} ${l.line}</div><div style="font-weight:900;color:${l.lean==='OVER'?'var(--over)':'var(--under)'}">${entryFmtOdds(l.odds)}</div></div><div style="font-size:var(--t-xs);color:var(--push);margin-top:4px">Why: ${l.ai_tier} × ${l.prop_type} WLB ${l.wlb.toFixed(2)} = ${l.leg_score.toFixed(2)} · ${l.source}</div>${renderEntryBestBookLine(l.prop,l.lean)}</div>`).join('')}${warning}<button onclick="copyEntryToClipboard()" style="margin-top:14px;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent);border-radius:8px;padding:10px 12px;font-weight:900;cursor:pointer;width:100%">${window.__entryCopied?'✓ Copied':'Copy entry'}</button></div></div>`}
+function renderEntry(entry){if(!entry)return '';if(!entry.candidates.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}GAME BUILDER</div><div class="empty" style="padding:24px;text-align:center">No props available for this game yet.</div></div></div>`;if(!entry.legs.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}GAME BUILDER</div><div class="empty" style="padding:24px;text-align:center">No usable odds for this game yet.</div></div></div>`;const odds=entry.math.american;const oddsText=odds>0?`+${odds}`:`${odds}`;const books=[...new Set(entry.legs.map(entryBestBookKey).filter(Boolean))];const warning=books.length>=2?`<div style="margin-top:12px;background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid color-mix(in srgb, var(--warn) 33%, transparent);color:var(--warn);border-radius:8px;padding:8px;font-size:var(--t-xs)">${icon('warn')}Cross-book: legs split across ${books.join(', ')}. Single-book parlay may price differently.</div>`:'';const shortage=entry.legs.length<entry.requested?`<div style="margin-top:8px;color:var(--warn);font-size:var(--t-xs)">Only ${entry.legs.length} legs available (you requested ${entry.requested}).</div>`:'';return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}GAME BUILDER — ${esc(entry.game.label)} · ${entry.legs.length} legs</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0"><div class="stat-box"><div class="val">${oddsText}</div><div class="lbl">Combined</div></div><div class="stat-box"><div class="val">$${entry.math.return10.toFixed(0)}</div><div class="lbl">$10 return</div></div><div class="stat-box"><div class="val">${entry.score.toFixed(2)}</div><div class="lbl">Score</div></div></div>${shortage}<div style="height:1px;background:#334155;margin:12px 0"></div>${entry.legs.map((l,i)=>`<div style="padding:10px 0;border-bottom:1px solid #263238"><div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:900">${i+1}. ${typeof playerLink==='function'?playerLink(l.player,l.prop_type,l.line):esc(l.player)} — ${l.prop_type} ${l.lean} ${l.line}</div><div style="font-weight:900;color:${l.lean==='OVER'?'var(--over)':'var(--under)'}">${entryFmtOdds(l.odds)}</div></div><div style="font-size:var(--t-xs);color:var(--push);margin-top:4px">Why: ${l.ai_tier} × ${l.prop_type} WLB ${l.wlb.toFixed(2)} = ${l.leg_score.toFixed(2)} · ${l.source}</div>${renderEntryBestBookLine(l.prop,l.lean)}</div>`).join('')}${warning}<button onclick="copyEntryToClipboard()" style="margin-top:14px;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent);border-radius:8px;padding:10px 12px;font-weight:900;cursor:pointer;width:100%">${window.__entryCopied?'✓ Copied':'Copy entry'}</button></div></div>`}
 function renderGameEntryView(){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};const games=getEntryGames();let html=renderGameSelector(games);if(st.gameEntry.selectedGame){html+=renderLegCountSelector();html+=renderEntry(buildGameEntry())}return html}
 function entryCopyText(entry){const odds=entry.math.american;const oddsText=odds>0?`+${odds}`:`${odds}`;return `${entry.game.label} — ${entry.legs.length}-leg entry\n${entry.legs.map((l,i)=>`${i+1}. ${l.player} - ${l.prop_type} ${l.lean} ${l.line}`).join('\n')}\nCombined ${oddsText} | $10 → $${entry.math.return10.toFixed(0)}\nBuilt: ${new Date().toLocaleString()}`}
 function copyEntryToClipboard(){const entry=buildGameEntry();if(!entry)return;const text=entryCopyText(entry);if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(()=>{window.__entryCopied=true;render();setTimeout(()=>{window.__entryCopied=false;render()},1200)}).catch(()=>entryShowCopyFallback(text))}else entryShowCopyFallback(text)}
@@ -2482,6 +2495,7 @@ function render(){
         </div>`;
       }).join("");
       picksHTML+=`</div>`;
+      picksHTML+=renderMarketParlays("HR","Dinger");
     }
   }else if(st.picksView==="ks"){
     const kb=getKsBoard();
@@ -2512,6 +2526,7 @@ function render(){
         </div>`;
       }).join("");
       picksHTML+=`</div>`;
+      picksHTML+=renderMarketParlays("P_SO","K");
     }
   }else if(st.picksView==="streaks"){
     const allStreaks=getStreaks();
@@ -2576,44 +2591,6 @@ function render(){
         </div>`;
       }).join("");
       picksHTML+=`</div>`;
-    }
-  }else if(st.picksView==="parlays"){
-    // ═══ DINGER / K PARLAYS ═══
-    const allPropStats=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].filter(m=>m!=="Batter_SO");
-    const availStats=["HR","P_SO"].filter(s=>allPropStats.includes(s));
-    const pStat=availStats.includes(st.parlayStat)?st.parlayStat:(availStats[0]||"HR");
-    const rawBoard=getStatParlayBoard(pStat);
-    const board=rawBoard.filter(player=>player.edge>=0.05);
-    const combos2=getStatParlayCombos(board,2);
-    const combos3=getStatParlayCombos(board,3);
-    const parlayLabel=pStat==="P_SO"?"K":"Dinger";
-
-    picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center;gap:12px"><div style="color:#818cf8;font-size:var(--t-sm);font-weight:700">Parlay Builder</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">${board.length} eligible ${parlayLabel.toLowerCase()} candidates</div></div>`;
-    picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Combination recommendations only. Use the Dingers and Ks boards to evaluate individual players.</div>`;
-    picksHTML+=`<div class="due-filters">${availStats.map(s=>`<div class="pf-btn ${pStat===s?"active":""}" onclick="setParlayStat('${s}')">${s==="P_SO"?"K Parlays":"Dinger Parlays"}</div>`).join("")}</div>`;
-
-    if(!availStats.length){picksHTML+=`<div class="empty" style="padding:40px">No home run or pitcher strikeout props available. Run the engine first.</div>`}
-    else if(!board.length){picksHTML+=`<div class="empty" style="padding:40px">No positive-edge ${parlayLabel.toLowerCase()} parlay is available. ${rawBoard.length?`All ${rawBoard.length} eligible OVER lines are below the +5% edge floor. Pass this market.`:"Need 3+ games of player data."}</div>`}
-    else{
-      // 2-Leg Combos
-      if(combos2.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">Best 2-Leg ${parlayLabel} Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos2.map((c,i)=>{
-          const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,pStat,p.dkLine||"")).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
-        }).join("");
-        picksHTML+=`</div></div>`;
-      }
-
-      // 3-Leg Combos
-      if(combos3.length){
-        picksHTML+=`<div class="combo-section"><div class="combo-title">Best 3-Leg ${parlayLabel} Parlays</div><div class="combo-grid">`;
-        picksHTML+=combos3.map((c,i)=>{
-          const avgHR=(c.avgHitRate*100).toFixed(0);
-          return`<div class="combo-card ${i===0?"best":""}"><span class="combo-rank">#${i+1}</span><span class="combo-players">${c.players.map(p=>playerLink(p.name,pStat,p.dkLine||"")).join(" + ")}</span><span class="combo-score">${avgHR}% avg</span><div class="combo-teams">${c.teams.join(" · ")} · Avg edge: ${c.avgEdge>0?"+":""}${(c.avgEdge*100).toFixed(0)}%</div></div>`;
-        }).join("");
-        picksHTML+=`</div></div>`;
-      }
     }
   }else if(st.picksView==="draft"){
     const board=getDraftBoard();
@@ -2744,7 +2721,7 @@ function render(){
       <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">${icon('log')}<span>Log</span></button>
       <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">${icon('picks')}<span>Picks</span></button>
       <button class="tab-btn ${activeTab==="stats"?"active":""}" onclick="switchTab('stats')">${icon('stats')}<span>Stats</span></button>
-      <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Entry</span></button>
+      <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Game Builder</span></button>
       <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">${icon('lookup')}<span>Lookup</span></button>
       <button class="tab-btn ${activeTab==="method"?"active":""}" onclick="switchTab('method')">${icon('info')}<span>Info</span></button>
     </div>
@@ -2809,7 +2786,6 @@ function render(){
       <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">Due</div>
       <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">Dingers</div>
       <div class="sub-tab ${st.picksView==="ks"?"active":""}" onclick="switchPicksView('ks')">Ks</div>
-      <div class="sub-tab ${st.picksView==="parlays"?"active":""}" onclick="switchPicksView('parlays')">Parlays</div>
       <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">Props</div>
     </div>
     <div class="cards-wrap">${picksHTML}</div>
@@ -2843,7 +2819,7 @@ function render(){
     <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">${icon('log')}<span>Log</span></button>
     <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">${icon('picks')}<span>Picks</span></button>
     <button class="tab-btn ${activeTab==="stats"?"active":""}" onclick="switchTab('stats')">${icon('stats')}<span>Stats</span></button>
-    <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Entry</span></button>
+    <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Builder</span></button>
     <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">${icon('lookup')}<span>Lookup</span></button>
     <button class="tab-btn ${activeTab==="method"?"active":""}" onclick="switchTab('method')">${icon('info')}<span>Info</span></button>
   </div>`;
