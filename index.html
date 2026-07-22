@@ -299,6 +299,22 @@ td.push{color:var(--push);font-weight:700}
 .props-control input,.props-control select{width:100%;height:38px;padding:0 10px;border:1px solid var(--border-1);border-radius:7px;background:var(--surface-1);color:var(--ink-0);font:inherit;font-size:var(--t-sm)}
 .props-control input:focus,.props-control select:focus{outline:none;border-color:var(--accent)}
 .props-score{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-md);font-weight:800;color:var(--accent)}
+.props-score-detail{font-size:9px;color:var(--ink-muted);white-space:nowrap;margin-top:1px}
+.props-side{display:inline-flex;align-items:center;gap:4px;font-size:var(--t-xs);font-weight:800;white-space:nowrap}
+.props-side.over{color:var(--over)}
+.props-side.under{color:var(--under)}
+.team-props-board{margin:8px 16px 4px;padding:14px 0;border-top:1px solid var(--border-1);border-bottom:1px solid var(--border-1)}
+.team-props-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}
+.team-props-name{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-xl);font-weight:800;color:var(--ink-0)}
+.team-props-context{color:var(--ink-muted);font-size:var(--t-xs);margin-top:2px}
+.team-props-staff{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end;color:var(--accent-soft);font-size:var(--t-xs)}
+.team-market-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.team-market-card{min-width:0;padding:10px;border:1px solid var(--border-1);background:var(--surface-1);border-radius:7px}
+.team-market-title{display:flex;justify-content:space-between;gap:6px;color:var(--accent);font-size:var(--t-xs);font-weight:800;text-transform:uppercase;letter-spacing:.06em;padding-bottom:7px;border-bottom:1px solid var(--border-1)}
+.team-market-row{padding:7px 0;border-bottom:1px solid var(--border-1);cursor:pointer}
+.team-market-row:last-child{border-bottom:0;padding-bottom:0}
+.team-market-player{font-size:var(--t-xs);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-market-call{display:flex;justify-content:space-between;gap:5px;margin-top:3px;font-size:10px;color:var(--ink-muted)}
 .props-tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:50vh;padding:0 16px 16px}
 .props-tbl-wrap table{min-width:760px}
 .odds-over{color:var(--over);font-weight:600}
@@ -609,6 +625,10 @@ td.push{color:var(--push);font-weight:700}
   .props-control-search{grid-column:1/-1}
   .props-filter{padding-left:10px;padding-right:10px}
   .props-tbl-wrap{padding-left:10px;padding-right:10px}
+  .team-props-board{margin-left:10px;margin-right:10px}
+  .team-props-head{align-items:flex-start;flex-direction:column;gap:7px}
+  .team-props-staff{justify-content:flex-start}
+  .team-market-grid{grid-template-columns:1fr 1fr}
   .analysis-shell{padding:0 10px 14px}
   .analysis-hero{padding-top:14px}
   .analysis-player{font-size:28px}
@@ -1889,14 +1909,42 @@ function getRankedPropsBoard(){
       const ranked=metricBoards.get(prop.METRIC)?.get(`${playerKey}|${parseFloat(prop.DK_LINE)}`)||null;
       const logCol=propToLogCol(prop.METRIC);
       const hitRateData=getHitRate(prop.PLAYER_NAME,logCol,parseFloat(prop.DK_LINE),isP);
-      const hitRate=ranked?.hitRate??hitRateData?.overRate??null;
       const overIP=impliedProb(parseInt(prop.OVER_ODDS));
-      const edge=ranked?.edge??(hitRate!==null&&overIP!==null?hitRate-overIP:null);
-      const score=ranked?.score??(hitRate!==null?hitRate*40+Math.max(edge||0,0)*30:0);
+      const underIP=impliedProb(parseInt(prop.UNDER_ODDS));
+      const overEdge=hitRateData&&overIP!==null?hitRateData.overRate-overIP:null;
+      const underEdge=hitRateData&&underIP!==null?hitRateData.underRate-underIP:null;
+      let side=null,hitRate=null,edge=null,odds=null;
+      if(overEdge!==null||underEdge!==null){
+        const chooseOver=underEdge===null||(overEdge!==null&&(overEdge>underEdge||(overEdge===underEdge&&hitRateData.overRate>=hitRateData.underRate)));
+        side=chooseOver?"OVER":"UNDER";
+        hitRate=chooseOver?hitRateData.overRate:hitRateData.underRate;
+        edge=chooseOver?overEdge:underEdge;
+        odds=chooseOver?parseInt(prop.OVER_ODDS):parseInt(prop.UNDER_ODDS);
+      }
+      const hitComponent=hitRate!==null?hitRate*20:0;
+      const edgeComponent=edge!==null?Math.max(edge,0)*60:0;
+      const formComponent=ranked&&side?(side==="OVER"?ranked.l7Avg>ranked.seasAvg:ranked.l7Avg<ranked.seasAvg)?5:0:0;
+      const matchupComponent=ranked&&side==="OVER"?(ranked.matchupScore||0)*3:0;
+      const score=hitComponent+edgeComponent+formComponent+matchupComponent;
       const team=String(player.team_abbr||"").toUpperCase();
-      return {prop,index,isP,player,team,teamName:teamDisplayName(team),opp:String(player.opp_abbr_tonight||"").toUpperCase(),hitRate,edge,score};
+      return {prop,index,isP,player,team,teamName:teamDisplayName(team),opp:String(player.opp_abbr_tonight||"").toUpperCase(),side,odds,hitRate,edge,score,components:{hit:hitComponent,edge:edgeComponent,form:formComponent,matchup:matchupComponent}};
     });
   });
+}
+
+function renderPropsTeamBoard(team,rows){
+  if(!team||team==="ALL")return"";
+  const teamRows=rows.filter(row=>row.team===team&&row.side);
+  const context=teamRows[0]?.player||st.tonight.find(row=>String(row.team_abbr||"").toUpperCase()===team)||{};
+  const opp=String(context.opp_abbr_tonight||teamRows[0]?.opp||"").toUpperCase();
+  const opponent=getTeamRanking(opp);
+  const pitcher=context.opp_pitcher_name||context.opp_starter||"TBD";
+  const markets=[{key:"H",label:"Hits"},{key:"HR",label:"Home Runs"},{key:"SB",label:"Stolen Bases"},{key:"TB",label:"Total Bases"},{key:"BB",label:"Walks"}];
+  const cards=markets.map(market=>{
+    const picks=teamRows.filter(row=>row.prop.METRIC===market.key).sort((a,b)=>b.score-a.score).slice(0,3);
+    return `<div class="team-market-card"><div class="team-market-title"><span>${market.label}</span><span>${picks.length}</span></div>${picks.length?picks.map(row=>`<div class="team-market-row" onclick="streakToDash('${esc(row.prop.PLAYER_NAME)}','${propToLogCol(row.prop.METRIC)}','${row.prop.DK_LINE}')"><div class="team-market-player">${esc(row.prop.PLAYER_NAME)}</div><div class="team-market-call"><span class="props-side ${row.side.toLowerCase()}">${row.side} ${esc(row.prop.DK_LINE)}</span><span>${(row.hitRate*100).toFixed(0)}% · ${row.score.toFixed(1)}</span></div></div>`).join(""):`<div style="padding-top:8px;color:var(--ink-muted);font-size:var(--t-xs)">No market</div>`}</div>`;
+  }).join("");
+  return `<section class="team-props-board"><div class="team-props-head"><div><div class="analysis-eyebrow">Team matchup board</div><div class="team-props-name">${esc(teamDisplayName(team))}</div><div class="team-props-context">${esc(team)} vs ${esc(opp||"TBD")} · opposing starter ${esc(pitcher)}</div></div>${opponent?`<div class="team-props-staff"><span>${teamRankValue(opponent,"PIT_ERA","PIT_ERA_BEST_RANK",{digits:2,direction:"best"})} ERA</span><span>${teamRankValue(opponent,"PIT_WHIP","PIT_WHIP_BEST_RANK",{digits:2,direction:"best"})} WHIP</span><span>${teamRankValue(opponent,"PIT_HR9","PIT_HR9_MOST_RANK",{digits:2,suffix:" HR/9",direction:"most"})}</span></div>`:""}</div><div class="team-market-grid">${cards}</div></section>`;
 }
 
 function getStatParlayCombos(board,legs){
@@ -2618,7 +2666,8 @@ function render(){
     const query=normalizePlayerName(st.propsSearch);
     const minHit=parseFloat(st.propsMinHit)/100;
     const minEdge=parseFloat(st.propsMinEdge)/100;
-    let filtered=getRankedPropsBoard().filter(row=>{
+    const rankedProps=getRankedPropsBoard();
+    let filtered=rankedProps.filter(row=>{
       const p=row.prop;
       if(st.propsMetric!=="ALL"&&p.METRIC!==st.propsMetric)return false;
       if(st.propsTeam!=="ALL"&&row.team!==st.propsTeam)return false;
@@ -2631,6 +2680,7 @@ function render(){
     filtered.sort((a,b)=>st.propsSort==="PLAYER"?(a.prop.PLAYER_NAME||"").localeCompare(b.prop.PLAYER_NAME||""):sortValue(b,st.propsSort)-sortValue(a,st.propsSort)||(a.prop.PLAYER_NAME||"").localeCompare(b.prop.PLAYER_NAME||""));
     const sorted=filtered.slice(0,200);
     const playerCount=new Set(filtered.map(row=>normalizePlayerName(row.prop.PLAYER_NAME))).size;
+    const teamBoardHTML=renderPropsTeamBoard(st.propsTeam,rankedProps);
     picksHTML=`<div class="props-toolbar">
       <div class="props-control props-control-search"><label for="propsSearchInput">Player or team</label><input type="text" id="propsSearchInput" placeholder="Search Harper, TOR, Blue Jays..." value="${esc(st.propsSearch)}"/></div>
       <div class="props-control"><label for="propsTeamSelect">Team</label><select id="propsTeamSelect"><option value="ALL">All teams</option>${allTeams.map(team=>`<option value="${esc(team)}" ${st.propsTeam===team?"selected":""}>${esc(teamDisplayName(team))} (${esc(team)})</option>`).join("")}</select></div>
@@ -2638,15 +2688,17 @@ function render(){
       <div class="props-control"><label for="propsMinHitSelect">Minimum Hit%</label><select id="propsMinHitSelect">${[[0,"Any"],[50,"50%+"],[60,"60%+"],[70,"70%+"]].map(([v,l])=>`<option value="${v}" ${String(st.propsMinHit)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
       <div class="props-control"><label for="propsMinEdgeSelect">Minimum Edge%</label><select id="propsMinEdgeSelect">${[[-100,"Any"],[0,"Positive"],[5,"+5%"],[10,"+10%"],[15,"+15%"]].map(([v,l])=>`<option value="${v}" ${String(st.propsMinEdge)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
     </div>
+    ${teamBoardHTML}
     <div class="props-filter"><div class="pf-btn ${st.propsMetric==="ALL"?"active":""}" onclick="setPropsMetric('ALL')">All</div>${allM.map(m=>`<div class="pf-btn ${st.propsMetric===m?"active":""}" onclick="setPropsMetric('${m}')">${m}</div>`).join("")}</div>
     <div style="padding:0 16px;color:var(--ink-muted);font-size:var(--t-xs);margin-bottom:4px">${filtered.length} props across ${playerCount} players${filtered.length>200?" · showing top 200":""} · ranked by ${st.propsSort==="SCORE"?"model score":st.propsSort==="HIT"?"Hit%":st.propsSort==="EDGE"?"Edge%":"player"}</div>
-    <div class="props-tbl-wrap"><table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Prop</th><th>Line</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th><th>Score</th></tr></thead><tbody>${sorted.map((row,i)=>{
+    <div class="props-tbl-wrap"><table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Prop</th><th>Best Side</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th><th>Score</th></tr></thead><tbody>${sorted.map((row,i)=>{
       const p=row.prop;
       const flags=getSampleFlags(p.PLAYER_NAME,row.isP);
       const locked=getLockInfo(p.PLAYER_NAME,row.isP).started;
       const hrPct=row.hitRate!==null?`${(row.hitRate*100).toFixed(0)}%`:"—";
       const edgeStr=row.edge!==null?`<span class="ev-badge ${row.edge>0.08?"ev-pos":row.edge>0?"ev-neutral":"ev-neg"}">${row.edge>0?"+":""}${(row.edge*100).toFixed(0)}%</span>`:"—";
-      return`<tr class="${flags.returning?"props-returning":""}${locked?" props-locked":""}" style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="color:var(--ink-muted);font-weight:700">${i+1}</td><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}${flags.returning?` <span class="risk-badge risk-returning">⚠️</span>`:flags.limited?` <span class="risk-badge risk-limited">⚠️</span>`:""}${locked?` <span class="locked-badge">🔒</span>`:""}</td><td title="${esc(row.teamName)}"><strong>${esc(row.team||"—")}</strong>${row.opp?` <span style="color:var(--ink-muted)">vs ${esc(row.opp)}</span>`:""}</td><td><span style="color:var(--accent);font-weight:600">${p.METRIC}</span></td><td style="font-weight:700">${p.DK_LINE}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:700">${hrPct}</td><td>${edgeStr}</td><td><span class="props-score">${row.score.toFixed(1)}</span></td></tr>${renderPropBestBookTableRow(p,10)}`}).join("")}</tbody></table></div>`;
+      const breakdown=`Hit ${row.components.hit.toFixed(1)} · Edge ${row.components.edge.toFixed(1)} · Form ${row.components.form.toFixed(0)} · Matchup ${row.components.matchup.toFixed(0)}`;
+      return`<tr class="${flags.returning?"props-returning":""}${locked?" props-locked":""}" style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="color:var(--ink-muted);font-weight:700">${i+1}</td><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}${flags.returning?` <span class="risk-badge risk-returning">⚠️</span>`:flags.limited?` <span class="risk-badge risk-limited">⚠️</span>`:""}${locked?` <span class="locked-badge">🔒</span>`:""}</td><td title="${esc(row.teamName)}"><strong>${esc(row.team||"—")}</strong>${row.opp?` <span style="color:var(--ink-muted)">vs ${esc(row.opp)}</span>`:""}</td><td><span style="color:var(--accent);font-weight:600">${p.METRIC}</span><div style="color:var(--ink-muted);font-size:9px">line ${esc(p.DK_LINE)}</div></td><td>${row.side?`<span class="props-side ${row.side.toLowerCase()}">${row.side} ${fmtOdds(row.odds)}</span>`:"—"}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:700">${hrPct}</td><td>${edgeStr}</td><td title="${esc(breakdown)}"><span class="props-score">${row.score.toFixed(1)}</span><div class="props-score-detail">H ${row.components.hit.toFixed(1)} · E ${row.components.edge.toFixed(1)} · F ${row.components.form.toFixed(0)} · M ${row.components.matchup.toFixed(0)}</div></td></tr>${renderPropBestBookTableRow(p,10)}`}).join("")}</tbody></table></div>`;
   }
 
   // === LOOKUP ===
