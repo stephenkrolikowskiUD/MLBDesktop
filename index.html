@@ -1470,7 +1470,7 @@ function getConvictionLegs(){
   const latestDate=getLatestPickDate();
   const latestRun=getLatestPickRun();
   const aiMap=new Map();
-  st.picks.filter(pk=>normalizeDate(rowField(pk,"DATE"))===latestDate&&toNum(rowField(pk,"RUN_NUMBER"))===latestRun).forEach(pk=>{if(pk.player)aiMap.set(normalizePlayerName(pk.player),pk)});
+  st.picks.filter(pk=>normalizeDate(rowField(pk,"DATE"))===latestDate&&toNum(rowField(pk,"RUN_NUMBER"))===latestRun).forEach(pk=>{if(pk.player){const playerKey=normalizePlayerName(pk.player);aiMap.set(playerKey,pk);aiMap.set(`${playerKey}|${normalizePropMetric(pk.prop_type)}|${normalizeLeanText(pk.lean)}`,pk)}});
   const streakMap=new Map();
   try{
     const streaks=getStreaks();
@@ -1482,7 +1482,10 @@ function getConvictionLegs(){
     const nl=normalizePlayerName(b.name);
     const evScore=Math.min(b.edge*40,10);
     let aiScore=0;
-    const aiPick=aiMap.get(nl);
+    const aiPick=aiMap.get(`${nl}|${normalizePropMetric(b.metric)}|${b.lean}`)||aiMap.get(nl);
+    const selectionMethod=!aiPick?"MARKET_MODEL":String(rowField(aiPick,"SELECTION_METHOD")||rowField(aiPick,"CONSENSUS_TAG")).toUpperCase().includes("VALIDATED")?"VALIDATED_MODEL":"GEMINI";
+    const explicitStatus=String(rowField(aiPick||{},"RECOMMENDATION_STATUS")||"").toUpperCase();
+    const recommendationStatus=explicitStatus||(selectionMethod==="VALIDATED_MODEL"&&b.metric==="H"&&b.lean==="OVER"?"PLAYABLE":selectionMethod==="GEMINI"&&b.lean==="UNDER"&&["P_BB","P_ER"].includes(b.metric)?"PLAYABLE":"RESEARCH");
     let aiConflictLevel="",aiDisagreementText="";
     if(aiPick){
         const conf=normalizeConfidence(aiPick.confidence);
@@ -1495,9 +1498,11 @@ function getConvictionLegs(){
         if(metricsRelated && aiLean && aiLean!==b.lean){
           aiConflictLevel=aiMetric===betMetric?"strong":"soft";
           aiDisagreementText=aiMetric===betMetric?`AI says ${aiLean} ${aiMetric}`:`AI leans ${aiLean} ${aiMetric}`;
-          aiScore-=conf==="SMASH"?2.5:conf==="STRONG"?1.5:0.75;
+          aiScore-=selectionMethod==="VALIDATED_MODEL"?2:0.75;
         }else if(aiAgreesWithBet(aiPick,b)){
-          aiScore=conf==="SMASH"?6:4;
+          // Gemini conviction is context, not the ranking engine. The
+          // deterministic validated model earns materially more weight.
+          aiScore=selectionMethod==="VALIDATED_MODEL"?4:0.5;
         }
       }
     let streakScore=0;
@@ -1512,10 +1517,16 @@ function getConvictionLegs(){
     const reliabilityScore=Math.min(b.total/10,2);
     const hrScore=b.hitRate>=0.8?2:b.hitRate>=0.65?1:0;
 
-    const conviction=evScore+aiScore+streakScore+reliabilityScore+hrScore;
+    let calibrationScore=0;
+    if(selectionMethod==="VALIDATED_MODEL"&&b.metric==="H"&&b.lean==="OVER")calibrationScore=4;
+    else if(selectionMethod==="GEMINI"&&b.lean==="UNDER"&&b.metric==="P_BB")calibrationScore=4;
+    else if(selectionMethod==="GEMINI"&&b.lean==="UNDER"&&b.metric==="P_ER")calibrationScore=2;
+    else if(selectionMethod==="GEMINI"&&b.lean==="OVER"&&["H","R","P_SO"].includes(b.metric))calibrationScore=-2;
+
+    const conviction=evScore+aiScore+calibrationScore+streakScore+reliabilityScore+hrScore;
 
     let signals=[];
-    if(aiAgreesWithBet(aiPick,b)){const c=normalizeConfidence(aiPick.confidence);signals.push(c==="SMASH"?"SMASH":c==="STRONG"?"STRONG":"AI")}
+    if(aiAgreesWithBet(aiPick,b)){const c=normalizeConfidence(aiPick.confidence);signals.push(selectionMethod==="VALIDATED_MODEL"?"VALIDATED":c==="SMASH"?"SMASH":c==="STRONG"?"STRONG":"AI")}
     if(aiConflictLevel==="strong")signals.push(`${icon('warn')}AI conflict`);
     else if(aiConflictLevel==="soft")signals.push(`${icon('warn')}AI cross-check`);
     if(streak)signals.push(`🔥 ${streak.streak}G streak`);
@@ -1527,7 +1538,7 @@ function getConvictionLegs(){
     const gameTotal=toNum(scheduleRow.over_under||scheduleRow.game_total);
     const gameKey=[b.team||"",b.opp||""].sort().join("|");
     const lineupRisk=String(aiPick?.injury_context||"").toUpperCase().startsWith("LINEUP RISK");
-    legs.push({...b,conviction,evScore,aiScore,streakScore,reliabilityScore,hrScore,signals,hasAI:aiAgreesWithBet(aiPick,b),aiConfidence:aiPick?normalizeConfidence(aiPick.confidence):"",hasAIConflict:!!aiConflictLevel,aiConflictLevel,aiDisagreementText,lineupRisk,hasStreak:!!streak,streakLength:streak?.streak||0,teamSlot:b.teamSlot||`${b.team}${b.isP?":P":":B"}`,gameTotal,gameKey});
+    legs.push({...b,conviction,evScore,aiScore,calibrationScore,selectionMethod,recommendationStatus,streakScore,reliabilityScore,hrScore,signals,hasAI:aiAgreesWithBet(aiPick,b),aiConfidence:aiPick?(selectionMethod==="VALIDATED_MODEL"?"VALIDATED":normalizeConfidence(aiPick.confidence)):"",hasAIConflict:!!aiConflictLevel,aiConflictLevel,aiDisagreementText,lineupRisk,hasStreak:!!streak,streakLength:streak?.streak||0,teamSlot:b.teamSlot||`${b.team}${b.isP?":P":":B"}`,gameTotal,gameKey});
   }
   legs.sort((a,b)=>b.conviction-a.conviction);
   return legs;
@@ -1545,6 +1556,7 @@ function getShortlistMatchupEvidence(leg){
 function getTonightShortlist(){
   return getMemo("tonightShortlist",()=>{
     const qualified=getConvictionLegs().filter(leg=>
+      leg.recommendationStatus==="PLAYABLE"&&
       leg.edge>=0.05&&
       leg.total>=5&&
       !!leg.team&&
@@ -2343,7 +2355,7 @@ function detectDrifts(rows,threshold=0.10){const all=(rows||[]).filter(r=>String
 function renderDriftAlerts(rows){const drifts=detectDrifts(rows);if(!drifts.length)return '';const shown=drifts.slice(0,5);return `<div style="padding:0 16px 8px"><div style="color:var(--warn);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Drift Alerts</div>${shown.map(d=>`<div class="card" style="border-color:var(--warn-line);margin-bottom:6px"><div style="font-size:var(--t-sm);color:var(--warn);font-weight:800">⚠️ DRIFT — ${esc(String(d.dimension_value||d.dimension_type))}</div><div style="font-size:var(--t-xs);color:var(--ink-1);margin-top:4px">last 30d ${statPct(d.hit_rate_last_30d)} vs all-time ${statPct(d.hit_rate_all_time)} (${d.delta>0?'+':''}${Math.round(d.delta*100)}pp on n=${Math.round(d.n)})</div></div>`).join('')}${drifts.length>5?`<div style="color:var(--push);font-size:var(--t-xs);padding:2px 4px">... and ${drifts.length-5} more</div>`:''}</div>`}
 function renderOverallCard(rows,w){const r=getMetricsForSlice(rows,'overall','',w);if(!r)return `<div class="empty">No overall stats for ${statsWindowLabel(w)}.</div>`;const low=!statBool(r,'MIN_SAMPLE_FLAG');return `<div class="card" style="margin:0 16px 10px;border-color:color-mix(in srgb, var(--accent) 27%, transparent)"><div class="card-title">OVERALL — ${statsWindowLabel(w)} ${low?'<span style="font-size:var(--t-xs);color:var(--warn)">(low sample)</span>':''}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end"><div><div style="font-size:34px;font-weight:900;color:var(--accent)">${statPct(statNum(r,'HIT_RATE'))}</div><div style="font-size:var(--t-xs);color:var(--push)">Push-adjusted hit rate</div><div style="font-size:var(--t-sm);color:var(--ink-1);margin-top:6px">${Math.round(statNum(r,'N_PICKS_DECISIVE'))} decisive / ${Math.round(statNum(r,'N_PICKS'))} picks</div></div><div style="text-align:right"><div style="font-size:var(--t-lg);font-weight:800;color:${statNum(r,'ROI_PER_PICK')>=0?'var(--over)':'var(--under)'}">ROI/pick ${statSigned(statNum(r,'ROI_PER_PICK'))}</div><div style="font-size:var(--t-xs);color:var(--push)">Flat -115 model</div></div></div></div>`}
 function hitBar(rate){const r=Math.max(0,Math.min(1,Number(rate)||0));const w=Math.round(r*100);const good=r>=STATS_BREAK_EVEN;return `<div style="height:7px;background:#26313a;border-radius:999px;overflow:hidden;margin-top:5px"><div style="height:100%;width:${w}%;background:${good?'var(--over)':'var(--under)'}"></div></div><div style="font-size:var(--t-xs);color:var(--push);margin-top:2px">break-even 52.4%</div>`}
-function renderTierBreakdown(rows,w){const tiers=['SMASH','STRONG','LEAN'];const found=tiers.map(t=>getMetricsForSlice(rows,'confidence_norm',t,w)).filter(Boolean);if(!found.length)return '';const rates=found.map(r=>statNum(r,'HIT_RATE'));const collapse=found.length>=2&&rates.some((a,i)=>rates.some((b,j)=>j>i&&Math.abs(a-b)<=0.01));return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Confidence Tiers ${collapse?'<span style="color:var(--warn);font-size:var(--t-xs)">⚠️ tier collapse</span>':''}</div>${tiers.map(t=>{const r=getMetricsForSlice(rows,'confidence_norm',t,w);if(!r)return '';const rate=statNum(r,'HIT_RATE');const color=t==='SMASH'?'var(--smash)':t==='STRONG'?'var(--warn)':'var(--push)';return `<div class="card" style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:10px"><div><span style="background:${color}22;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 7px;font-size:var(--t-xs);font-weight:800">${t}</span><div style="font-size:var(--t-xs);color:var(--push);margin-top:5px">n=${Math.round(statNum(r,'N_PICKS_DECISIVE'))} · ROI/p ${statSigned(statNum(r,'ROI_PER_PICK'))}</div></div><div style="font-size:var(--t-lg);font-weight:900;color:${color}">${statPct(rate)}</div></div>${hitBar(rate)}</div>`}).join('')}</div>`}
+function renderTierBreakdown(rows,w){const tiers=['VALIDATED','SMASH','STRONG','LEAN'];const found=tiers.map(t=>getMetricsForSlice(rows,'confidence_norm',t,w)).filter(Boolean);if(!found.length)return '';const aiRows=found.filter(r=>statField(r,'DIMENSION_VALUE')!=='VALIDATED');const rates=aiRows.map(r=>statNum(r,'HIT_RATE'));const collapse=aiRows.length>=2&&rates.some((a,i)=>rates.some((b,j)=>j>i&&Math.abs(a-b)<=0.01));return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Selection Calibration ${collapse?'<span style="color:var(--warn);font-size:var(--t-xs)">⚠️ AI tier collapse</span>':''}</div><div style="font-size:var(--t-xs);color:var(--push);margin:-1px 0 7px">VALIDATED is the deterministic market model. SMASH / STRONG / LEAN are Gemini confidence labels.</div>${tiers.map(t=>{const r=getMetricsForSlice(rows,'confidence_norm',t,w);if(!r)return '';const rate=statNum(r,'HIT_RATE');const color=t==='VALIDATED'?'var(--over)':t==='SMASH'?'var(--smash)':t==='STRONG'?'var(--warn)':'var(--push)';return `<div class="card" style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;gap:10px"><div><span style="background:${color}22;color:${color};border:1px solid ${color}55;border-radius:999px;padding:2px 7px;font-size:var(--t-xs);font-weight:800">${t}</span><div style="font-size:var(--t-xs);color:var(--push);margin-top:5px">n=${Math.round(statNum(r,'N_PICKS_DECISIVE'))} · ROI/p ${statSigned(statNum(r,'ROI_PER_PICK'))}</div></div><div style="font-size:var(--t-lg);font-weight:900;color:${color}">${statPct(rate)}</div></div>${hitBar(rate)}</div>`}).join('')}</div>`}
 function renderLeanBreakdown(rows,w){const over=getMetricsForSlice(rows,'lean_norm','OVER',w),under=getMetricsForSlice(rows,'lean_norm','UNDER',w);if(!over&&!under)return '';let call='';if(over&&under&&statBool(over,'MIN_SAMPLE_FLAG')&&statBool(under,'MIN_SAMPLE_FLAG')){const diff=statNum(under,'HIT_RATE')-statNum(over,'HIT_RATE');if(Math.abs(diff)>=0.05)call=`<div class="card" style="border-color:#60a5fa55;margin-bottom:6px;color:#bfdbfe;font-size:var(--t-xs)">💡 ${diff>0?'UNDERs':'OVERs'} outperforming by ${Math.abs(diff*100).toFixed(1)}pp — consider review.</div>`}return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">Lean Breakdown</div>${call}${['OVER','UNDER'].map(v=>{const r=v==='OVER'?over:under;if(!r)return '';return `<div class="card" style="margin-bottom:6px"><div style="display:flex;justify-content:space-between"><div style="font-weight:800;color:var(--ink-1)">${v}<div style="font-size:var(--t-xs);color:var(--push)">n=${Math.round(statNum(r,'N_PICKS_DECISIVE'))} · ROI/p ${statSigned(statNum(r,'ROI_PER_PICK'))}</div></div><div style="font-size:var(--t-lg);font-weight:900;color:${statNum(r,'HIT_RATE')>=STATS_BREAK_EVEN?'var(--over)':'var(--under)'}">${statPct(statNum(r,'HIT_RATE'))}</div></div></div>`}).join('')}</div>`}
 function renderCLVSummary(rows,w){const pos=getMetricsForSlice(rows,'clv_bucket','positive',w),neg=getMetricsForSlice(rows,'clv_bucket','negative',w);if(!pos&&!neg)return '';const cell=(label,r)=>`<div class="card"><div style="font-size:var(--t-xs);color:var(--push);text-transform:uppercase">${label}</div><div style="font-size:var(--t-lg);font-weight:900;color:${label.includes('Positive')?'var(--over)':'var(--under)'}">${r?statPct(statNum(r,'HIT_RATE')):'—'}</div><div style="font-size:var(--t-xs);color:var(--ink-1)">n=${r?Math.round(statNum(r,'N_PICKS_DECISIVE')):0}</div></div>`;return `<div style="padding:0 16px 10px"><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800;margin-bottom:6px">CLV Summary</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${cell('Positive CLV',pos)}${cell('Negative CLV',neg)}</div></div>`}
 function renderPropTypeList(rows,w,ranking='best',limit=5){const arr=statsRowsForWindow(rows,w).filter(r=>statField(r,'DIMENSION_TYPE')==='prop_type_norm'&&statBool(r,'MIN_SAMPLE_FLAG')).sort((a,b)=>ranking==='best'?statNum(b,'WILSON_LOWER_95')-statNum(a,'WILSON_LOWER_95'):statNum(a,'WILSON_LOWER_95')-statNum(b,'WILSON_LOWER_95')).slice(0,limit);if(!arr.length)return '';const good=ranking==='best';return `<div style="padding:0 16px 10px"><div style="color:${good?'var(--over)':'var(--under)'};font-size:var(--t-sm);font-weight:800;margin-bottom:6px">${good?'Top':'Worst'} Prop Types</div><div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:var(--t-xs)"><thead><tr style="color:var(--push)"><th style="text-align:left;padding:8px">PROP</th><th>HIT</th><th>n</th><th>ROI/p</th><th>WLB</th></tr></thead><tbody>${arr.map(r=>`<tr style="border-top:1px solid #26313a"><td style="padding:8px;font-weight:800;color:var(--ink-1)">${esc(statField(r,'DIMENSION_VALUE'))}</td><td style="text-align:center;color:${statNum(r,'HIT_RATE')>=STATS_BREAK_EVEN?'var(--over)':'var(--under)'};font-weight:800">${statPct0(statNum(r,'HIT_RATE'))}</td><td style="text-align:center">${Math.round(statNum(r,'N_PICKS_DECISIVE'))}</td><td style="text-align:center">${statSigned(statNum(r,'ROI_PER_PICK'))}</td><td style="text-align:center">${statNum(r,'WILSON_LOWER_95').toFixed(3)}</td></tr>`).join('')}</tbody></table></div></div>`}
@@ -2644,15 +2656,18 @@ function render(){
     // Only show most recent date's picks
     const latestDate=getLatestPickDate();
     const latestRun=getLatestPickRun();
-    const todayPicks=latestDate?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun):st.picks;
+    const allTodayPicks=latestDate?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun):st.picks;
+    const hasCalibrationStatus=allTodayPicks.some(p=>String(rowField(p,"RECOMMENDATION_STATUS")||"").trim());
+    const todayPicks=hasCalibrationStatus?allTodayPicks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).toUpperCase()==="PLAYABLE"):allTodayPicks;
+    const researchCount=hasCalibrationStatus?allTodayPicks.length-todayPicks.length:0;
     const pickGuard=st.pickGuard;
-    if(!todayPicks.length){picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">No AI picks today. Run the engine to generate.</div>`}
+    if(!todayPicks.length){picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">${hasCalibrationStatus?`No calibrated play qualifies today. ${researchCount} research pick${researchCount===1?"":"s"} remain tracked for model learning.`:"No AI picks today. Run the engine to generate."}</div>`}
     else{
       const hits=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="YES"||h==="TRUE"}).length;
       const miss=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="NO"||h==="FALSE"}).length;
-      const smash=todayPicks.filter(p=>normalizeConfidence(p.confidence)==="SMASH").length;
+      const validated=todayPicks.filter(p=>String(rowField(p,"SELECTION_METHOD")||rowField(p,"CONSENSUS_TAG")).toUpperCase().includes("VALIDATED")).length;
       const tracked=hits+miss;
-      picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PICKS</div></div><div class="ps-card"><div class="ps-val">${smash}</div><div class="ps-lbl">SMASH</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
+      picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PLAYABLE</div></div><div class="ps-card"><div class="ps-val">${validated}</div><div class="ps-lbl">VALIDATED</div></div><div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">${researchCount}</div><div class="ps-lbl">RESEARCH ONLY</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
       const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
       const pickModels=rankedPicks.map(getPickDisplayModel),featured=pickModels[0],remaining=pickModels.slice(1);
       picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L10</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;

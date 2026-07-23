@@ -65,6 +65,8 @@ PICK_PERF_TIME_WINDOWS = {
 PICK_PERF_SNAPSHOT_WINDOWS = ('all_time', 'last_30d')
 PICK_PERF_DIMENSIONS = (
     'confidence_norm',
+    'selection_method_norm',
+    'recommendation_status_norm',
     'prop_type_norm',
     'lean_norm',
     'consensus_bucket',
@@ -397,7 +399,17 @@ def pick_perf_prepare_df(df_all):
     df['player_norm'] = df.get('player', pd.Series('', index=idx)).map(normalize_person_name)
     df['prop_type_norm'] = df.get('prop_type', pd.Series('', index=idx)).map(normalize_prop_metric)
     df['lean_norm'] = df.get('lean', pd.Series('', index=idx)).fillna('').astype(str).str.upper().replace({'FADE': 'UNDER'})
+    explicit_method = df.get('SELECTION_METHOD', pd.Series('', index=idx)).fillna('').astype(str).str.strip().str.upper()
+    consensus_tag = df.get('CONSENSUS_TAG', pd.Series('', index=idx)).fillna('').astype(str).str.strip().str.upper()
+    df['selection_method_norm'] = np.where(
+        explicit_method.ne(''),
+        explicit_method,
+        np.where(consensus_tag.eq('VALIDATED FALLBACK'), 'VALIDATED_MODEL', 'GEMINI'),
+    )
+    raw_status = df.get('RECOMMENDATION_STATUS', pd.Series('', index=idx)).fillna('').astype(str).str.strip().str.upper()
+    df['recommendation_status_norm'] = np.where(raw_status.ne(''), raw_status, 'LEGACY_RESEARCH')
     df['confidence_norm'] = df.get('confidence', pd.Series('', index=idx)).map(normalize_confidence)
+    df.loc[df['selection_method_norm'].eq('VALIDATED_MODEL'), 'confidence_norm'] = 'VALIDATED'
     df['clv_open_f'] = pd.to_numeric(df.get('CLV_OPEN_LINE', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_latest_f'] = pd.to_numeric(df.get('CLV_LATEST_LINE', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_edge'] = np.where(df['lean_norm'] == 'UNDER', df['clv_open_f'] - df['clv_latest_f'], df['clv_latest_f'] - df['clv_open_f'])
@@ -537,7 +549,7 @@ def print_pick_performance_summary(metrics_df, sport):
         return f"{r['HIT_RATE'] * 100:.1f}% (n={int(r['N_PICKS_DECISIVE'])})" if pd.notna(r['HIT_RATE']) else f"n/a (n={int(r['N_PICKS_DECISIVE'])})"
     print(f"   Overall:       {fmt_row(overall_all)}  |  last 30d: {fmt_row(overall_30)}")
     conf = metrics_df[(metrics_df['DIMENSION_TYPE'] == 'confidence_norm') & (metrics_df['TIME_WINDOW'] == 'all_time')]
-    for tier in ['SMASH', 'STRONG', 'LEAN']:
+    for tier in ['VALIDATED', 'SMASH', 'STRONG', 'LEAN']:
         row = conf[conf['DIMENSION_VALUE'] == tier]
         if not row.empty:
             print(f"   {tier:<14} {fmt_row(row)}")
@@ -1019,8 +1031,11 @@ if 'HIT' in df_all.columns:
 
     # By confidence tier
     print("\n   By Confidence:")
-    for tier in ['SMASH', 'STRONG', 'LEAN']:
-        tier_df = df_all[df_all['confidence'].str.upper() == tier]
+    raw_conf = df_all.get('confidence', pd.Series('', index=df_all.index)).fillna('').astype(str).str.upper()
+    validated_mask = df_all.get('CONSENSUS_TAG', pd.Series('', index=df_all.index)).fillna('').astype(str).str.upper().eq('VALIDATED FALLBACK')
+    for tier in ['VALIDATED', 'SMASH', 'STRONG', 'LEAN']:
+        tier_mask = validated_mask if tier == 'VALIDATED' else (raw_conf.eq(tier) & ~validated_mask)
+        tier_df = df_all[tier_mask]
         tier_yes = len(tier_df[tier_df['HIT'] == 'YES'])
         tier_no = len(tier_df[tier_df['HIT'] == 'NO'])
         tier_dec = tier_yes + tier_no
