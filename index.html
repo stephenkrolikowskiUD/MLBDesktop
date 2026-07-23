@@ -478,6 +478,27 @@ td.push{color:var(--push);font-weight:700}
 .shortlist-evidence strong{color:var(--ink-0)}
 .shortlist-tags{grid-column:1/-1;display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:2px}
 .shortlist-tag{padding:2px 6px;border:1px solid var(--border-1);background:var(--surface-2);color:var(--accent-soft);font-size:var(--t-xs);font-weight:700}
+.shortlist-action{align-self:center;border:1px solid var(--accent);background:transparent;color:var(--accent);padding:6px 9px;font-size:var(--t-xs);font-weight:800;cursor:pointer}
+.shortlist-action.added{background:var(--accent);color:var(--surface-0)}
+.shortlist-tray{margin-bottom:12px;border:1px solid var(--border-1);background:var(--surface-1)}
+.shortlist-tray-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border-bottom:1px solid var(--border-1)}
+.shortlist-tray-title{font-size:var(--t-sm);font-weight:800;color:var(--ink-0)}
+.shortlist-tray-title span{color:var(--accent);margin-left:5px}
+.shortlist-tray-actions{display:flex;gap:6px}
+.shortlist-tray-btn{border:1px solid var(--border-1);background:var(--surface-2);color:var(--ink-1);padding:5px 8px;font-size:var(--t-xs);font-weight:700;cursor:pointer}
+.shortlist-tray-btn.primary{border-color:var(--accent);color:var(--accent)}
+.shortlist-tray-body{padding:10px 12px}
+.shortlist-tray-empty{color:var(--ink-muted);font-size:var(--t-xs);line-height:1.4}
+.shortlist-tray-legs{display:flex;gap:6px;flex-wrap:wrap}
+.shortlist-tray-leg{display:inline-flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid var(--border-1);background:var(--surface-2);font-size:var(--t-xs)}
+.shortlist-tray-leg strong{color:var(--ink-0)}
+.shortlist-tray-remove{border:0;background:none;color:var(--ink-muted);font-size:14px;line-height:1;cursor:pointer;padding:0}
+.shortlist-tray-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:10px;background:var(--border-1)}
+.shortlist-tray-metric{padding:8px;background:var(--surface-2)}
+.shortlist-tray-metric strong{display:block;color:var(--accent);font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-md)}
+.shortlist-tray-metric span{display:block;color:var(--ink-muted);font-size:var(--t-xs)}
+.shortlist-tray-warning{margin-top:8px;padding:7px 8px;border-left:2px solid var(--warn);background:var(--warn-soft);color:var(--warn);font-size:var(--t-xs);line-height:1.35}
+.shortlist-tray-notice{margin-top:7px;color:var(--warn);font-size:var(--t-xs);font-weight:700}
 .convergence-shell{padding:12px 16px 4px}
 .convergence-toggle{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border-1);border-radius:12px;background:#143222}
 .convergence-toggle::-webkit-details-marker{display:none}
@@ -664,6 +685,8 @@ td.push{color:var(--push);font-weight:700}
   .shortlist-grid{grid-template-columns:1fr}
   .shortlist-card.top{grid-column:auto}
   .shortlist-evidence{grid-template-columns:1fr}
+  .shortlist-tray-head{align-items:flex-start;flex-direction:column}
+  .shortlist-tray-metrics{grid-template-columns:repeat(2,1fr)}
   .props-toolbar{grid-template-columns:1fr 1fr;padding:10px 10px 2px}
   .props-control-search{grid-column:1/-1}
   .props-filter{padding-left:10px;padding-right:10px}
@@ -836,12 +859,21 @@ const BEST_BET_MIN_ODDS = -250;
 const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","UD_FP","H+R+RBI"];
 const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
+const SHORTLIST_TRAY_KEY="mlb-shortlist-tray";
+
+function loadShortlistTray(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(SHORTLIST_TRAY_KEY)||"[]");
+    return Array.isArray(parsed)?parsed:[];
+  }catch(e){return[]}
+}
 
 let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
   picks:[],props:[],allBooksProps:[],teamRankings:[],
   pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
+  shortlistTray:loadShortlistTray(),shortlistTrayNotice:"",
   mode:"batter",
   player:"",metric:"H",line:"",activeTab:"picks",oppFilter:"",
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
@@ -1533,20 +1565,76 @@ function getTonightShortlist(){
   });
 }
 
+function shortlistLegKey(item){return`${normalizePlayerName(item.name)}|${normalizePropMetric(item.metric)}|${item.dkLine}|${item.lean}`}
+function currentShortlistSlateKey(){return getLatestPickDate()||"current"}
+function persistShortlistTray(){localStorage.setItem(SHORTLIST_TRAY_KEY,JSON.stringify(st.shortlistTray||[]))}
+function getActiveShortlistTray(){
+  const slateKey=currentShortlistSlateKey();
+  const active=(st.shortlistTray||[]).filter(item=>item.slateKey===slateKey);
+  if(active.length!==(st.shortlistTray||[]).length){st.shortlistTray=active;persistShortlistTray()}
+  return active;
+}
+function isInShortlistTray(row){const key=shortlistLegKey(row);return getActiveShortlistTray().some(item=>shortlistLegKey(item)===key)}
+function toggleShortlistTray(name,metric,line,lean){
+  const row=getTonightShortlist().find(item=>normalizePlayerName(item.name)===normalizePlayerName(name)&&normalizePropMetric(item.metric)===normalizePropMetric(metric)&&String(item.dkLine)===String(line)&&item.lean===lean);
+  if(!row)return;
+  const items=getActiveShortlistTray();
+  const key=shortlistLegKey(row);
+  const existing=items.findIndex(item=>shortlistLegKey(item)===key);
+  if(existing>=0){items.splice(existing,1);st.shortlistTray=items;st.shortlistTrayNotice="";persistShortlistTray();render();return}
+  if(items.some(item=>normalizePlayerName(item.name)===normalizePlayerName(row.name))){st.shortlistTrayNotice=`${row.name} already has a leg in the tray.`;render();return}
+  if(items.length>=8){st.shortlistTrayNotice="The tray is capped at eight legs.";render();return}
+  const bestBook=getBestBookForLean(row.prop,row.lean);
+  items.push({slateKey:currentShortlistSlateKey(),name:row.name,metric:row.metric,dkLine:row.dkLine,lean:row.lean,odds:Number(bestBook?.odds||row.odds),book:bestBook?formatBookName(bestBook.book):"DK",edge:row.edge,hitRate:row.hitRate,team:row.team,opp:row.opp,isP:row.isP});
+  st.shortlistTray=items;st.shortlistTrayNotice="";persistShortlistTray();render();
+}
+function removeShortlistTrayLeg(key){st.shortlistTray=getActiveShortlistTray().filter(item=>shortlistLegKey(item)!==key);st.shortlistTrayNotice="";persistShortlistTray();render()}
+function clearShortlistTray(){st.shortlistTray=[];st.shortlistTrayNotice="";persistShortlistTray();render()}
+function shortlistTrayCopyText(items){
+  const math=calculateParlayMath(items);
+  const combined=math.american>0?`+${math.american}`:`${math.american}`;
+  return`MLB Shortlist Entry — ${items.length} legs\n${items.map((item,index)=>`${index+1}. ${item.name} — ${item.metric} ${item.lean} ${item.dkLine} (${fmtOdds(item.odds)}, ${item.book})`).join("\n")}\nCombined ${combined} | $10 → $${math.return10.toFixed(2)}\nBuilt ${new Date().toLocaleString()}`;
+}
+function copyShortlistTray(){
+  const items=getActiveShortlistTray();if(!items.length)return;
+  const text=shortlistTrayCopyText(items);
+  const done=()=>{window.__shortlistTrayCopied=true;render();setTimeout(()=>{window.__shortlistTrayCopied=false;render()},1200)};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done).catch(()=>entryShowCopyFallback(text));
+  else entryShowCopyFallback(text);
+}
+function renderShortlistTray(){
+  const items=getActiveShortlistTray();
+  if(!items.length)return`<aside class="shortlist-tray"><div class="shortlist-tray-head"><div><div class="shortlist-tray-title">My Shortlist Tray <span>0</span></div><div class="shortlist-tray-empty">Add qualified legs below to assemble your final entry. One leg per player.</div></div></div>${st.shortlistTrayNotice?`<div class="shortlist-tray-body"><div class="shortlist-tray-notice">${esc(st.shortlistTrayNotice)}</div></div>`:""}</aside>`;
+  const math=calculateParlayMath(items);
+  const combined=math.american>0?`+${math.american}`:`${math.american}`;
+  const avgEdge=items.reduce((sum,item)=>sum+item.edge,0)/items.length;
+  const weakest=items.reduce((min,item)=>item.edge<min.edge?item:min,items[0]);
+  const books=[...new Set(items.map(item=>item.book).filter(Boolean))];
+  const gameCounts=new Map();
+  items.forEach(item=>{const key=[item.team,item.opp].sort().join("|");gameCounts.set(key,(gameCounts.get(key)||0)+1)});
+  const correlated=[...gameCounts.values()].some(count=>count>1);
+  const warnings=[];
+  if(correlated)warnings.push("Same-game legs detected; the combined probability is not independent.");
+  if(books.length>1)warnings.push(`Cross-book entry: best prices are split across ${books.join(", ")}.`);
+  if(weakest.edge<0.08)warnings.push(`Weakest leg is ${weakest.name} at +${(weakest.edge*100).toFixed(1)}% edge.`);
+  return`<aside class="shortlist-tray"><div class="shortlist-tray-head"><div class="shortlist-tray-title">My Shortlist Tray <span>${items.length}</span></div><div class="shortlist-tray-actions"><button class="shortlist-tray-btn" onclick="clearShortlistTray()">Clear</button><button class="shortlist-tray-btn primary" onclick="copyShortlistTray()">${window.__shortlistTrayCopied?"Copied":"Copy entry"}</button></div></div><div class="shortlist-tray-body"><div class="shortlist-tray-legs">${items.map(item=>`<div class="shortlist-tray-leg"><strong>${esc(item.name)}</strong><span>${esc(item.metric)} ${item.lean} ${esc(item.dkLine)} · ${fmtOdds(item.odds)}</span><button class="shortlist-tray-remove" title="Remove ${esc(item.name)}" onclick="removeShortlistTrayLeg('${esc(shortlistLegKey(item))}')">×</button></div>`).join("")}</div><div class="shortlist-tray-metrics"><div class="shortlist-tray-metric"><strong>${combined}</strong><span>Combined odds</span></div><div class="shortlist-tray-metric"><strong>$${math.return10.toFixed(2)}</strong><span>$10 return</span></div><div class="shortlist-tray-metric"><strong>+${(avgEdge*100).toFixed(1)}%</strong><span>Average edge</span></div><div class="shortlist-tray-metric"><strong>+${(weakest.edge*100).toFixed(1)}%</strong><span>Weakest leg</span></div></div>${warnings.map(warning=>`<div class="shortlist-tray-warning">${icon("warn")}${esc(warning)}</div>`).join("")}${st.shortlistTrayNotice?`<div class="shortlist-tray-notice">${esc(st.shortlistTrayNotice)}</div>`:""}</div></aside>`;
+}
+
 function renderTonightShortlist(){
   const rows=getTonightShortlist();
-  if(!rows.length)return`<section class="shortlist-shell"><div class="shortlist-head"><div><div class="analysis-eyebrow">Tonight's decision board</div><div class="shortlist-title">Tonight's Shortlist</div><div class="shortlist-sub">Only unlocked, adequately sampled props with actionable prices, +5% edge, and no active model or lineup warning qualify.</div></div><div class="shortlist-rule">Strict mode · passing allowed</div></div><div class="props-pass" style="margin:0"><div class="props-pass-title">No play clears every gate tonight</div><div class="props-pass-copy">The data loaded correctly; the board is declining to promote a weak or conflicted option. Best Bets and Prop Explorer still contain the wider research set.</div></div></section>`;
+  if(!rows.length)return`<section class="shortlist-shell"><div class="shortlist-head"><div><div class="analysis-eyebrow">Tonight's decision board</div><div class="shortlist-title">Tonight's Shortlist</div><div class="shortlist-sub">Only unlocked, adequately sampled props with actionable prices, +5% edge, and no active model or lineup warning qualify.</div></div><div class="shortlist-rule">Strict mode · passing allowed</div></div>${renderShortlistTray()}<div class="props-pass" style="margin:0"><div class="props-pass-title">No play clears every gate tonight</div><div class="props-pass-copy">The data loaded correctly; the board is declining to promote a weak or conflicted option. Best Bets and Prop Explorer still contain the wider research set.</div></div></section>`;
   const avgEdge=rows.reduce((sum,row)=>sum+row.edge,0)/rows.length;
   const aiBacked=rows.filter(row=>row.hasAI).length;
   const markets=new Set(rows.map(row=>row.metric)).size;
-  return`<section class="shortlist-shell"><div class="shortlist-head"><div><div class="analysis-eyebrow">Tonight's decision board</div><div class="shortlist-title">Tonight's Shortlist</div><div class="shortlist-sub">Qualified opportunities only: +5% modeled edge, playable price, 5+ decisive games, no sample warning, no lineup risk, no model disagreement, and not locked.</div></div><div class="shortlist-rule">Ranked by conviction</div></div><div class="shortlist-kpis"><div class="shortlist-kpi"><strong>${rows.length}</strong><span>Qualified</span></div><div class="shortlist-kpi"><strong>+${(avgEdge*100).toFixed(1)}%</strong><span>Average edge</span></div><div class="shortlist-kpi"><strong>${aiBacked}</strong><span>AI backed</span></div><div class="shortlist-kpi"><strong>${markets}</strong><span>Markets</span></div></div><div class="shortlist-grid">${rows.map((row,index)=>{
+  return`<section class="shortlist-shell"><div class="shortlist-head"><div><div class="analysis-eyebrow">Tonight's decision board</div><div class="shortlist-title">Tonight's Shortlist</div><div class="shortlist-sub">Qualified opportunities only: +5% modeled edge, playable price, 5+ decisive games, no sample warning, no lineup risk, no model disagreement, and not locked.</div></div><div class="shortlist-rule">Ranked by conviction</div></div><div class="shortlist-kpis"><div class="shortlist-kpi"><strong>${rows.length}</strong><span>Qualified</span></div><div class="shortlist-kpi"><strong>+${(avgEdge*100).toFixed(1)}%</strong><span>Average edge</span></div><div class="shortlist-kpi"><strong>${aiBacked}</strong><span>AI backed</span></div><div class="shortlist-kpi"><strong>${markets}</strong><span>Markets</span></div></div>${renderShortlistTray()}<div class="shortlist-grid">${rows.map((row,index)=>{
     const edgePct=(row.edge*100).toFixed(1);
     const hitPct=(row.hitRate*100).toFixed(0);
     const impliedPct=(row.impliedProb*100).toFixed(0);
     const callClass=row.lean==="OVER"?"prop-over":"prop-under";
     const matchup=getShortlistMatchupEvidence(row);
     const tags=[row.hasAI?`${row.aiConfidence||"AI"} backed`:"Market model",row.hasStreak?`${row.streakLength}G streak`:"Stable sample",row.edge>=0.15?"Elite edge":row.edge>=0.08?"Strong edge":"Qualified edge"];
-    return`<article class="shortlist-card${index===0?" top":""}" onclick="streakToDash('${esc(row.name)}','${propToLogCol(row.metric)}','${row.dkLine}')"><div><div class="shortlist-rank">${index===0?"Top play":`#${String(index+1).padStart(2,"0")}`}</div><div class="shortlist-name">${playerLink(row.name,row.metric,row.dkLine)}</div><div class="shortlist-meta">${esc(row.team)} vs ${esc(row.opp||"TBD")} · ${esc(propTypeLabel(row.metric))} · ${row.hits}/${row.total} decisive games</div></div><div class="shortlist-call"><strong class="${callClass}">${row.lean} ${esc(row.dkLine)}</strong><span>${fmtOdds(row.odds)} · +${edgePct}% edge</span></div><div class="shortlist-evidence"><span><strong>${hitPct}% historical hit rate</strong> across the available sample</span><span><strong>${edgePct} points above market</strong> (${hitPct}% model vs ${impliedPct}% implied)</span><span>${esc(matchup)}</span><span><strong>Playable price:</strong> ${fmtOdds(row.odds)}${row.hasAI?` · ${esc(row.aiConfidence||"AI")} agrees`:" · no AI conflict"}</span></div><div class="shortlist-tags">${tags.map(tag=>`<span class="shortlist-tag">${esc(tag)}</span>`).join("")}</div></article>`;
+    const inTray=isInShortlistTray(row);
+    return`<article class="shortlist-card${index===0?" top":""}" onclick="streakToDash('${esc(row.name)}','${propToLogCol(row.metric)}','${row.dkLine}')"><div><div class="shortlist-rank">${index===0?"Top play":`#${String(index+1).padStart(2,"0")}`}</div><div class="shortlist-name">${playerLink(row.name,row.metric,row.dkLine)}</div><div class="shortlist-meta">${esc(row.team)} vs ${esc(row.opp||"TBD")} · ${esc(propTypeLabel(row.metric))} · ${row.hits}/${row.total} decisive games</div></div><div class="shortlist-call"><strong class="${callClass}">${row.lean} ${esc(row.dkLine)}</strong><span>${fmtOdds(row.odds)} · +${edgePct}% edge</span></div><div class="shortlist-evidence"><span><strong>${hitPct}% historical hit rate</strong> across the available sample</span><span><strong>${edgePct} points above market</strong> (${hitPct}% model vs ${impliedPct}% implied)</span><span>${esc(matchup)}</span><span><strong>Playable price:</strong> ${fmtOdds(row.odds)}${row.hasAI?` · ${esc(row.aiConfidence||"AI")} agrees`:" · no AI conflict"}</span></div><div class="shortlist-tags">${tags.map(tag=>`<span class="shortlist-tag">${esc(tag)}</span>`).join("")}<button class="shortlist-action${inTray?" added":""}" onclick="event.stopPropagation();toggleShortlistTray('${esc(row.name)}','${esc(row.metric)}','${esc(row.dkLine)}','${row.lean}')">${inTray?"Remove":"Add to tray"}</button></div></article>`;
   }).join("")}</div></section>`;
 }
 
