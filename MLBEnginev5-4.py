@@ -314,14 +314,48 @@ def parse_gemini_json_array(raw):
         raise
 
 def promote_consensus_confidence(confidence, consensus_count):
-    conf = normalize_confidence(confidence)
-    if consensus_count < 2:
-        return conf
-    if conf == 'LEAN':
-        return 'STRONG'
-    if conf == 'STRONG':
-        return 'SMASH'
-    return conf
+    # Repetition across stochastic Gemini passes is useful context, but the
+    # historical audit shows it is not a reliable reason to upgrade a tier.
+    return normalize_confidence(confidence)
+
+def pick_selection_method(pick):
+    explicit = str(pick.get('SELECTION_METHOD', '') or '').strip().upper()
+    if explicit:
+        return explicit
+    if str(pick.get('CONSENSUS_TAG', '') or '').strip().upper() == 'VALIDATED FALLBACK':
+        return 'VALIDATED_MODEL'
+    return 'GEMINI'
+
+def recommendation_status(pick):
+    """Gate the public recommendation set using audited positive-ROI segments."""
+    method = pick_selection_method(pick)
+    metric = normalize_prop_metric(pick.get('prop_type', ''))
+    lean = str(pick.get('lean', '') or '').strip().upper().replace('FADE', 'UNDER')
+    if method == 'VALIDATED_MODEL' and metric == 'H' and lean == 'OVER':
+        return 'PLAYABLE'
+    if method == 'GEMINI' and lean == 'UNDER' and metric in {'P_BB', 'P_ER'}:
+        return 'PLAYABLE'
+    return 'RESEARCH'
+
+def calibrated_pick_priority(pick):
+    """Rank observed positive-ROI segments ahead of uncalibrated AI conviction."""
+    method = pick_selection_method(pick)
+    metric = normalize_prop_metric(pick.get('prop_type', ''))
+    lean = str(pick.get('lean', '') or '').strip().upper().replace('FADE', 'UNDER')
+    status = recommendation_status(pick)
+    base = 100.0 if status == 'PLAYABLE' else 0.0
+    if method == 'VALIDATED_MODEL' and metric == 'H' and lean == 'OVER':
+        base += 30.0
+    elif method == 'GEMINI' and metric == 'P_BB' and lean == 'UNDER':
+        base += 25.0
+    elif method == 'GEMINI' and metric == 'P_ER' and lean == 'UNDER':
+        base += 15.0
+    elif method == 'VALIDATED_MODEL':
+        base += 5.0
+    # Consensus is retained as a small tie-breaker, never a tier upgrade.
+    base += min(float(pick.get('CONSENSUS_COUNT', 0) or 0), 3.0) * 0.25
+    base += min(float(pick.get('_fallback_score', 0) or 0), 20.0) * 0.05
+    return base
 
 def build_consensus_pick_pool(pick_lists):
     grouped = {}
@@ -349,7 +383,8 @@ def build_consensus_pick_pool(pick_lists):
         pick = dict(entry['pick'])
         pick['CONSENSUS_COUNT'] = entry['count']
         pick['CONSENSUS_RUNS'] = ','.join(str(r) for r in entry['runs'])
-        pick['CONSENSUS_TAG'] = f"CONSENSUS {entry['count']}/3" if entry['count'] >= 2 else ''
+        pick['CONSENSUS_TAG'] = f"CONSENSUS {entry['count']}/{len(pick_lists)}" if entry['count'] >= 2 else ''
+        pick['SELECTION_METHOD'] = 'GEMINI'
         pick['confidence'] = promote_consensus_confidence(pick.get('confidence'), entry['count'])
         merged.append(pick)
     merged.sort(key=lambda pk: (-int(pk.get('CONSENSUS_COUNT', 1)), float(pk.get('rank', 999) or 999)))
@@ -2463,6 +2498,7 @@ def generate_gemini_picks():
                     'CONSENSUS_COUNT': 0,
                     'CONSENSUS_RUNS': '',
                     'CONSENSUS_TAG': 'VALIDATED FALLBACK',
+                    'SELECTION_METHOD': 'VALIDATED_MODEL',
                     '_fallback_score': score,
                 })
             candidates.sort(key=lambda row: row['_fallback_score'], reverse=True)
@@ -2923,6 +2959,38 @@ Do not explain anything outside the JSON array.
             if len(fresh_pick_keys) < MIN_DAILY_PICKS:
                 print(f"   ⚠️ Only {len(fresh_pick_keys)} fresh picks were available after Gemini recovery and market backfill")
 
+        # Always let the audited deterministic H model compete with Gemini,
+        # even when Gemini already filled the nominal pick count. These rows
+        # drove the strongest observed ROI and should not be relegated to an
+        # emergency-only backfill path.
+        validated_challengers = [
+            row for row in build_validated_fallback_candidates()
+            if row.get('prop_type') == 'H' and row.get('lean') == 'OVER'
+        ]
+        challenger_added = 0
+        for challenger in validated_challengers:
+            pick_key = (
+                normalize_player_name(challenger.get('player', '')),
+                str(challenger.get('prop_type', '')).strip().upper(),
+                str(challenger.get('lean', '')).strip().upper(),
+            )
+            if pick_key in seen_pick_keys or pick_key in fresh_pick_keys:
+                continue
+            picks_data.append(challenger)
+            fresh_pick_keys.add(pick_key)
+            challenger_added += 1
+            if challenger_added >= 6:
+                break
+        if challenger_added:
+            print(f"   📐 Added {challenger_added} validated-model challenger(s) for calibrated ranking")
+
+        for pick in picks_data:
+            pick['SELECTION_METHOD'] = pick_selection_method(pick)
+            pick['RECOMMENDATION_STATUS'] = recommendation_status(pick)
+            pick['CALIBRATION_SCORE'] = round(calibrated_pick_priority(pick), 3)
+        picks_data.sort(key=lambda pick: (-float(pick.get('CALIBRATION_SCORE', 0) or 0), float(pick.get('rank', 999) or 999)))
+        picks_data = picks_data[:GEMINI_TARGET_PICKS]
+
         print(f"   Gemini picks after post-filter: {len(picks_data)}")
         if dropped_reasons:
             print(f"   🚫 Dropped hallucinated/invalid picks: {len(dropped_reasons)}")
@@ -3015,6 +3083,7 @@ Do not explain anything outside the JSON array.
             df_picks = pd.DataFrame(dedup_keep)
             col_order = ['DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team', 'opponent', 'opp_pitcher', 'prop_type',
                          'line', 'lean', 'confidence', 'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note', 'DATA_SOURCE', 'source',
+                         'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
                          'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
                          'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CONSENSUS_TAG',
                          'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA', 'CLV_LAST_UPDATE',
