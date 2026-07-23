@@ -2989,9 +2989,12 @@ Do not explain anything outside the JSON array.
             pick['RECOMMENDATION_STATUS'] = recommendation_status(pick)
             pick['CALIBRATION_SCORE'] = round(calibrated_pick_priority(pick), 3)
         picks_data.sort(key=lambda pick: (-float(pick.get('CALIBRATION_SCORE', 0) or 0), float(pick.get('rank', 999) or 999)))
-        picks_data = picks_data[:GEMINI_TARGET_PICKS]
+        # Preserve the full research cohort. The initial Gemini/post-filter
+        # pool is already capped, and challengers add at most six rows. Public
+        # promotion is controlled by RECOMMENDATION_STATUS, not by deleting
+        # lower-ranked observations before they can be graded.
 
-        print(f"   Gemini picks after post-filter: {len(picks_data)}")
+        print(f"   Tracked picks after calibrated merge: {len(picks_data)}")
         if dropped_reasons:
             print(f"   🚫 Dropped hallucinated/invalid picks: {len(dropped_reasons)}")
             if len(dropped_reasons) <= 25:
