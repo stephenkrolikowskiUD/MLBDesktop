@@ -976,7 +976,10 @@ print(f"\nFetching batter game logs for {SEASON} season...")
 print("⚡ Using parallel fetching...")
 
 def get_qualified_batters(season):
-    url = f"{MLB_API}/stats?stats=season&group=hitting&sportId=1&season={season}&limit=300"
+    # MLB defaults this endpoint to its official qualified-player pool. Request
+    # everyone, then apply our own PA threshold so active/returning players do
+    # not silently stop receiving game-log updates.
+    url = f"{MLB_API}/stats?stats=season&group=hitting&sportId=1&season={season}&limit=1000&playerPool=ALL"
     resp = requests.get(url, timeout=10).json()
     batters = []
     days_into_season = (now_est - OPENING_DAY).days if now_est >= OPENING_DAY else 0
@@ -3158,7 +3161,9 @@ df_pitcher_tonight = pd.DataFrame()
 p_ha_pivot = pd.DataFrame()
 
 def get_qualified_pitchers(season):
-    url = f"{MLB_API}/stats?stats=season&group=pitching&sportId=1&season={season}&limit=300"
+    # Use the complete player pool and enforce the engine's innings threshold
+    # locally. MLB's default qualified pool omits valid probable starters.
+    url = f"{MLB_API}/stats?stats=season&group=pitching&sportId=1&season={season}&limit=1000&playerPool=ALL"
     resp = requests.get(url, timeout=10).json()
     pitchers_list = []
     days_into_season = (now_est - OPENING_DAY).days if now_est >= OPENING_DAY else 0
