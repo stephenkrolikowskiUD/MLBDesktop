@@ -3379,10 +3379,23 @@ if len(games_tonight) > 0:
 
     if len(df_pitcher_logs) > 0:
         p_most_recent = df_pitcher_logs.sort_values('game_date').groupby('player_id').last().reset_index()
-        p_most_recent['team_abbr'] = p_most_recent['player_id'].map(pitcher_current_team)
-        p_most_recent['player_name'] = p_most_recent['player_id'].map(
-            {p['player_id']: p['player_name'] for p in qualified_pitchers})
         df_pitcher_tonight = p_most_recent[p_most_recent['player_id'].isin(tonight_sp_ids)].copy()
+        # The probable-pitcher feed is authoritative for tonight's identity and
+        # team. A qualified-pitcher lookup can be incomplete and must not erase
+        # a valid starter name already present in the game logs.
+        schedule_name_map = {pid: info['player_name'] for pid, info in tonight_sp_info.items()}
+        schedule_team_map = {pid: info['team_abbr'] for pid, info in tonight_sp_info.items()}
+        qualified_name_map = {p['player_id']: p['player_name'] for p in qualified_pitchers}
+        df_pitcher_tonight['player_name'] = (
+            df_pitcher_tonight['player_id'].map(schedule_name_map)
+            .combine_first(df_pitcher_tonight['player_id'].map(qualified_name_map))
+            .combine_first(df_pitcher_tonight['player_name'])
+        )
+        df_pitcher_tonight['team_abbr'] = (
+            df_pitcher_tonight['player_id'].map(schedule_team_map)
+            .combine_first(df_pitcher_tonight['player_id'].map(pitcher_current_team))
+            .combine_first(df_pitcher_tonight['team_abbr'])
+        )
     else:
         df_pitcher_tonight = pd.DataFrame()
 
