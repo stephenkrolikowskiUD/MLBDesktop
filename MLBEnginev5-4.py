@@ -144,6 +144,7 @@ SHEET_SCHEMAS = {
         ],
         'recommended': [
             'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
+            'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
             'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
         ],
     },
@@ -2476,6 +2477,11 @@ def generate_gemini_picks():
                 opp_pitcher = clean_text(player_meta.get('opp_pitcher'), 'TBD')
                 venue = clean_text(player_meta.get('venue') or source.get('venue_tonight', ''))
                 lineup_risk_note = clean_text(player_meta.get('lineup_risk_note'))
+                reference_book = clean_text(prop.get('REFERENCE_BOOK') or prop.get('BOOK') or 'draftkings')
+                reference_odds = pd.to_numeric(prop.get(f'{lean}_ODDS'), errors='coerce')
+                best_book = clean_text(prop.get(f'BEST_{lean}_BOOK') or reference_book)
+                best_odds = pd.to_numeric(prop.get(f'BEST_{lean}_ODDS'), errors='coerce')
+                pick_odds = best_odds if pd.notna(best_odds) else reference_odds
                 candidates.append({
                     'rank': 999,
                     'player': player_name,
@@ -2499,6 +2505,11 @@ def generate_gemini_picks():
                     'CONSENSUS_RUNS': '',
                     'CONSENSUS_TAG': 'VALIDATED FALLBACK',
                     'SELECTION_METHOD': 'VALIDATED_MODEL',
+                    'REFERENCE_BOOK': reference_book,
+                    'REFERENCE_ODDS': float(reference_odds) if pd.notna(reference_odds) else np.nan,
+                    'PICK_BOOK': best_book if pd.notna(best_odds) else reference_book,
+                    'PICK_ODDS': float(pick_odds) if pd.notna(pick_odds) else np.nan,
+                    'IMPLIED_PROBABILITY': round(american_to_implied(pick_odds), 4) if pd.notna(pick_odds) else np.nan,
                     '_fallback_score': score,
                 })
             candidates.sort(key=lambda row: row['_fallback_score'], reverse=True)
@@ -2853,10 +2864,24 @@ Do not explain anything outside the JSON array.
                 desired_line = float(line_val)
             except (TypeError, ValueError):
                 desired_line = float(line_matches.iloc[0]['DK_LINE'])
-            matched_line = line_matches.loc[
-                line_matches['DK_LINE'].astype(float).sub(desired_line).abs().idxmin(), 'DK_LINE'
-            ]
-            pk['line'] = float(matched_line)
+            matched_idx = line_matches['DK_LINE'].astype(float).sub(desired_line).abs().idxmin()
+            matched_prop = line_matches.loc[matched_idx]
+            pk['line'] = float(matched_prop['DK_LINE'])
+            priced_lean = str(pk.get('lean', '') or '').strip().upper().replace('FADE', 'UNDER')
+            side = 'UNDER' if priced_lean == 'UNDER' else 'OVER'
+            reference_book = clean_text(
+                matched_prop.get('REFERENCE_BOOK'),
+                clean_text(matched_prop.get('BOOK'), 'draftkings'),
+            )
+            reference_odds = pd.to_numeric(matched_prop.get(f'{side}_ODDS'), errors='coerce')
+            best_book = clean_text(matched_prop.get(f'BEST_{side}_BOOK'), reference_book)
+            best_odds = pd.to_numeric(matched_prop.get(f'BEST_{side}_ODDS'), errors='coerce')
+            pick_odds = best_odds if pd.notna(best_odds) else reference_odds
+            pk['REFERENCE_BOOK'] = reference_book
+            pk['REFERENCE_ODDS'] = float(reference_odds) if pd.notna(reference_odds) else np.nan
+            pk['PICK_BOOK'] = best_book if pd.notna(best_odds) else reference_book
+            pk['PICK_ODDS'] = float(pick_odds) if pd.notna(pick_odds) else np.nan
+            pk['IMPLIED_PROBABILITY'] = round(american_to_implied(pick_odds), 4) if pd.notna(pick_odds) else np.nan
             if prompt_metric == 'H' and float(pk['line']) > 0.5:
                 dropped_reasons.append(f"{pk.get('player')} H {float(pk['line']):g} — snapped to banned H line")
                 continue
@@ -3035,6 +3060,8 @@ Do not explain anything outside the JSON array.
             df_picks['RESULT'] = ''
             df_picks['ACTUAL_STAT'] = np.nan
             df_picks['HIT'] = ''
+            df_picks['REALIZED_PROFIT'] = np.nan
+            df_picks['ACTUAL_ROI_PER_PICK'] = np.nan
             df_picks['CLV_OPEN_LINE'] = df_picks['line']
             df_picks['CLV_LATEST_LINE'] = df_picks['line']
             df_picks['CLV_DELTA'] = 0.0
@@ -3087,10 +3114,11 @@ Do not explain anything outside the JSON array.
             col_order = ['DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team', 'opponent', 'opp_pitcher', 'prop_type',
                          'line', 'lean', 'confidence', 'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note', 'DATA_SOURCE', 'source',
                          'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
+                         'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
                          'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
                          'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CONSENSUS_TAG',
                          'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA', 'CLV_LAST_UPDATE',
-                         'RESULT', 'ACTUAL_STAT', 'HIT', 'LAST_UPDATED']
+                         'RESULT', 'ACTUAL_STAT', 'HIT', 'REALIZED_PROFIT', 'ACTUAL_ROI_PER_PICK', 'LAST_UPDATED']
             df_picks = df_picks[[c for c in col_order if c in df_picks.columns]]
             if not df_picks.empty:
                 df_picks = df_picks.reset_index(drop=True)

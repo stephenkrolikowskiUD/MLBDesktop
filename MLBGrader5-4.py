@@ -91,6 +91,23 @@ def safe_float(val, default=None):
     except (TypeError, ValueError):
         return default
 
+def american_profit_units(odds):
+    """Net profit on a one-unit stake for winning American odds."""
+    price = safe_float(odds)
+    if price is None or price == 0:
+        return None
+    return price / 100.0 if price > 0 else 100.0 / abs(price)
+
+def realized_profit_units(hit, odds):
+    result = str(hit or '').strip().upper()
+    if result == 'NO':
+        return -1.0
+    if result in {'PUSH', 'DNP'}:
+        return 0.0
+    if result == 'YES':
+        return american_profit_units(odds)
+    return None
+
 def innings_to_outs(ip_val):
     if ip_val is None:
         return 0
@@ -300,9 +317,10 @@ def build_score_backtest(df_graded):
 
 PICK_PERFORMANCE_COLUMNS = [
     'DIMENSION_TYPE', 'DIMENSION_VALUE', 'TIME_WINDOW',
-    'N_PICKS', 'N_PICKS_DECISIVE', 'N_HITS', 'N_MISSES', 'N_PUSHES', 'N_DNP',
+    'N_PICKS', 'N_PICKS_DECISIVE', 'N_SETTLED', 'N_HITS', 'N_MISSES', 'N_PUSHES', 'N_DNP',
     'HIT_RATE', 'HIT_RATE_RAW', 'PUSH_RATE', 'DNP_RATE',
     'ROI_FLAT', 'ROI_PER_PICK',
+    'N_PRICED', 'ACTUAL_PROFIT_UNITS', 'ACTUAL_ROI_PER_PICK',
     'AVG_CLV_EDGE', 'CLV_POSITIVE_RATE', 'CLV_POS_HIT_RATE', 'CLV_NEG_HIT_RATE',
     'WILSON_LOWER_95', 'MIN_SAMPLE_FLAG',
     'LAST_UPDATED',
@@ -410,6 +428,8 @@ def pick_perf_prepare_df(df_all):
     df['recommendation_status_norm'] = np.where(raw_status.ne(''), raw_status, 'LEGACY_RESEARCH')
     df['confidence_norm'] = df.get('confidence', pd.Series('', index=idx)).map(normalize_confidence)
     df.loc[df['selection_method_norm'].eq('VALIDATED_MODEL'), 'confidence_norm'] = 'VALIDATED'
+    df['pick_odds_f'] = pd.to_numeric(df.get('PICK_ODDS', pd.Series(np.nan, index=idx)), errors='coerce')
+    df['realized_profit_f'] = pd.to_numeric(df.get('REALIZED_PROFIT', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_open_f'] = pd.to_numeric(df.get('CLV_OPEN_LINE', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_latest_f'] = pd.to_numeric(df.get('CLV_LATEST_LINE', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_edge'] = np.where(df['lean_norm'] == 'UNDER', df['clv_open_f'] - df['clv_latest_f'], df['clv_latest_f'] - df['clv_open_f'])
@@ -434,11 +454,21 @@ def pick_perf_metrics_row(df_slice, dim_type, dim_value, window_name):
     n_misses = int((df_slice['HIT'] == 'NO').sum())
     n_pushes = int((df_slice['HIT'] == 'PUSH').sum())
     n_dnp = int((df_slice['HIT'] == 'DNP').sum())
-    n_decisive = n_picks - n_dnp
+    n_decisive = n_hits + n_misses
+    n_settled = n_hits + n_misses + n_pushes
     hit_rate = pick_perf_rate(n_hits, n_misses)
     hit_rate_raw = n_hits / n_decisive if n_decisive > 0 else np.nan
     roi_flat = (n_hits * (100 / abs(PICK_PERF_STANDARD_ODDS)) - n_misses) * 100
-    roi_per_pick = roi_flat / n_decisive if n_decisive > 0 else np.nan
+    roi_per_pick = roi_flat / n_settled if n_settled > 0 else np.nan
+    priced = df_slice[df_slice['HIT'].isin(['YES', 'NO', 'PUSH']) & df_slice['pick_odds_f'].notna()].copy()
+    if not priced.empty:
+        missing_profit = priced['realized_profit_f'].isna()
+        priced.loc[missing_profit, 'realized_profit_f'] = priced.loc[missing_profit].apply(
+            lambda row: realized_profit_units(row['HIT'], row['pick_odds_f']), axis=1
+        )
+    n_priced = len(priced)
+    actual_profit = priced['realized_profit_f'].sum() if n_priced else np.nan
+    actual_roi_per_pick = actual_profit / n_priced if n_priced else np.nan
     clv_numeric = df_slice.dropna(subset=['clv_edge'])
     clv_pos = df_slice[df_slice['clv_edge'] > 0]
     clv_neg = df_slice[df_slice['clv_edge'].notna() & (df_slice['clv_edge'] <= 0)]
@@ -454,6 +484,7 @@ def pick_perf_metrics_row(df_slice, dim_type, dim_value, window_name):
         'TIME_WINDOW': window_name,
         'N_PICKS': n_picks,
         'N_PICKS_DECISIVE': n_decisive,
+        'N_SETTLED': n_settled,
         'N_HITS': n_hits,
         'N_MISSES': n_misses,
         'N_PUSHES': n_pushes,
@@ -464,6 +495,9 @@ def pick_perf_metrics_row(df_slice, dim_type, dim_value, window_name):
         'DNP_RATE': round(n_dnp / n_picks, 3) if n_picks else 0,
         'ROI_FLAT': round(roi_flat, 3),
         'ROI_PER_PICK': round(roi_per_pick, 3) if pd.notna(roi_per_pick) else np.nan,
+        'N_PRICED': n_priced,
+        'ACTUAL_PROFIT_UNITS': round(actual_profit, 3) if pd.notna(actual_profit) else np.nan,
+        'ACTUAL_ROI_PER_PICK': round(actual_roi_per_pick, 4) if pd.notna(actual_roi_per_pick) else np.nan,
         'AVG_CLV_EDGE': round(clv_numeric['clv_edge'].mean(), 3) if not clv_numeric.empty else np.nan,
         'CLV_POSITIVE_RATE': round((clv_numeric['clv_edge'] > 0).mean(), 3) if not clv_numeric.empty else np.nan,
         'CLV_POS_HIT_RATE': round(pick_perf_rate(pos_hits, pos_misses), 3) if pd.notna(pick_perf_rate(pos_hits, pos_misses)) else np.nan,
@@ -516,6 +550,8 @@ def build_snapshot_rows(metrics_df, snapshot_date):
         rows.append({'SNAPSHOT_DATE': snapshot_date, 'METRIC_KEY': f"hit_rate.{key_suffix}", 'METRIC_VALUE': row['HIT_RATE'], 'N_PICKS': row['N_PICKS_DECISIVE'], 'TIME_WINDOW': row['TIME_WINDOW']})
         if dim_type in {'overall', 'confidence_norm'}:
             rows.append({'SNAPSHOT_DATE': snapshot_date, 'METRIC_KEY': f"roi_per_pick.{key_suffix}", 'METRIC_VALUE': row['ROI_PER_PICK'], 'N_PICKS': row['N_PICKS_DECISIVE'], 'TIME_WINDOW': row['TIME_WINDOW']})
+            if pd.notna(row.get('ACTUAL_ROI_PER_PICK')):
+                rows.append({'SNAPSHOT_DATE': snapshot_date, 'METRIC_KEY': f"actual_roi_per_pick.{key_suffix}", 'METRIC_VALUE': row['ACTUAL_ROI_PER_PICK'], 'N_PICKS': row.get('N_PRICED', 0), 'TIME_WINDOW': row['TIME_WINDOW']})
     return rows
 
 def snapshot_already_exists(spreadsheet, snapshot_date):
@@ -610,6 +646,18 @@ try:
 except Exception as e:
     print(f"❌ Could not find Daily_Picks sheet: {e}")
     raise
+
+profit_columns = ['REALIZED_PROFIT', 'ACTUAL_ROI_PER_PICK']
+if all_rows:
+    original_headers = all_rows[0]
+    added_profit_columns = [col for col in profit_columns if col not in original_headers]
+    if added_profit_columns:
+        expanded_headers = original_headers + added_profit_columns
+        ws.update([expanded_headers], value_input_option='RAW')
+        all_rows[0] = expanded_headers
+        for row in all_rows[1:]:
+            row.extend([''] * len(added_profit_columns))
+        print(f"   🔄 Added Daily_Picks profit columns: {', '.join(added_profit_columns)}")
 
 if len(all_rows) <= 1:
     print("⚠️ No picks to grade — sheet is empty.")
@@ -865,6 +913,8 @@ col_idx = {h: i for i, h in enumerate(headers)}
 actual_col = col_idx.get('ACTUAL_STAT')
 hit_col = col_idx.get('HIT')
 result_col = col_idx.get('RESULT')
+profit_col = col_idx.get('REALIZED_PROFIT')
+actual_roi_col = col_idx.get('ACTUAL_ROI_PER_PICK')
 
 if actual_col is None or hit_col is None:
     print("❌ Missing ACTUAL_STAT or HIT columns in Daily_Picks")
@@ -910,6 +960,10 @@ for idx, pick in ungraded.iterrows():
         updates.append({'range': f'{col_letter(hit_col)}{sheet_row}', 'value': 'DNP'})
         if result_col is not None:
             updates.append({'range': f'{col_letter(result_col)}{sheet_row}', 'value': 'DNP'})
+        if profit_col is not None:
+            updates.append({'range': f'{col_letter(profit_col)}{sheet_row}', 'value': '0'})
+        if actual_roi_col is not None:
+            updates.append({'range': f'{col_letter(actual_roi_col)}{sheet_row}', 'value': '0'})
         dnp += 1
         print(f"   ⬜ {player} ({date}) — DNP / No box score found")
         continue
@@ -937,6 +991,12 @@ for idx, pick in ungraded.iterrows():
     updates.append({'range': f'{col_letter(hit_col)}{sheet_row}', 'value': hit_str})
     if result_col is not None:
         updates.append({'range': f'{col_letter(result_col)}{sheet_row}', 'value': result_str})
+    realized_profit = realized_profit_units(hit_str, pick.get('PICK_ODDS'))
+    if realized_profit is not None:
+        if profit_col is not None:
+            updates.append({'range': f'{col_letter(profit_col)}{sheet_row}', 'value': str(round(realized_profit, 4))})
+        if actual_roi_col is not None:
+            updates.append({'range': f'{col_letter(actual_roi_col)}{sheet_row}', 'value': str(round(realized_profit, 4))})
 
     icon = "✅" if hit_str == "YES" else "❌" if hit_str == "NO" else "➖" if hit_str == "PUSH" else "⬜"
     print(f"   {icon} {player} | {prop_type} {lean} {line} → Actual: {actual} → {hit_str}")
