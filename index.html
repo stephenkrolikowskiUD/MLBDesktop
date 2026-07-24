@@ -2349,6 +2349,72 @@ function statPct0(v){const n=Number(v);return Number.isFinite(n)?Math.round(n*10
 function statSigned(v){const n=Number(v);if(!Number.isFinite(n))return '—';return (n>0?'+':'')+n.toFixed(3)}
 function statRoiPct(v){const n=Number(v);if(!Number.isFinite(n))return '—';return `${n>0?'+':''}${(n*100).toFixed(1)}%`}
 function statRoiSummary(r){const n=Math.round(statNum(r,'N_PRICED')),actual=statNum(r,'ACTUAL_ROI_PER_PICK');return n>0&&Number.isFinite(actual)?`actual ${statRoiPct(actual)} on ${n} · flat ${statSigned(statNum(r,'ROI_PER_PICK'))}`:`flat ${statSigned(statNum(r,'ROI_PER_PICK'))}`}
+function priceDisciplineOddsValue(v){const n=Number(v);return Number.isFinite(n)&&n!==0?n:null}
+function priceDisciplineCurrentPrice(pick){
+  const captured=priceDisciplineOddsValue(rowField(pick,'PICK_ODDS'));
+  if(captured!==null)return{odds:captured,book:String(rowField(pick,'PICK_BOOK')||'captured')};
+  const prop=findPropForPick(rowField(pick,'player'),rowField(pick,'prop_type'),rowField(pick,'line'));
+  const best=getBestBookForLean(prop,rowField(pick,'lean'));
+  if(best&&priceDisciplineOddsValue(best.odds)!==null)return{odds:Number(best.odds),book:formatBookName(best.book)};
+  const side=normalizeLeanText(rowField(pick,'lean'))==='UNDER'?'UNDER':'OVER';
+  const reference=priceDisciplineOddsValue(mbField(prop,`${side}_ODDS`));
+  return reference===null?null:{odds:reference,book:formatBookName(mbField(prop,'REFERENCE_BOOK')||mbField(prop,'BOOK')||'DK')};
+}
+function priceDisciplineCohorts(pick,rows){
+  const method=String(rowField(pick,'SELECTION_METHOD')).trim().toUpperCase();
+  const confidence=method==='VALIDATED_MODEL'?'VALIDATED':normalizeConfidence(rowField(pick,'confidence'));
+  const prop=normalizePropMetric(rowField(pick,'prop_type'));
+  const validated=method==='VALIDATED_MODEL';
+  const candidates=(validated?[
+    getMetricsForSlice(rows,'selection_method_norm',method,'all_time'),
+    getMetricsForSlice(rows,'confidence_norm','VALIDATED','all_time'),
+  ]:[
+    method&&getMetricsForSlice(rows,'selection_method_norm',method,'all_time'),
+    confidence&&getMetricsForSlice(rows,'confidence_norm',confidence,'all_time'),
+    prop&&getMetricsForSlice(rows,'prop_type_norm',prop,'all_time'),
+  ]).filter(r=>r&&statBool(r,'MIN_SAMPLE_FLAG')&&statNum(r,'WILSON_LOWER_95')>0);
+  const unique=[...new Map(candidates.map(r=>[`${statField(r,'DIMENSION_TYPE')}|${statField(r,'DIMENSION_VALUE')}`,r])).values()];
+  return unique;
+}
+function evaluatePriceDiscipline(pick,rows){
+  const cohorts=priceDisciplineCohorts(pick,rows),price=priceDisciplineCurrentPrice(pick);
+  if(!cohorts.length)return{pick,price,status:'LOW SAMPLE',reason:'No qualifying historical cohort'};
+  const conservative=Math.min(...cohorts.map(r=>statNum(r,'WILSON_LOWER_95')));
+  const fair=Math.min(...cohorts.map(r=>statNum(r,'HIT_RATE')));
+  const thresholdOdds=impliedToAmerican(conservative);
+  if(!price)return{pick,price,status:'NO PRICE',fair,conservative,thresholdOdds,reason:'No current sportsbook price'};
+  const marketProb=impliedProb(price.odds);
+  const edge=marketProb===null?null:conservative-marketProb;
+  return{pick,price,fair,conservative,thresholdOdds,edge,status:edge!==null&&edge>=0?'BET':'PASS',cohorts};
+}
+function renderPriceDiscipline(rows){
+  const active=getActivePicks();
+  const hasStatuses=active.some(p=>String(rowField(p,'RECOMMENDATION_STATUS')).trim());
+  const playable=hasStatuses?active.filter(p=>String(rowField(p,'RECOMMENDATION_STATUS')).trim().toUpperCase()==='PLAYABLE'):active;
+  if(!playable.length)return'';
+  const evaluated=playable.map(p=>evaluatePriceDiscipline(p,rows)).sort((a,b)=>{
+    const order={BET:0,PASS:1,'NO PRICE':2,'LOW SAMPLE':3};
+    return(order[a.status]??9)-(order[b.status]??9)||(Number(b.edge)||-99)-(Number(a.edge)||-99);
+  });
+  const bets=evaluated.filter(r=>r.status==='BET').length,passes=evaluated.filter(r=>r.status==='PASS').length;
+  const statusColor=s=>s==='BET'?'var(--over)':s==='PASS'?'var(--under)':'var(--warn)';
+  return`<div style="padding:0 16px 10px">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:6px">
+      <div><div style="color:var(--accent);font-size:var(--t-sm);font-weight:800">Price Discipline — Current Slate</div><div style="font-size:var(--t-xs);color:var(--push);margin-top:2px">Advisory only. Current price must beat the most conservative qualified all-time cohort.</div></div>
+      <div style="font-size:var(--t-xs);color:var(--ink-1);white-space:nowrap">${bets} BET · ${passes} PASS</div>
+    </div>
+    <div class="card" style="padding:0;overflow-x:auto">
+      <table style="width:100%;min-width:760px;border-collapse:collapse;font-size:var(--t-xs)">
+        <thead><tr style="color:var(--push)"><th style="text-align:left;padding:8px">PLAYER</th><th>PROP</th><th>PRICE</th><th>FAIR</th><th>CONSERVATIVE</th><th>MIN PRICE</th><th>EDGE</th><th>CALL</th></tr></thead>
+        <tbody>${evaluated.map(r=>{
+          const p=r.pick,edge=Number(r.edge),edgeText=Number.isFinite(edge)?`${edge>=0?'+':''}${(edge*100).toFixed(1)}pp`:'—';
+          return`<tr style="border-top:1px solid #26313a"><td style="padding:8px;font-weight:800;color:var(--ink-1)">${playerLink(rowField(p,'player'),rowField(p,'prop_type'),rowField(p,'line'))}</td><td style="text-align:center">${esc(propTypeLabel(rowField(p,'prop_type')))} ${esc(normalizeLeanText(rowField(p,'lean')))} ${esc(rowField(p,'line'))}</td><td style="text-align:center">${r.price?`${fmtOdds(r.price.odds)} <span style="color:var(--push)">${esc(r.price.book)}</span>`:'—'}</td><td style="text-align:center">${Number.isFinite(r.fair)?statPct(r.fair):'—'}</td><td style="text-align:center">${Number.isFinite(r.conservative)?statPct(r.conservative):'—'}</td><td style="text-align:center">${r.thresholdOdds!==null&&r.thresholdOdds!==undefined?fmtOdds(r.thresholdOdds):'—'}</td><td style="text-align:center;color:${Number.isFinite(edge)?statusColor(r.status):'var(--push)'};font-weight:800">${edgeText}</td><td style="text-align:center"><span style="color:${statusColor(r.status)};font-weight:900">${r.status}</span></td></tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+    <div style="font-size:var(--t-xs);color:var(--push);margin-top:5px">MIN PRICE is the worst price worth accepting under the conservative estimate. PASS does not remove a tracked pick.</div>
+  </div>`;
+}
 function statsRowsForWindow(rows,w){return (rows||[]).filter(r=>String(statField(r,'TIME_WINDOW'))===w)}
 function getMetricsForSlice(rows,dimType,dimValue,timeWindow){return (rows||[]).find(r=>String(statField(r,'DIMENSION_TYPE'))===dimType&&String(statField(r,'DIMENSION_VALUE'))===String(dimValue)&&String(statField(r,'TIME_WINDOW'))===timeWindow)||null}
 function statsWindowLabel(w){return (STATS_WINDOWS.find(x=>x[0]===w)||[])[1]||w}
@@ -2447,7 +2513,7 @@ function renderPickBoardRow(model,index){
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
 
-function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Stats unavailable — Pick Performance data will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
+function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Stats unavailable — Pick Performance data will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
 
 function render(){
   var picksHTML="";
