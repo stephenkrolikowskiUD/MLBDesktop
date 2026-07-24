@@ -2243,6 +2243,17 @@ def generate_gemini_picks():
             return val.strip().upper() in {"1", "TRUE", "YES", "Y"}
         return bool(val)
 
+    def clean_text(value, default=''):
+        if value is None:
+            return default
+        try:
+            if pd.isna(value):
+                return default
+        except (TypeError, ValueError):
+            pass
+        text = str(value).strip()
+        return text if text else default
+
     def weather_note_for_venue(venue_name):
         wx = next((w for w in weather_rows if w.get('venue_name') == venue_name), {})
         if not wx:
@@ -2403,17 +2414,6 @@ def generate_gemini_picks():
         def build_validated_fallback_candidates():
             """Rank real sportsbook props for backfill when Gemini under-delivers."""
             candidates = []
-
-            def clean_text(value, default=''):
-                if value is None:
-                    return default
-                try:
-                    if pd.isna(value):
-                        return default
-                except (TypeError, ValueError):
-                    pass
-                text = str(value).strip()
-                return text if text else default
 
             allowed_metrics = {'H', 'R', 'P_SO', 'P_ER', 'P_BB'}
             stat_fields = {
