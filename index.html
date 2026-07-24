@@ -2472,7 +2472,7 @@ function pickEvidenceHTML(model){
   if(model.form.decisive)bits.push(`<span><strong>L10 ${model.form.hits}/${model.form.decisive}</strong> hit</span>`);
   if(model.form.avg!==null)bits.push(`<span>avg <strong>${model.form.avg.toFixed(1)}</strong></span>`);
   const book=getBestBookForLean(model.pickProp,model.leanText);
-  if(book?.delta!==null&&!book.isDK&&Math.abs(book.delta)>0.05)bits.push(`<span><strong>${book.delta>0?"+":""}${book.delta.toFixed(1)}pp</strong> book edge</span>`);
+  if(book&&book.delta!==null&&!book.isDK&&Math.abs(book.delta)>0.05)bits.push(`<span><strong>${book.delta>0?"+":""}${book.delta.toFixed(1)}pp</strong> book edge</span>`);
   if(model.flags.returning)bits.push(`<span>returning</span>`);
   if(model.flags.limited)bits.push(`<span>limited sample</span>`);
   return bits.join("");
