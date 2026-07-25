@@ -358,6 +358,50 @@ def calibrated_pick_priority(pick):
     base += min(float(pick.get('_fallback_score', 0) or 0), 20.0) * 0.05
     return base
 
+def projected_valid_gemini_count(candidate_picks, valid_player_map, valid_prop_keys):
+    """Estimate how many Gemini candidates will survive the real post-filter."""
+    pitcher_pick_count = 0
+    prop_type_counts = {}
+    hit_count = 0
+    run_prop_count = 0
+    survivor_count = 0
+
+    for pick in candidate_picks:
+        player_norm = normalize_player_name(pick.get('player', ''))
+        metric = normalize_prop_metric(pick.get('prop_type', ''))
+        if player_norm not in valid_player_map:
+            continue
+        if metric not in {'H', 'R', 'P_SO', 'P_ER', 'P_BB'}:
+            continue
+        if (player_norm, metric) not in valid_prop_keys:
+            continue
+        if metric == 'H':
+            line_num = pd.to_numeric(pick.get('line'), errors='coerce')
+            if pd.notna(line_num) and float(line_num) > 0.5:
+                continue
+            if hit_count >= 10:
+                continue
+        per_type_cap = 4 if metric == 'P_SO' else 3
+        if metric != 'H' and prop_type_counts.get(metric, 0) >= per_type_cap:
+            continue
+        if metric == 'R' and run_prop_count >= 2:
+            continue
+        if metric.startswith('P_') and pitcher_pick_count >= 4:
+            continue
+
+        prop_type_counts[metric] = prop_type_counts.get(metric, 0) + 1
+        if metric == 'H':
+            hit_count += 1
+        if metric == 'R':
+            run_prop_count += 1
+        if metric.startswith('P_'):
+            pitcher_pick_count += 1
+        survivor_count += 1
+        if survivor_count >= GEMINI_TARGET_PICKS:
+            break
+
+    return survivor_count
+
 def build_consensus_pick_pool(pick_lists):
     grouped = {}
     for run_idx, picks in enumerate(pick_lists, start=1):
@@ -2496,7 +2540,7 @@ def generate_gemini_picks():
                     'line': line,
                     'lean': lean,
                     'confidence': 'LEAN',
-                    'rationale': 'Validated sportsbook market fallback after Gemini under-delivery.',
+                    'rationale': 'Validated sportsbook candidate from the audited market and form model.',
                     'injury_context': lineup_risk_note,
                     'venue': venue,
                     'weather_note': weather_note_for_venue(venue),
@@ -2785,15 +2829,33 @@ OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no 
             except Exception:
                 pass
 
-        # Give Gemini one focused recovery pass when all three consensus calls
-        # under-deliver. The deterministic market backfill below remains the
+        # Count candidates through the same eligibility and slate-cap gates
+        # used by the real post-filter. Raw Gemini output can look full while
+        # leaving too few usable picks after invalid markets and caps drop out.
+        projected_survivors = projected_valid_gemini_count(
+            picks_data,
+            valid_player_map,
+            valid_prop_keys,
+        )
+        print(
+            f"   Gemini validation preflight: {projected_survivors} projected survivor(s) "
+            f"from {len(picks_data)} unique candidate(s)"
+        )
+
+        # Give Gemini one focused recovery pass when the validated projection
+        # under-delivers. The deterministic market backfill below remains the
         # final guarantee, so this cannot turn into an unbounded retry loop.
-        if len(picks_data) < MIN_DAILY_PICKS:
-            print(f"⚠️ Gemini under-delivered ({len(picks_data)} unique picks); requesting one recovery pass...")
+        if projected_survivors < MIN_DAILY_PICKS:
+            print(
+                f"⚠️ Gemini validation projected only {projected_survivors} usable pick(s); "
+                "requesting one recovery pass..."
+            )
             recovery_prompt = prompt + f"""
 
 RECOVERY REQUIREMENT:
-The previous response returned too few usable candidates. Return at least {MIN_DAILY_PICKS} distinct picks now.
+The previous responses yielded only {projected_survivors} candidates that survived validation.
+Return at least {MIN_DAILY_PICKS} distinct picks that satisfy the allowed markets and slate caps.
+Respect these final caps: at most 10 H, 2 R, 4 P_SO, 3 P_ER, 3 P_BB, and 4 total pitcher picks.
 Use only exact real props listed in PLAYER DATA. Include LEAN picks when the evidence is merely adequate.
 Do not explain anything outside the JSON array.
 """
@@ -2815,7 +2877,16 @@ Do not explain anything outside the JSON array.
                     consensus_pick_lists.append(recovery_picks)
                     picks_data = build_consensus_pick_pool(consensus_pick_lists)
                     consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
-                    print(f"   ↳ Recovery merge: {len(picks_data)} unique picks, {consensus_hits} appearing in 2+ passes")
+                    projected_survivors = projected_valid_gemini_count(
+                        picks_data,
+                        valid_player_map,
+                        valid_prop_keys,
+                    )
+                    print(
+                        f"   ↳ Recovery merge: {len(picks_data)} unique picks, "
+                        f"{consensus_hits} appearing in 2+ passes, "
+                        f"{projected_survivors} projected survivor(s)"
+                    )
             except Exception as e:
                 msg = f"Gemini recovery pass failed: {type(e).__name__}: {str(e)[:180]}"
                 print(f"   ⚠️ {msg}")
@@ -2935,6 +3006,11 @@ Do not explain anything outside the JSON array.
             if len(filtered) >= 14:
                 break
         picks_data = filtered
+        gemini_survivor_count = len(picks_data)
+        print(
+            f"   Gemini validation result: {gemini_survivor_count} survived "
+            f"from {picks_before_filter} unique candidate(s)"
+        )
 
         # Backfill only from props that were actually returned by the books.
         # This is deliberately conservative: fallback picks are LEAN, retain
@@ -2972,6 +3048,10 @@ Do not explain anything outside the JSON array.
                     continue
                 if metric.startswith('P_') and pitcher_pick_count >= 4:
                     continue
+                fallback_pick['rationale'] = (
+                    'Validated sportsbook backfill after Gemini validation shortfall.'
+                )
+                fallback_pick['CONSENSUS_TAG'] = 'VALIDATED BACKFILL'
                 picks_data.append(fallback_pick)
                 fresh_pick_keys.add(pick_key)
                 prop_type_counts[metric] = prop_type_counts.get(metric, 0) + 1
@@ -3004,6 +3084,10 @@ Do not explain anything outside the JSON array.
             )
             if pick_key in seen_pick_keys or pick_key in fresh_pick_keys:
                 continue
+            challenger['rationale'] = (
+                'Audited Hits model challenger added for calibrated comparison.'
+            )
+            challenger['CONSENSUS_TAG'] = 'VALIDATED CHALLENGER'
             picks_data.append(challenger)
             fresh_pick_keys.add(pick_key)
             challenger_added += 1
@@ -3032,8 +3116,11 @@ Do not explain anything outside the JSON array.
         print(f"      batters after props filter: {len(batter_prop_pool)}")
         print(f"      pitchers after props filter: {len(pitcher_prop_pool)}")
         print(f"      final sent to Gemini: {len(gemini_pool)}")
-        print(f"      picks before post-filter: {picks_before_filter}")
-        print(f"      picks after post-filter: {len(picks_data)}")
+        print(f"      unique Gemini candidates: {picks_before_filter}")
+        print(f"      Gemini survivors: {gemini_survivor_count}")
+        print(f"      emergency backfills: {fallback_added}")
+        print(f"      deterministic challengers: {challenger_added}")
+        print(f"      total tracked cohort: {len(picks_data)}")
         for i, pk in enumerate(picks_data):
             pk['rank'] = i + 1
         df_picks = pd.DataFrame(picks_data)
