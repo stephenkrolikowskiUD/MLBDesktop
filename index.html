@@ -244,6 +244,27 @@ td.push{color:var(--push);font-weight:700}
 .pick-card.lineup-risk{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.smash{border-left-color:var(--warn);background:#2a2418} .pick-card.lineup-risk.strong{border-left-color:var(--warn);background:#2a2418} .lineup-risk-badge{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line);font-size:var(--t-xs);font-weight:700;padding:3px 8px;border-radius:6px;margin-top:6px} .lineup-risk-text{color:var(--warn);font-size:var(--t-xs);margin-top:4px;font-weight:600}
 .pick-result{display:flex;align-items:center;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-1)}
 .pick-editorial{padding:0 16px 16px}
+.model-picks-intro{padding:12px 16px 10px}
+.model-picks-title{font-family:"Barlow Condensed",system-ui,sans-serif;color:var(--ink-0);font-size:var(--t-xl);font-weight:800;line-height:1}
+.model-picks-sub{color:var(--ink-muted);font-size:var(--t-xs);line-height:1.45;margin-top:5px;max-width:760px}
+.freshness-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--border-1);border-radius:6px;margin-top:11px;overflow:hidden}
+.freshness-item{padding:9px 10px;background:var(--surface-1);border-right:1px solid var(--border-1);min-width:0}
+.freshness-item:last-child{border-right:0}
+.freshness-label{color:var(--ink-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.freshness-value{display:flex;align-items:center;gap:6px;color:var(--ink-1);font-size:var(--t-xs);font-weight:700;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.freshness-dot{width:6px;height:6px;border-radius:50%;background:var(--over);flex:0 0 auto}
+.freshness-item.warn .freshness-dot{background:var(--warn)}
+.freshness-item.stale .freshness-dot,.freshness-item.missing .freshness-dot{background:var(--under)}
+.freshness-item.warn .freshness-value{color:var(--warn)}
+.freshness-item.stale .freshness-value,.freshness-item.missing .freshness-value{color:var(--under)}
+.pick-provenance{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:6px}
+.pick-source-badge,.pick-consensus-badge{display:inline-flex;align-items:center;border:1px solid var(--border-1);border-radius:999px;padding:2px 7px;font-size:10px;font-weight:800;line-height:1.25;white-space:nowrap}
+.pick-source-badge.validated{color:var(--over);background:var(--over-soft);border-color:var(--over-line)}
+.pick-source-badge.ai{color:var(--accent-soft);background:var(--accent-bg);border-color:var(--accent-line)}
+.pick-source-badge.research{color:var(--ink-muted);background:var(--surface-2)}
+.pick-consensus-badge{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.pick-why{color:var(--ink-muted);font-size:10px;line-height:1.4;margin-top:5px}
+.pick-why strong{color:var(--ink-1)}
 .pick-feature{background:var(--surface-1);border:1px solid var(--border-1);border-left:4px solid var(--smash);border-radius:6px;padding:16px;margin-bottom:10px;cursor:pointer;transition:border-color var(--dur-fast),background var(--dur-fast)}
 .pick-feature.strong{border-left-color:var(--strong)}
 .pick-feature.lean{border-left-color:var(--push)}
@@ -649,6 +670,10 @@ td.push{color:var(--push);font-weight:700}
   .pick-rationale{font-size:var(--t-xs);line-height:1.4;margin-top:4px;white-space:normal;overflow:visible;text-overflow:clip}
   .lineup-risk-badge,.lineup-risk-text{font-size:var(--t-xs);line-height:1.2}
   .pick-editorial{padding:0 10px 12px}
+  .model-picks-intro{padding:11px 10px 9px}
+  .freshness-strip{grid-template-columns:1fr 1fr}
+  .freshness-item:nth-child(2){border-right:0}
+  .freshness-item:nth-child(-n+2){border-bottom:1px solid var(--border-1)}
   .pick-feature{padding:13px}
   .pick-feature-name{font-size:24px}
   .pick-feature-line{font-size:27px}
@@ -1167,11 +1192,11 @@ function getPickGuard(latestDate,picksCount){
   const today=easternTodayISO();
   if(!picksCount){
     return st.props.length
-      ?{level:"warn",text:"Engine issue — AI picks are missing or incomplete for tonight's slate."}
-      :{level:"info",text:"No AI picks for tonight yet. Props may still be loading."};
+      ?{level:"warn",text:"Engine issue — model picks are missing or incomplete for tonight's slate."}
+      :{level:"info",text:"No model picks for tonight yet. Props may still be loading."};
   }
-  if(latestDate&&latestDate!==today)return{level:"warn",text:`Showing stale AI picks from ${latestDate}. Engine may be incomplete.`};
-  if(picksCount<3&&st.props.length>=12)return{level:"warn",text:`AI picks look incomplete for tonight (${picksCount} loaded).`};
+  if(latestDate&&latestDate!==today)return{level:"warn",text:`Showing stale model picks from ${latestDate}. Engine may be incomplete.`};
+  if(picksCount<3&&st.props.length>=12)return{level:"warn",text:`Model picks look incomplete for tonight (${picksCount} loaded).`};
   return null;
 }
 function renderPickGuard(guard){
@@ -1179,6 +1204,64 @@ function renderPickGuard(guard){
   const border=guard.level==="warn"?"var(--warn)":"var(--ink-muted)";
   const text=guard.level==="warn"?"#fcd34d":"var(--ink-1)";
   return `<div class="section" style="margin-bottom:12px"><div class="card" style="border-left:3px solid ${border}"><div style="font-size:var(--t-xs);color:${text};font-weight:600">${esc(guard.text)}</div></div></div>`;
+}
+function parseEasternTimestamp(value){
+  const raw=String(value||"").trim();
+  if(!raw)return null;
+  const match=raw.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?\s*(?:EST|EDT)?$/i);
+  if(match){
+    let hour=Number(match[4]);
+    const ampm=(match[7]||"").toUpperCase();
+    if(ampm==="PM"&&hour<12)hour+=12;
+    if(ampm==="AM"&&hour===12)hour=0;
+    const wallUtc=Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]),hour,Number(match[5]),Number(match[6]||0));
+    const probe=new Date(wallUtc);
+    const easternParts=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(probe);
+    const part=type=>Number(easternParts.find(p=>p.type===type)?.value||0);
+    const represented=Date.UTC(part("year"),part("month")-1,part("day"),part("hour"),part("minute"),part("second"));
+    return wallUtc+(wallUtc-represented);
+  }
+  const parsed=new Date(raw);
+  return Number.isNaN(parsed.getTime())?null:parsed.getTime();
+}
+function latestDataTimestamp(rows,fields=["LAST_UPDATED"]){
+  let latest=null;
+  for(const row of rows||[]){
+    for(const field of fields){
+      const ms=parseEasternTimestamp(rowField(row,field));
+      if(ms!==null&&(latest===null||ms>latest))latest=ms;
+    }
+  }
+  return latest;
+}
+function freshnessAgeLabel(ms){
+  if(ms===null)return"No data";
+  const minutes=Math.max(0,Math.round((Date.now()-ms)/60000));
+  if(minutes<2)return"just now";
+  if(minutes<60)return`${minutes}m ago`;
+  const hours=Math.round(minutes/60);
+  if(hours<24)return`${hours}h ago`;
+  return`${Math.round(hours/24)}d ago`;
+}
+function freshnessSignal(label,rows,{warnHours,staleHours,fields=["LAST_UPDATED"]}){
+  const ms=latestDataTimestamp(rows,fields);
+  if(ms===null)return{label,level:"missing",value:"No data"};
+  const ageHours=Math.max(0,(Date.now()-ms)/3600000);
+  const level=ageHours>=staleHours?"stale":ageHours>=warnHours?"warn":"fresh";
+  return{label,level,value:freshnessAgeLabel(ms)};
+}
+function getModelFreshness(){
+  const latestDate=getLatestPickDate(),latestRun=getLatestPickRun();
+  const currentPicks=(st.picks||[]).filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun);
+  return[
+    freshnessSignal("Model picks",currentPicks,{warnHours:8,staleHours:20,fields:["LAST_UPDATED","RUN_TIME"]}),
+    freshnessSignal("Sportsbook markets",st.props,{warnHours:3,staleHours:8}),
+    freshnessSignal("Batter logs",st.gameLogs,{warnHours:18,staleHours:36}),
+    freshnessSignal("Probable starters",st.pTonight,{warnHours:4,staleHours:10}),
+  ];
+}
+function renderModelFreshness(){
+  return `<div class="freshness-strip">${getModelFreshness().map(signal=>`<div class="freshness-item ${signal.level}"><div class="freshness-label">${esc(signal.label)}</div><div class="freshness-value"><span class="freshness-dot"></span>${esc(signal.value)}</div></div>`).join("")}</div>`;
 }
 
 const COMBO_STATS={
@@ -2477,6 +2560,32 @@ function pickEvidenceHTML(model){
   if(model.flags.limited)bits.push(`<span>limited sample</span>`);
   return bits.join("");
 }
+function getPickProvenance(pk){
+  const method=String(rowField(pk,"SELECTION_METHOD")||"").trim().toUpperCase();
+  const status=String(rowField(pk,"RECOMMENDATION_STATUS")||"").trim().toUpperCase();
+  const consensusCount=Math.max(0,toNum(rowField(pk,"CONSENSUS_COUNT")));
+  const validated=method.includes("VALIDATED");
+  return{
+    label:status==="RESEARCH"?"Research only":validated?"Validated model":"AI reviewed",
+    className:status==="RESEARCH"?"research":validated?"validated":"ai",
+    consensusCount,
+    description:status==="RESEARCH"
+      ?"Tracked for grading; not promoted as an actionable recommendation."
+      :validated
+        ?"Selected by the deterministic market and form model."
+        :"Selected by Gemini, then checked against real players, markets, and lines."
+  };
+}
+function pickProvenanceHTML(model){
+  const source=model.provenance;
+  return `<div class="pick-provenance"><span class="pick-source-badge ${source.className}" title="${esc(source.description)}">${esc(source.label)}</span>${source.consensusCount>=2?`<span class="pick-consensus-badge" title="Appeared across repeated engine runs">Run consensus · ${source.consensusCount}</span>`:""}</div>`;
+}
+function pickWhyHTML(model){
+  const reason=String(rowField(model.pk,"rationale","reasoning")||"").trim();
+  const score=Number(rowField(model.pk,"CALIBRATION_SCORE"));
+  const scoreText=Number.isFinite(score)?` · calibration ${score.toFixed(1)}`:"";
+  return `<div class="pick-why"><strong>Why it ranks:</strong> ${esc(reason||model.provenance.description)}${esc(scoreText)}</div>`;
+}
 function getPickDisplayModel(pk){
   const confidence=normalizeConfidence(pk.confidence),tierClass=confidence==="SMASH"?"smash":confidence==="STRONG"?"strong":"lean";
   const leanText=normalizeLeanText(pk.lean),leanClass=leanText==="UNDER"?"under":"over";
@@ -2487,7 +2596,7 @@ function getPickDisplayModel(pk){
   const result=hit==="YES"||hit==="TRUE"?"HIT":hit==="NO"||hit==="FALSE"?"MISS":hasActual?"PUSH":"";
   const injury=String(pk.injury_context||""),lineupRisk=injury.toUpperCase().startsWith("LINEUP RISK");
   const pickProp=findPropForPick(pk.player,pk.prop_type,pk.line);
-  const model={pk,confidence,tierClass,leanText,leanClass,isPitch,flags,locked,actual,hasActual,pending,result,injury,lineupRisk,pickProp};
+  const model={pk,confidence,tierClass,leanText,leanClass,isPitch,flags,locked,actual,hasActual,pending,result,injury,lineupRisk,pickProp,provenance:getPickProvenance(pk)};
   model.form=getPickRecentForm(pk);
   return model;
 }
@@ -2504,11 +2613,11 @@ function pickStatusLine(model){
 function pickClick(model){return `streakToDash(${[model.pk.player,model.pk.prop_type||"",model.pk.line||""].map(v=>esc(JSON.stringify(String(v)))).join(",")})`}
 function renderFeaturedPick(model){
   const p=model.pk,status=pickStatusLine(model),evidence=pickEvidenceHTML(model);
-  return `<section class="pick-feature ${model.tierClass}${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-feature-kicker"><span>${icon("picks")}Top recommendation</span><span style="color:var(--${model.tierClass==="smash"?"smash":model.tierClass==="strong"?"strong":"push"})">${model.confidence}</span></div><div class="pick-feature-main"><div><div class="pick-feature-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-feature-matchup">${esc(p.game||"")} · vs ${esc(p.opp_pitcher||"TBD")} · ${esc(p.venue||"")}</div></div><div class="pick-feature-call"><div class="pick-feature-line ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-feature-market">${esc(propTypeLabel(p.prop_type))}</div></div></div><div class="pick-feature-evidence"><div><div class="pick-evidence">${evidence||"Model-ranked slate leader"}</div>${renderBestBookLine(model.pickProp,model.leanText)}${p.rationale?`<div class="pick-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}</div><div class="pick-board-form" aria-label="Last ten results">${renderPickFormBars(model.form)}</div></div>${status?`<div class="pick-board-status" style="grid-column:auto;margin-top:8px">${esc(status)}</div>`:""}${model.lineupRisk?`<div class="lineup-risk-text">${esc(model.injury)}</div>`:""}</section>`;
+  return `<section class="pick-feature ${model.tierClass}${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-feature-kicker"><span>${icon("picks")}Top recommendation</span><span style="color:var(--${model.tierClass==="smash"?"smash":model.tierClass==="strong"?"strong":"push"})">${model.confidence}</span></div><div class="pick-feature-main"><div><div class="pick-feature-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-feature-matchup">${esc(p.game||"")} · vs ${esc(p.opp_pitcher||"TBD")} · ${esc(p.venue||"")}</div>${pickProvenanceHTML(model)}</div><div class="pick-feature-call"><div class="pick-feature-line ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-feature-market">${esc(propTypeLabel(p.prop_type))}</div></div></div><div class="pick-feature-evidence"><div><div class="pick-evidence">${evidence||"Model-ranked slate leader"}</div>${renderBestBookLine(model.pickProp,model.leanText)}${pickWhyHTML(model)}</div><div class="pick-board-form" aria-label="Last ten results">${renderPickFormBars(model.form)}</div></div>${status?`<div class="pick-board-status" style="grid-column:auto;margin-top:8px">${esc(status)}</div>`:""}${model.lineupRisk?`<div class="lineup-risk-text">${esc(model.injury)}</div>`:""}</section>`;
 }
 function renderPickBoardRow(model,index){
   const p=model.pk,status=pickStatusLine(model),evidence=pickEvidenceHTML(model);
-  return `<div class="pick-board-row${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-board-rank">${String(p.rank||index+2).padStart(2,"0")}</div><div class="pick-board-player"><div class="pick-board-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-board-meta">${esc(p.game||"")} · ${esc(propTypeLabel(p.prop_type))}</div></div><div class="pick-board-form" aria-label="Last ten results">${renderPickFormBars(model.form)}</div><div class="pick-evidence">${evidence||"No recent sample"}</div><div class="pick-board-decision"><div class="pick-board-call ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-board-tier ${model.tierClass}">${model.confidence}</div></div>${p.rationale?`<div class="pick-board-rationale" title="${esc(p.rationale)}">${esc(p.rationale)}</div>`:""}${status?`<div class="pick-board-status">${esc(status)}</div>`:""}</div>`;
+  return `<div class="pick-board-row${model.locked?" locked-card":""}" onclick="${pickClick(model)}"><div class="pick-board-rank">${String(p.rank||index+2).padStart(2,"0")}</div><div class="pick-board-player"><div class="pick-board-name">${playerLink(p.player,p.prop_type||"",p.line||"")}</div><div class="pick-board-meta">${esc(p.game||"")} · ${esc(propTypeLabel(p.prop_type))}</div>${pickProvenanceHTML(model)}</div><div class="pick-board-form" aria-label="Last ten results">${renderPickFormBars(model.form)}</div><div class="pick-evidence">${evidence||"No recent sample"}</div><div class="pick-board-decision"><div class="pick-board-call ${model.leanClass}">${esc(model.leanText)} ${esc(p.line||"—")}</div><div class="pick-board-tier ${model.tierClass}">${model.confidence}</div></div><div class="pick-board-rationale">${pickWhyHTML(model)}</div>${status?`<div class="pick-board-status">${esc(status)}</div>`:""}</div>`;
 }
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
@@ -2729,13 +2838,14 @@ function render(){
     const todayPicks=hasCalibrationStatus?allTodayPicks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).toUpperCase()==="PLAYABLE"):allTodayPicks;
     const researchCount=hasCalibrationStatus?allTodayPicks.length-todayPicks.length:0;
     const pickGuard=st.pickGuard;
-    if(!todayPicks.length){picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">${hasCalibrationStatus?`No calibrated play qualifies today. ${researchCount} research pick${researchCount===1?"":"s"} remain tracked for model learning.`:"No AI picks today. Run the engine to generate."}</div>`}
+    const modelIntro=`<section class="model-picks-intro"><div class="model-picks-title">Model Picks</div><div class="model-picks-sub">Ranked recommendations from the deterministic market model and Gemini review layer. Provenance, evidence, and source freshness stay visible so every call can be audited.</div>${renderModelFreshness()}</section>`;
+    if(!todayPicks.length){picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">${hasCalibrationStatus?`No calibrated play qualifies today. ${researchCount} research pick${researchCount===1?"":"s"} remain tracked for model learning.`:"No model picks today. Run the engine to generate."}</div>`}
     else{
       const hits=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="YES"||h==="TRUE"}).length;
       const miss=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="NO"||h==="FALSE"}).length;
       const validated=todayPicks.filter(p=>String(rowField(p,"SELECTION_METHOD")||rowField(p,"CONSENSUS_TAG")).toUpperCase().includes("VALIDATED")).length;
       const tracked=hits+miss;
-      picksHTML=convergenceHTML+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PLAYABLE</div></div><div class="ps-card"><div class="ps-val">${validated}</div><div class="ps-lbl">VALIDATED</div></div><div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">${researchCount}</div><div class="ps-lbl">RESEARCH ONLY</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
+      picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PLAYABLE</div></div><div class="ps-card"><div class="ps-val">${validated}</div><div class="ps-lbl">VALIDATED</div></div><div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">${researchCount}</div><div class="ps-lbl">RESEARCH ONLY</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
       const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
       const pickModels=rankedPicks.map(getPickDisplayModel),featured=pickModels[0],remaining=pickModels.slice(1);
       picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L10</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;
@@ -3057,7 +3167,7 @@ function render(){
       <div class="sub-tab ${st.picksView==="shortlist"?"active":""}" onclick="switchPicksView('shortlist')">Tonight's Shortlist</div>
       <div class="sub-tab ${st.picksView==="bets"?"active":""}" onclick="switchPicksView('bets')">Best Bets</div>
       <div class="sub-tab ${st.picksView==="slips"?"active":""}" onclick="switchPicksView('slips')">Slips</div>
-      <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">AI Picks</div>
+      <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">Model Picks</div>
       <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">Draft</div>
       <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">Streaks</div>
       <div class="sub-tab ${st.picksView==="due"?"active":""}" onclick="switchPicksView('due')">Due</div>
@@ -3081,7 +3191,7 @@ function render(){
     <div style="padding:16px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:4px">⚾</div><div style="color:var(--accent);font-weight:800;font-size:var(--t-md)">How This Dashboard Works</div><div style="color:var(--accent-soft);font-size:var(--t-xs);margin-top:4px">Under the hood of the MLB DFS Engine</div></div>
       <div class="card" style="margin-bottom:10px"><div class="card-title">📡 Data Sources</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">MLB Stats API</span> — Batter/pitcher game logs, splits, career vs SP, tonight's schedule.</div><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">The Odds API</span> — Live spreads, totals, and player props across 13 markets.</div><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">OpenWeather</span> — Venue weather (temp, wind, conditions) for outdoor parks.</div><div><span style="color:var(--accent);font-weight:700">Google Sheets</span> — Central warehouse. Engine writes 14+ tabs; app reads live.</div></div></div>
       <div class="card" style="margin-bottom:10px"><div class="card-title">⚙️ Calculations</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><span style="color:var(--accent);font-weight:700">Rolling Averages</span> L7/L14/L30/Season · <span style="color:var(--accent);font-weight:700">LHP/RHP Splits</span> · <span style="color:var(--accent);font-weight:700">Home/Away Splits</span> · <span style="color:var(--accent);font-weight:700">Career Batter vs SP</span> · <span style="color:var(--accent);font-weight:700">EV%</span> hit rate vs implied odds · <span style="color:var(--accent);font-weight:700">Line Movement</span> snapshot diffs</div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">🤖 AI Picks — Gemini</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">Gemini 2.5 Flash Lite receives 80 batters with stats + DK lines + weather + pitcher matchups. Props-only filter. Returns 14 ranked picks with SMASH/STRONG/LEAN.</div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">Model Picks</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">A deterministic market-and-form model and Gemini review layer produce a tracked recommendation cohort. Every pick is anchored to a real player, market, and sportsbook line; provenance badges distinguish validated-model selections from AI-reviewed candidates.</div></div>
       <div class="card" style="margin-bottom:10px"><div class="card-title">Best Bets & Slips</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">EV engine compares hit rates to implied odds. Slips combine EV + AI + streaks into conviction-scored parlays.</div></div>
       <div class="card" style="margin-bottom:10px"><div class="card-title">🧊 They're Due</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">Finds cold hitters with strong season averages and favorable matchups tonight. Regression to the mean + soft pitching = buy low.</div></div>
       <div class="card" style="margin-bottom:10px"><div class="card-title">Dingers</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">HR probability board ranked by HR rate, recent power, and DK odds. Includes 3-leg dinger parlay combos.</div></div>
