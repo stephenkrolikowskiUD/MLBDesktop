@@ -896,7 +896,7 @@ function loadShortlistTray(){
 let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
-  picks:[],props:[],allBooksProps:[],teamRankings:[],
+  picks:[],picksHistory:[],props:[],allBooksProps:[],teamRankings:[],
   pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
   shortlistTray:loadShortlistTray(),shortlistTrayNotice:"",
   mode:"batter",
@@ -3285,6 +3285,9 @@ function loadAllData(){
   fetchSheet("Tonights_Starters").catch(()=>[]),
   fetchSheet("Pitcher_Game_Logs").catch(()=>[]),
   fetchSheet("Pitcher_Home_Away").catch(()=>[]),
+  fetchSheet("Picks_Current")
+    .then(rows=>({available:true,rows}))
+    .catch(()=>({available:false,rows:[]})),
   fetchSheet("Daily_Picks").catch(()=>[]),
   fetchSheet("DK_Player_Props").catch(()=>[]),
   fetchSheet("All_Books_Props").catch(()=>[]),
@@ -3292,7 +3295,7 @@ function loadAllData(){
   fetchSheet("Team_Rankings").catch(()=>[]),
   fetchSheet("Pick_Performance").catch(()=>[]),
   fetchSheet("Pick_Performance_Snapshots").catch(()=>[])
-]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,picks,props,allBooksProps,vsSP,teamRankings,pickPerformance,pickPerformanceSnaps])=>{
+]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,currentPickSource,picksHistory,props,allBooksProps,vsSP,teamRankings,pickPerformance,pickPerformanceSnaps])=>{
   resetDerived();
   st.tonight=normalizeKeys(cleanRows(tonight));
   st.gameLogs=normalizeKeys(cleanRows(logs));
@@ -3303,7 +3306,7 @@ function loadAllData(){
   st.pTonight=normalizeKeys(cleanRows(pTonight));
   st.pGameLogs=normalizeKeys(cleanRows(pLogs));
   st.pSplits=normalizeKeys(cleanRows(pSplits));
-  st.picks=normalizeKeys(cleanRows(picks)).map(p=>({
+  const normalizePickRows=rows=>normalizeKeys(cleanRows(rows||[])).map(p=>({
     ...p,
     player: cleanName(rowField(p,"player","PLAYER_NAME")),
     prop_type: normalizePropMetric(rowField(p,"prop_type","METRIC")),
@@ -3311,7 +3314,14 @@ function loadAllData(){
     confidence: normalizeConfidence(rowField(p,"confidence")),
     DATE: normalizeDate(rowField(p,"DATE")),
     RUN_NUMBER: toNum(rowField(p,"RUN_NUMBER"))
-	  }));
+  }));
+  const normalizedCurrentPicks=normalizePickRows(currentPickSource.rows);
+  st.picksHistory=normalizePickRows(picksHistory);
+  st.picks=currentPickSource.available?normalizedCurrentPicks:st.picksHistory;
+  console.log(
+    `📍 Picks source: ${currentPickSource.available?"Picks_Current":"Daily_Picks fallback"} `+
+    `(${st.picks.length} current, ${st.picksHistory.length} history)`
+  );
 	  st.props=normalizeKeys(cleanRows(props));
 	  st.allBooksProps=normalizeKeys(cleanRows(allBooksProps||[]));
 	  st.vsSP=normalizeKeys(cleanRows(vsSP));
@@ -3326,6 +3336,8 @@ function loadAllData(){
 	    Tonights_Batters: ['player_name', 'team_abbr', 'opp_abbr_tonight',
 	                       'RETURNING', 'LIMITED_SAMPLE', 'L5_GAMES_PLAYED',
 	                       'GAMES_LAST_7D', 'IBB_RISK', 'LINEUP_PROTECTION_NOTE'],
+	    Picks_Current: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
+	                  'confidence', 'rationale', 'HIT'],
 	    Daily_Picks: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
 	                  'confidence', 'rationale', 'HIT'],
 	    DK_Player_Props: ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS'],
@@ -3336,7 +3348,8 @@ function loadAllData(){
 	  };
 	  const _schemaSources = {
 	    Tonights_Batters: st.tonight,
-	    Daily_Picks: st.picks,
+	    Picks_Current: normalizedCurrentPicks,
+	    Daily_Picks: st.picksHistory,
 	    DK_Player_Props: st.props,
 	    All_Books_Props: st.allBooksProps,
 	    Tonights_Pitchers: st.pitchers,
