@@ -52,6 +52,18 @@ ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() 
 _last_odds_credits_remaining = None
 GEMINI_TARGET_PICKS = 14
 MIN_DAILY_PICKS = 9
+PICK_OUTPUT_COLUMNS = [
+    'DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team',
+    'opponent', 'opp_pitcher', 'prop_type', 'line', 'lean', 'confidence',
+    'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note',
+    'DATA_SOURCE', 'source', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS',
+    'CALIBRATION_SCORE', 'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK',
+    'PICK_ODDS', 'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
+    'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE', 'CONSENSUS_COUNT', 'CONSENSUS_RUNS',
+    'CONSENSUS_TAG', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA',
+    'CLV_LAST_UPDATE', 'RESULT', 'ACTUAL_STAT', 'HIT', 'REALIZED_PROFIT',
+    'ACTUAL_ROI_PER_PICK', 'LAST_UPDATED',
+]
 
 # --- Odds API quota guard ---
 QUOTA_FLOOR_GLOBAL = 2000
@@ -146,6 +158,19 @@ SHEET_SCHEMAS = {
             'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
             'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
             'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
+        ],
+    },
+    'Picks_Current': {
+        'required': [
+            'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
+            'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
+        ],
+        'recommended': [
+            'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
+            'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
+            'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS',
+            'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
+            'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
         ],
     },
     'DK_Player_Props': {
@@ -2251,12 +2276,16 @@ if len(existing_daily_picks) > 0:
         seen_pick_keys.add(key)
 existing_run_numbers = pd.to_numeric(existing_daily_picks.get('RUN_NUMBER', pd.Series(dtype=float)), errors='coerce').dropna().astype(int)
 today_run_number = int(existing_run_numbers.max()) + 1 if not existing_run_numbers.empty else 1
+df_picks_current = pd.DataFrame(columns=PICK_OUTPUT_COLUMNS)
+
 def generate_gemini_picks():
+    global df_picks_current
     print("\n" + "=" * 60)
     print("🤖 GEMINI AI DAILY PICKS GENERATOR")
     print("=" * 60)
 
     df_picks = pd.DataFrame()
+    df_picks_current = pd.DataFrame(columns=PICK_OUTPUT_COLUMNS)
     if not GEMINI_API_KEY:
         print("⚠️ No Gemini API key — skipping AI picks.")
         return df_picks
@@ -3049,7 +3078,7 @@ Do not explain anything outside the JSON array.
                 if metric.startswith('P_') and pitcher_pick_count >= 4:
                     continue
                 fallback_pick['rationale'] = (
-                    'Validated sportsbook backfill after Gemini validation shortfall.'
+                    'Validated sportsbook backfill added to satisfy the fresh-pick floor.'
                 )
                 fallback_pick['CONSENSUS_TAG'] = 'VALIDATED BACKFILL'
                 picks_data.append(fallback_pick)
@@ -3164,6 +3193,16 @@ Do not explain anything outside the JSON array.
                 df_picks['CONSENSUS_RUNS'] = '1'
             if 'CONSENSUS_TAG' not in df_picks.columns:
                 df_picks['CONSENSUS_TAG'] = ''
+            # Picks_Current is a complete snapshot of this run. Capture it
+            # before Daily_Picks removes same-day duplicates for grading.
+            df_picks_current = df_picks[
+                [c for c in PICK_OUTPUT_COLUMNS if c in df_picks.columns]
+            ].copy()
+            df_picks_current = df_picks_current.reset_index(drop=True)
+            df_picks_current['rank'] = range(1, len(df_picks_current) + 1)
+            print(
+                f"   📍 Picks_Current snapshot: {len(df_picks_current)} complete current pick(s)"
+            )
             dedup_keep = []
             duplicate_drop_msgs = []
             duplicate_reserve = []
@@ -3201,15 +3240,7 @@ Do not explain anything outside the JSON array.
             if duplicate_drop_msgs:
                 dropped_reasons.extend(duplicate_drop_msgs)
             df_picks = pd.DataFrame(dedup_keep)
-            col_order = ['DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team', 'opponent', 'opp_pitcher', 'prop_type',
-                         'line', 'lean', 'confidence', 'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note', 'DATA_SOURCE', 'source',
-                         'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
-                         'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
-                         'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
-                         'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CONSENSUS_TAG',
-                         'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA', 'CLV_LAST_UPDATE',
-                         'RESULT', 'ACTUAL_STAT', 'HIT', 'REALIZED_PROFIT', 'ACTUAL_ROI_PER_PICK', 'LAST_UPDATED']
-            df_picks = df_picks[[c for c in col_order if c in df_picks.columns]]
+            df_picks = df_picks[[c for c in PICK_OUTPUT_COLUMNS if c in df_picks.columns]]
             if not df_picks.empty:
                 df_picks = df_picks.reset_index(drop=True)
                 df_picks['rank'] = range(1, len(df_picks) + 1)
@@ -3595,8 +3626,8 @@ def validate_sheet_schema(sheet_name, df):
             except Exception:
                 pass
 
-def safe_upload(spreadsheet, sheet_name, df, max_retries=3):
-    if df is None or len(df) == 0:
+def safe_upload(spreadsheet, sheet_name, df, max_retries=3, allow_empty=False):
+    if df is None or (len(df) == 0 and not allow_empty):
         print(f"   ⏭️  {sheet_name}: No data — skipped")
         return
     validate_sheet_schema(sheet_name, df)
@@ -3616,7 +3647,10 @@ def safe_upload(spreadsheet, sheet_name, df, max_retries=3):
             needed_cols = len(df_clean.columns)
             if ws.row_count < needed_rows or ws.col_count < needed_cols:
                 ws.resize(rows=max(needed_rows, ws.row_count), cols=max(needed_cols, ws.col_count))
-            set_with_dataframe(ws, df_clean)
+            if df_clean.empty:
+                ws.update([df_clean.columns.tolist()], value_input_option='RAW')
+            else:
+                set_with_dataframe(ws, df_clean)
             print(f"   ✅ {sheet_name}: {len(df_clean)} rows × {len(df_clean.columns)} cols")
             try:
                 runlog.record_write(sheet_name, len(df_clean))
@@ -3677,6 +3711,13 @@ print(f"\nWriting {len(SHEETS_TO_WRITE)} sheets to '{SHEET_NAME}'...\n")
 for sheet_name, df in SHEETS_TO_WRITE.items():
     safe_upload(sh, sheet_name, df)
     time.sleep(2)
+
+# Picks_Current is an overwrite-only snapshot for the dashboard. Unlike
+# Daily_Picks history, an empty run clears stale recommendations.
+print(f"\n📍 Refreshing Picks_Current snapshot...")
+safe_upload(sh, 'Picks_Current', df_picks_current, allow_empty=True)
+time.sleep(2)
+
 # --- DAILY PICKS: APPEND-ONLY (preserves history) ---
 if df_picks is not None and len(df_picks) > 0:
     print(f"\n📌 Appending today's picks to Daily_Picks...")
