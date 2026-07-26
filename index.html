@@ -107,6 +107,22 @@ input::placeholder{color:var(--ink-muted)}
 .card-title{color:var(--accent);font-weight:700;font-size:var(--t-sm);margin-bottom:8px}
 .stats-strip{background:var(--surface-1);padding:10px 16px;border-bottom:1px solid var(--surface-2);overflow-x:auto}
 .stats-strip-inner{display:flex;gap:16px;min-width:max-content}
+.daily-leaders{padding:14px 16px 4px}
+.daily-leaders-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:10px}
+.daily-leaders-title{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-xl);font-weight:800;line-height:1;color:var(--ink-0)}
+.daily-leaders-sub{color:var(--ink-muted);font-size:var(--t-xs);margin-top:4px}
+.daily-leaders-metrics{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.daily-leaders-metric{border:1px solid var(--border-1);background:var(--surface-2);color:var(--ink-muted);border-radius:999px;padding:5px 9px;font-size:var(--t-xs);font-weight:800;cursor:pointer}
+.daily-leaders-metric.active{background:var(--accent);border-color:var(--accent);color:var(--surface-0)}
+.daily-leaders-list{border:1px solid var(--border-1);border-radius:6px;overflow:hidden;background:var(--surface-1)}
+.daily-leader-row{display:grid;grid-template-columns:38px minmax(0,1fr) 90px 64px;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--border-1);cursor:pointer}
+.daily-leader-row:first-child{border-top:0;background:color-mix(in srgb,var(--accent) 6%,var(--surface-1))}
+.daily-leader-rank{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:18px;font-weight:800;color:var(--ink-muted)}
+.daily-leader-row:first-child .daily-leader-rank,.daily-leader-row:first-child .daily-leader-value{color:var(--accent)}
+.daily-leader-name{font-weight:750;color:var(--ink-0)}
+.daily-leader-meta{font-size:10px;color:var(--ink-muted);margin-top:2px}
+.daily-leader-team{font-size:var(--t-xs);font-weight:750;color:var(--ink-muted);text-align:right}
+.daily-leader-value{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:22px;font-weight:800;color:var(--ink-0);text-align:right}
 .stat-item{text-align:center;min-width:40px}
 .stat-label{color:var(--accent-soft);font-size:var(--t-xs);margin-bottom:2px;font-weight:600}
 .stat-val{color:var(--accent);font-weight:700;font-size:var(--t-sm)}
@@ -687,6 +703,11 @@ td.push{color:var(--push);font-weight:700}
   .freshness-strip{grid-template-columns:1fr 1fr}
   .freshness-item:nth-child(2){border-right:0}
   .freshness-item:nth-child(-n+2){border-bottom:1px solid var(--border-1)}
+  .daily-leaders{padding:12px 10px 4px}
+  .daily-leaders-head{align-items:flex-start;flex-direction:column;gap:9px}
+  .daily-leaders-metrics{justify-content:flex-start}
+  .daily-leader-row{grid-template-columns:30px minmax(0,1fr) 48px;padding:9px 10px}
+  .daily-leader-team{display:none}
   .pick-feature{padding:13px}
   .pick-feature-name{font-size:24px}
   .pick-feature-line{font-size:27px}
@@ -910,7 +931,7 @@ let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
   picks:[],picksHistory:[],props:[],allBooksProps:[],teamRankings:[],
-  pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
+  pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",statsLeaderMetric:"H",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
   shortlistTray:loadShortlistTray(),shortlistTrayNotice:"",
   mode:"batter",
   player:"",metric:"H",line:"",activeTab:"picks",oppFilter:"",
@@ -2479,6 +2500,45 @@ function copyEntryToClipboard(){const entry=buildGameEntry();if(!entry)return;co
 function entryShowCopyFallback(text){window.__entryCopied=false;const box=document.createElement('textarea');box.value=text;box.style.position='fixed';box.style.left='10px';box.style.bottom='10px';box.style.width='320px';box.style.height='160px';box.style.zIndex='9999';document.body.appendChild(box);box.focus();box.select()}
 
 function setStatsTimeWindow(w){st.statsTimeWindow=w;render()}
+function setStatsLeaderMetric(metric){st.statsLeaderMetric=metric;render()}
+function getDailyLeaders(metric){
+  const pitcher=metric==="P_SO";
+  const stat= pitcher?"SO":metric;
+  const logs=pitcher?st.pGameLogs:st.gameLogs;
+  const today=easternTodayISO();
+  const dated=(logs||[]).map(row=>({...row,_leaderDate:entryDateISO(rowField(row,"game_date","GAME_DATE","DATE"))})).filter(row=>row._leaderDate&&row._leaderDate<today);
+  const date=dated.map(row=>row._leaderDate).sort().pop()||"";
+  if(!date)return{date:"",rows:[]};
+  const grouped=new Map();
+  dated.filter(row=>row._leaderDate===date).forEach(row=>{
+    const name=cleanName(rowField(row,"player_name","PLAYER_NAME","player"));
+    if(!name)return;
+    const key=normalizePlayerName(name);
+    const current=grouped.get(key)||{
+      name,team:String(rowField(row,"team_abbr","TEAM_ABBR","team")||""),
+      opp:String(rowField(row,"opp_abbr","OPP_ABBR","opponent")||""),
+      value:0,games:0,pitcher
+    };
+    current.value+=toNum(rowField(row,stat));
+    current.games+=1;
+    grouped.set(key,current);
+  });
+  return{date,rows:[...grouped.values()].filter(row=>row.value>0).sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name)).slice(0,10)};
+}
+function renderDailyLeaders(){
+  const metric=st.statsLeaderMetric||"H";
+  const board=getDailyLeaders(metric);
+  const labels={H:"Hits",HR:"Home runs",RBI:"Runs batted in",P_SO:"Pitcher strikeouts"};
+  const metricLabel=labels[metric]||metric;
+  const dateLabel=board.date?new Date(`${board.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"Latest completed slate";
+  const controls=[["H","Hits"],["HR","Home Runs"],["RBI","RBI"],["P_SO","Pitcher Ks"]]
+    .map(([value,label])=>`<button class="daily-leaders-metric ${metric===value?"active":""}" onclick="setStatsLeaderMetric('${value}')">${label}</button>`).join("");
+  const rows=board.rows.map((row,index)=>{
+    const detail=[row.team,row.opp?`vs ${row.opp}`:"",row.games>1?`${row.games} games`:""].filter(Boolean).join(" · ");
+    return`<div class="daily-leader-row" onclick="streakToDash(decodeURIComponent('${encodeURIComponent(row.name)}'),'${metric}','')"><div class="daily-leader-rank">${String(index+1).padStart(2,"0")}</div><div><div class="daily-leader-name">${esc(row.name)}</div><div class="daily-leader-meta">${esc(detail)}</div></div><div class="daily-leader-team">${row.pitcher?"PITCHER":"BATTER"}</div><div class="daily-leader-value">${row.value}</div></div>`;
+  }).join("");
+  return`<section class="daily-leaders"><div class="daily-leaders-head"><div><div class="analysis-eyebrow">Daily results</div><div class="daily-leaders-title">${esc(metricLabel)} Leaders</div><div class="daily-leaders-sub">${esc(dateLabel)} · final box scores from MLB game logs</div></div><div class="daily-leaders-metrics">${controls}</div></div>${rows?`<div class="daily-leaders-list">${rows}</div>`:`<div class="empty" style="padding:24px;text-align:center">No completed-game data available for this metric.</div>`}</section>`;
+}
 function statField(row,name){return row?.[name]??row?.[name.toLowerCase()]??row?.[name.toUpperCase()]??''}
 function statNum(row,name){return toNum(statField(row,name))}
 function statBool(row,name){const v=String(statField(row,name)).trim().toUpperCase();return v==='TRUE'||v==='YES'||v==='1'}
@@ -2677,7 +2737,7 @@ function renderPickBoardRow(model,index){
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
 
-function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Stats unavailable — Pick Performance data will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
+function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderDailyLeaders()+renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Pick Performance unavailable — grading analytics will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
 
 function render(){
   var picksHTML="";
