@@ -2898,9 +2898,11 @@ function render(){
     else{
       const hits=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="YES"||h==="TRUE"}).length;
       const miss=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="NO"||h==="FALSE"}).length;
-      const validated=todayPicks.filter(p=>String(rowField(p,"SELECTION_METHOD")||rowField(p,"CONSENSUS_TAG")).toUpperCase().includes("VALIDATED")).length;
       const tracked=hits+miss;
-      picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard)+`<div class="picks-summary"><div class="ps-card"><div class="ps-val">${todayPicks.length}</div><div class="ps-lbl">PLAYABLE</div></div><div class="ps-card"><div class="ps-val">${validated}</div><div class="ps-lbl">VALIDATED</div></div><div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">${researchCount}</div><div class="ps-lbl">RESEARCH ONLY</div></div>${tracked?`<div class="ps-card"><div class="ps-val" style="color:${hits>=miss?"var(--over)":"var(--under)"}">${hits}-${miss}</div><div class="ps-lbl">RECORD</div></div>`:`<div class="ps-card"><div class="ps-val" style="color:var(--ink-muted)">—</div><div class="ps-lbl">RECORD</div></div>`}</div>`;
+      picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard);
+      if(tracked){
+        picksHTML+=`<div style="display:flex;justify-content:flex-end;padding:0 16px 9px"><span class="pick-source-badge ${hits>=miss?"validated":"research"}">Current record ${hits}-${miss}</span></div>`;
+      }
       const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
       const pickModels=rankedPicks.map(getPickDisplayModel),featured=pickModels[0],remaining=pickModels.slice(1);
       picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L10</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;
