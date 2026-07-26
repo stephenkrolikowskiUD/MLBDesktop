@@ -111,6 +111,15 @@ input::placeholder{color:var(--ink-muted)}
 .daily-leaders-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:10px}
 .daily-leaders-title{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-xl);font-weight:800;line-height:1;color:var(--ink-0)}
 .daily-leaders-sub{color:var(--ink-muted);font-size:var(--t-xs);margin-top:4px}
+.daily-leaders-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.daily-leaders-mode{display:flex;border:1px solid var(--border-1);border-radius:6px;overflow:hidden;background:var(--surface-1)}
+.daily-leaders-mode button{border:0;border-right:1px solid var(--border-1);background:transparent;color:var(--ink-muted);padding:6px 10px;font-size:var(--t-xs);font-weight:800;cursor:pointer}
+.daily-leaders-mode button:last-child{border-right:0}
+.daily-leaders-mode button.active{background:var(--accent);color:var(--surface-0)}
+.daily-leaders-date-nav{display:flex;align-items:center;gap:5px}
+.daily-leaders-date-nav button{width:29px;height:29px;border:1px solid var(--border-1);border-radius:6px;background:var(--surface-2);color:var(--ink-0);font-weight:900;cursor:pointer}
+.daily-leaders-date-nav button:disabled{opacity:.3;cursor:default}
+.daily-leaders-live{color:var(--warn);font-weight:800}
 .daily-leaders-metrics{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .daily-leaders-metric{border:1px solid var(--border-1);background:var(--surface-2);color:var(--ink-muted);border-radius:999px;padding:5px 9px;font-size:var(--t-xs);font-weight:800;cursor:pointer}
 .daily-leaders-metric.active{background:var(--accent);border-color:var(--accent);color:var(--surface-0)}
@@ -705,6 +714,7 @@ td.push{color:var(--push);font-weight:700}
   .freshness-item:nth-child(-n+2){border-bottom:1px solid var(--border-1)}
   .daily-leaders{padding:12px 10px 4px}
   .daily-leaders-head{align-items:flex-start;flex-direction:column;gap:9px}
+  .daily-leaders-toolbar{justify-content:flex-start}
   .daily-leaders-metrics{justify-content:flex-start}
   .daily-leader-row{grid-template-columns:30px minmax(0,1fr) 48px;padding:9px 10px}
   .daily-leader-team{display:none}
@@ -932,7 +942,7 @@ let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
   picks:[],picksHistory:[],props:[],allBooksProps:[],teamRankings:[],
-  pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",statsLeaderMetric:"H",gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
+  pickPerformance:[],pickPerformanceSnaps:[],statsTimeWindow:"last_30d",statsLeaderMetric:"H",leaderMode:"final",leaderDateOffset:0,gameEntry:{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null},
   shortlistTray:loadShortlistTray(),shortlistTrayNotice:"",
   mode:"batter",
   player:"",metric:"H",line:"",activeTab:"picks",oppFilter:"",
@@ -2501,15 +2511,22 @@ function copyEntryToClipboard(){const entry=buildGameEntry();if(!entry)return;co
 function entryShowCopyFallback(text){window.__entryCopied=false;const box=document.createElement('textarea');box.value=text;box.style.position='fixed';box.style.left='10px';box.style.bottom='10px';box.style.width='320px';box.style.height='160px';box.style.zIndex='9999';document.body.appendChild(box);box.focus();box.select()}
 
 function setStatsTimeWindow(w){st.statsTimeWindow=w;render()}
-function setStatsLeaderMetric(metric){st.statsLeaderMetric=metric;render()}
+function setStatsLeaderMetric(metric){st.statsLeaderMetric=metric;st.leaderDateOffset=0;render()}
+function setLeaderMode(mode){st.leaderMode=mode==="live"?"live":"final";st.leaderDateOffset=0;render()}
+function shiftLeaderDate(delta){st.leaderDateOffset=Math.max(0,(st.leaderDateOffset||0)+delta);render()}
 function getDailyLeaders(metric){
   const pitcher=metric==="P_SO";
   const stat= pitcher?"SO":metric;
   const logs=pitcher?st.pGameLogs:st.gameLogs;
   const today=easternTodayISO();
-  const dated=(logs||[]).map(row=>({...row,_leaderDate:entryDateISO(rowField(row,"game_date","GAME_DATE","DATE"))})).filter(row=>row._leaderDate&&row._leaderDate<today);
-  const date=dated.map(row=>row._leaderDate).sort().pop()||"";
-  if(!date)return{date:"",rows:[]};
+  const dated=(logs||[]).map(row=>({...row,_leaderDate:entryDateISO(rowField(row,"game_date","GAME_DATE","DATE"))})).filter(row=>row._leaderDate);
+  const mode=st.leaderMode==="live"?"live":"final";
+  const finalDates=[...new Set(dated.filter(row=>row._leaderDate<today).map(row=>row._leaderDate))].sort().reverse();
+  const maxOffset=Math.max(0,finalDates.length-1);
+  const offset=Math.min(Math.max(0,st.leaderDateOffset||0),maxOffset);
+  if(offset!==st.leaderDateOffset)st.leaderDateOffset=offset;
+  const date=mode==="live"?today:(finalDates[offset]||"");
+  if(!date)return{date:"",rows:[],mode,hasPrevious:false,hasNext:false};
   const grouped=new Map();
   dated.filter(row=>row._leaderDate===date).forEach(row=>{
     const name=cleanName(rowField(row,"player_name","PLAYER_NAME","player"));
@@ -2524,7 +2541,12 @@ function getDailyLeaders(metric){
     current.games+=1;
     grouped.set(key,current);
   });
-  return{date,rows:[...grouped.values()].filter(row=>row.value>0).sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name)).slice(0,10)};
+  return{
+    date,mode,
+    hasPrevious:mode==="final"&&offset<maxOffset,
+    hasNext:mode==="final"&&offset>0,
+    rows:[...grouped.values()].filter(row=>row.value>0).sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name)).slice(0,10)
+  };
 }
 function renderDailyLeaders(){
   const metric=st.statsLeaderMetric||"H";
@@ -2532,13 +2554,18 @@ function renderDailyLeaders(){
   const labels={H:"Hits",HR:"Home runs",RBI:"Runs batted in",P_SO:"Pitcher strikeouts"};
   const metricLabel=labels[metric]||metric;
   const dateLabel=board.date?new Date(`${board.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"Latest completed slate";
+  const live=board.mode==="live";
+  const modeControls=`<div class="daily-leaders-mode"><button class="${live?"":"active"}" onclick="setLeaderMode('final')">Final</button><button class="${live?"active":""}" onclick="setLeaderMode('live')">Today so far</button></div>`;
+  const dateNav=live?"":`<div class="daily-leaders-date-nav"><button onclick="shiftLeaderDate(1)" ${board.hasPrevious?"":"disabled"} aria-label="Previous completed slate">‹</button><button onclick="shiftLeaderDate(-1)" ${board.hasNext?"":"disabled"} aria-label="Next completed slate">›</button></div>`;
   const controls=[["H","Hits"],["HR","Home Runs"],["RBI","RBI"],["P_SO","Pitcher Ks"]]
     .map(([value,label])=>`<button class="daily-leaders-metric ${metric===value?"active":""}" onclick="setStatsLeaderMetric('${value}')">${label}</button>`).join("");
   const rows=board.rows.map((row,index)=>{
     const detail=[row.team,row.opp?`vs ${row.opp}`:"",row.games>1?`${row.games} games`:""].filter(Boolean).join(" · ");
     return`<div class="daily-leader-row" onclick="streakToDash(decodeURIComponent('${encodeURIComponent(row.name)}'),'${metric}','')"><div class="daily-leader-rank">${String(index+1).padStart(2,"0")}</div><div><div class="daily-leader-name">${esc(row.name)}</div><div class="daily-leader-meta">${esc(detail)}</div></div><div class="daily-leader-team">${row.pitcher?"PITCHER":"BATTER"}</div><div class="daily-leader-value">${row.value}</div></div>`;
   }).join("");
-  return`<section class="daily-leaders"><div class="daily-leaders-head"><div><div class="analysis-eyebrow">Daily results</div><div class="daily-leaders-title">${esc(metricLabel)} Leaders</div><div class="daily-leaders-sub">${esc(dateLabel)} · final box scores from MLB game logs</div></div><div class="daily-leaders-metrics">${controls}</div></div>${rows?`<div class="daily-leaders-list">${rows}</div>`:`<div class="empty" style="padding:24px;text-align:center">No completed-game data available for this metric.</div>`}</section>`;
+  const sourceLabel=live?`<span class="daily-leaders-live">LIVE / INCOMPLETE</span> · games currently available in MLB game logs`:"final box scores from MLB game logs";
+  const emptyLabel=live?"No results have reached today's game logs yet.":"No completed-game data available for this metric.";
+  return`<section class="daily-leaders"><div class="daily-leaders-head"><div><div class="analysis-eyebrow">Daily results</div><div class="daily-leaders-title">${esc(metricLabel)} Leaders</div><div class="daily-leaders-sub">${esc(dateLabel)} · ${sourceLabel}</div></div><div class="daily-leaders-toolbar">${modeControls}${dateNav}<div class="daily-leaders-metrics">${controls}</div></div></div>${rows?`<div class="daily-leaders-list">${rows}</div>`:`<div class="empty" style="padding:24px;text-align:center">${emptyLabel}</div>`}</section>`;
 }
 function statField(row,name){return row?.[name]??row?.[name.toLowerCase()]??row?.[name.toUpperCase()]??''}
 function statNum(row,name){return toNum(statField(row,name))}
