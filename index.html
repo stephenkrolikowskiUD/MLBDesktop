@@ -2551,7 +2551,7 @@ function getDailyLeaders(metric){
 function renderDailyLeaders(){
   const metric=st.statsLeaderMetric||"H";
   const board=getDailyLeaders(metric);
-  const labels={H:"Hits",HR:"Home runs",RBI:"Runs batted in",P_SO:"Pitcher strikeouts"};
+  const labels={H:"Hits",HR:"Home runs",RBI:"RBI",P_SO:"Pitcher strikeouts"};
   const metricLabel=labels[metric]||metric;
   const dateLabel=board.date?new Date(`${board.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"Latest completed slate";
   const live=board.mode==="live";
@@ -2765,7 +2765,14 @@ function renderPickBoardRow(model,index){
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
 
-function renderLeadersView(){return `${renderDailyLeaders()}<div class="timestamp">Latest completed MLB slate · Click any player to open analysis</div>`}
+function renderLeadersView(){
+  const live=st.leaderMode==="live";
+  const refreshed=st.loadedAt||"this page load";
+  const status=live
+    ?`Today so far · Engine snapshot refreshed ${refreshed} · Not continuously live`
+    :`Finalized MLB game-log snapshot · Dashboard refreshed ${refreshed}`;
+  return `${renderDailyLeaders()}<div class="timestamp">${esc(status)} · Click any player to open analysis</div>`;
+}
 function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Pick Performance unavailable — grading analytics will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
 
 function render(){
