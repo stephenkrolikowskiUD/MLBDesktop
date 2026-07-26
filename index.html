@@ -954,7 +954,7 @@ td.push{color:var(--push);font-weight:700}
 </style>
 </head>
 <body>
-<div id="app"><div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Pulling matchups, markets, and recent form</div></div></div>
+<div id="app"><div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Finding the signal between the foul lines.</div></div></div>
 <script>
 const ICONS = {
   dash:   '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="7"/><rect x="9" y="2" width="5" height="4"/><rect x="9" y="8" width="5" height="6"/><rect x="2" y="11" width="5" height="3"/></svg>',
@@ -2898,7 +2898,7 @@ function render(){
   var picksHTML="";
   const focus=saveFocus();
   const app=document.getElementById("app");
-  if(st.loading){app.innerHTML=`<div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Pulling matchups, markets, and recent form</div></div>`;return}
+  if(st.loading){app.innerHTML=`<div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Finding the signal between the foul lines.</div></div>`;return}
   if(st.error){app.innerHTML=`<div class="error">⚠️ ${st.error}<br><br><span style="color:var(--ink-muted);font-size:var(--t-sm)">Make sure your Google Sheet is set to "Anyone with the link can view"</span></div>`;return}
 
   const isP=st.mode==="pitcher";
