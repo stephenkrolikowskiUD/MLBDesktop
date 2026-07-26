@@ -452,6 +452,14 @@ td.push{color:var(--push);font-weight:700}
 .stat-box .lbl{font-size:var(--t-xs);color:var(--accent-soft);margin-top:2px}
 .lk-tbl-wrap{overflow-x:auto;padding:0 16px 16px}
 .lk-section{padding:14px 16px 0}
+.lookup-search-shell{padding:34px 16px 24px;border-bottom:1px solid var(--border-1)}
+.lookup-search-inner{max-width:720px;margin:0 auto}
+.lookup-search-kicker{color:var(--accent);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.lookup-search-title{font-family:"Barlow Condensed",system-ui,sans-serif;color:var(--ink-0);font-size:32px;font-weight:800;line-height:1;margin-top:5px}
+.lookup-search-wrap{margin-top:16px}
+.lookup-search-wrap input{height:48px;padding:0 15px;font-size:var(--t-md);border-color:var(--accent-line);background:var(--surface-1)}
+.lookup-search-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 16%,transparent)}
+.lookup-empty{padding:42px 20px;text-align:center;color:var(--ink-muted);font-size:var(--t-sm)}
 .empty{color:var(--ink-muted);font-size:var(--t-sm);padding:20px;text-align:center}
 .loading-sm{color:var(--ink-muted);font-size:var(--t-sm);padding:20px;text-align:center}
 .picks-summary{display:flex;gap:8px;padding:0 16px 8px}
@@ -825,6 +833,8 @@ td.push{color:var(--push);font-weight:700}
   .analysis-market-row{grid-template-columns:minmax(80px,1fr) 55px 80px;gap:8px}
   .analysis-market-best{grid-column:1/-1}
   .analysis-chart .bar-chart{height:118px}
+  .lookup-search-shell{padding:24px 10px 18px}
+  .lookup-search-title{font-size:28px}
 }
 
 /* ═══ TABLET+ (768px) ═══ */
@@ -1001,7 +1011,7 @@ let st={
   picksView:"shortlist",propsMetric:"ALL",propsSearch:"",propsTeam:"ALL",propsSort:"EDGE",propsMinHit:"0",propsMinEdge:"5",
   streakFilter:"all",dueFilter:"all",drafted:new Set(),slipLegs:"3",
   vsSP:[],
-  lkPlayer:null,lkResults:[],lkSubTab:"career",lkPlayerType:"batter",
+  lkPlayer:null,lkResults:[],lkQuery:"",lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
   lkVsPlayerName:"",lkVsPlayerResults:[],lkVsPlayerStats:null,
   lkVsTeamId:null,lkLoading:{},lkTeamList:[],
@@ -3387,7 +3397,6 @@ function render(){
         <input type="number" id="lineInput" value="${line}" placeholder="Line" step="0.5"/>
       </div>
     </div>`:""}
-    ${activeTab==="lookup"?`<div class="header-controls"><div class="search-wrap" style="flex:1;max-width:500px"><input type="text" id="lkSearch" placeholder="Search any MLB player..." autocomplete="off"/>${lkSugs}</div></div>`:""}
   </div>
 
   <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
@@ -3438,7 +3447,8 @@ function render(){
   <div id="pg-entry" class="page ${activeTab==="entry"?"active":""}">${renderGameEntryView()}</div>
 
   <div id="pg-lookup" class="page ${activeTab==="lookup"?"active":""}">
-    ${lk?`<div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>${lkSum}<div class="sub-tabs"><div class="sub-tab ${st.lkSubTab==="career"?"active":""}" onclick="switchLkSub('career')">Career</div><div class="sub-tab ${st.lkSubTab==="vsTeam"?"active":""}" onclick="switchLkSub('vsTeam')">vs Team</div><div class="sub-tab ${st.lkSubTab==="vsPlayer"?"active":""}" onclick="switchLkSub('vsPlayer')">vs Player</div></div>${lkBody}`:`<div class="empty" style="padding:60px 20px;font-size:var(--t-md)">Search for any active MLB player to see career stats, team matchups, and head-to-head data.</div>`}
+    <section class="lookup-search-shell"><div class="lookup-search-inner"><div class="lookup-search-kicker">MLB player database</div><div class="lookup-search-title">Player lookup</div><div class="search-wrap lookup-search-wrap"><input type="search" id="lkSearch" placeholder="Search any active MLB player" value="${esc(st.lkQuery)}" autocomplete="off"/>${lkSugs}</div></div></section>
+    ${lk?`<div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>${lkSum}<div class="sub-tabs"><div class="sub-tab ${st.lkSubTab==="career"?"active":""}" onclick="switchLkSub('career')">Career</div><div class="sub-tab ${st.lkSubTab==="vsTeam"?"active":""}" onclick="switchLkSub('vsTeam')">vs Team</div><div class="sub-tab ${st.lkSubTab==="vsPlayer"?"active":""}" onclick="switchLkSub('vsPlayer')">vs Player</div></div>${lkBody}`:`<div class="lookup-empty">Search by player name to begin.</div>`}
     <div class="timestamp">Data from MLB Stats API · Live</div>
   </div>
 
@@ -3471,7 +3481,7 @@ function render(){
   document.getElementById("themeBtn")?.addEventListener("click",toggleTheme);
   document.getElementById("refreshBtn")?.addEventListener("click",loadAllData);
   const of=document.getElementById("oppFilter");if(of)of.onchange=e=>{st.oppFilter=e.target.value;render()};
-  const lkS=document.getElementById("lkSearch");if(lkS)lkS.oninput=e=>{clearTimeout(window._lkT);window._lkT=setTimeout(()=>searchLkPlayers(e.target.value),300)};
+  const lkS=document.getElementById("lkSearch");if(lkS)lkS.oninput=e=>{st.lkQuery=e.target.value;clearTimeout(window._lkT);window._lkT=setTimeout(()=>searchLkPlayers(e.target.value),300)};
   const vts=document.getElementById("vsTeamSel");if(vts)vts.onchange=e=>{st.lkVsTeamId=e.target.value?parseInt(e.target.value):null;fetchLkVsTeam(st.lkPlayer.id,st.lkVsTeamId)};
   const vpi=document.getElementById("vsPlayerInput");if(vpi)vpi.oninput=e=>{clearTimeout(window._vpT);window._vpT=setTimeout(()=>searchVsP(e.target.value),300)};
   const psi=document.getElementById("propsSearchInput");if(psi)psi.oninput=e=>{st.propsSearch=e.target.value;render()};
@@ -3484,11 +3494,12 @@ function render(){
 }
 
 async function searchLkPlayers(q){
+  st.lkQuery=q;
   if(q.length<2){st.lkResults=[];render();return}
   try{const d=await mlbFetch(`${MLB_API}/people/search?names=${encodeURIComponent(q)}&sportId=1&hydrate=currentTeam&limit=10`);st.lkResults=(d.people||[]).filter(p=>p.active).map(p=>({id:p.id,name:p.fullName,team:p.currentTeam?.abbreviation||"",pos:p.primaryPosition?.abbreviation||"",number:p.primaryNumber||"",bats:p.batSide?.code||"",throws:p.pitchHand?.code||"",img:`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${p.id}/headshot/67/current`}));render()}catch(e){console.error(e)}
 }
 function pickLkPlayer(i){
-  const p=st.lkResults[i];st.lkPlayer=p;st.lkResults=[];st.lkSubTab="career";
+  const p=st.lkResults[i];st.lkPlayer=p;st.lkQuery=p.name;st.lkResults=[];st.lkSubTab="career";
   st.lkCareer=null;st.lkYby=null;st.lkVsTeamStats=null;st.lkVsPlayerStats=null;st.lkVsPlayerId=null;st.lkVsPlayerName="";st.lkVsTeamId=null;
   st.lkPlayerType=["P","TWP"].includes(p.pos)?"pitcher":"batter";
   const isP=["P","TWP"].includes(p.pos);
