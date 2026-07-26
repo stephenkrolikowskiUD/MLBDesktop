@@ -1077,8 +1077,10 @@ def get_player_game_log(player_id, season):
         for split in splits:
             stat = split.get('stat', {})
             opp_id = split.get('opponent', {}).get('id')
+            game = split.get('game', {}) or {}
             games.append({
                 'player_id': player_id,
+                'game_pk': game.get('gamePk') or game.get('pk') or split.get('gamePk') or '',
                 'game_date': split.get('date', ''),
                 'team_abbr': team_id_to_abbr.get(split.get('team', {}).get('id'), ''),
                 'opp_abbr': team_id_to_abbr.get(opp_id, split.get('opponent', {}).get('abbreviation', '')),
@@ -1101,7 +1103,7 @@ def get_player_game_log(player_id, season):
     except Exception:
         return []
 
-BATTER_LOG_BASE_COLS = ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
+BATTER_LOG_BASE_COLS = ['player_id', 'game_pk', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
                         'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
 BATTER_LOG_NUMERIC_COLS = ['player_id', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
 existing_batter_logs = load_existing_log_sheet('Batter_Game_Logs', BATTER_LOG_BASE_COLS, BATTER_LOG_NUMERIC_COLS)
@@ -1121,7 +1123,8 @@ def fetch_one_batter_log(batter):
     logs = get_player_game_log(batter['player_id'], SEASON)
     cutoff = latest_batter_date_by_pid.get(batter['player_id'])
     if cutoff:
-        logs = [log for log in logs if normalize_game_date(log.get('game_date')) > cutoff]
+        refresh_from = (pd.to_datetime(cutoff) - pd.Timedelta(days=2)).strftime('%Y-%m-%d')
+        logs = [log for log in logs if normalize_game_date(log.get('game_date')) >= refresh_from]
     for log in logs:
         log['player_name'] = batter['player_name']
         log['game_date'] = normalize_game_date(log['game_date'])
@@ -1141,16 +1144,38 @@ with ThreadPoolExecutor(max_workers=15) as executor:
 
 elapsed = time.time() - start_time
 new_batter_logs = pd.DataFrame(all_game_logs, columns=BATTER_LOG_BASE_COLS)
+# Replace any cached player/date represented in the refresh batch. A game-log
+# row may have been captured before the final out; appending alone would leave
+# both the partial and final lines in history.
+refreshed_batter_rows = 0
+if len(existing_batter_logs) > 0 and len(new_batter_logs) > 0:
+    new_batter_logs['game_date'] = new_batter_logs['game_date'].map(normalize_game_date)
+    refresh_keys = {
+        (int(float(pid)), game_date)
+        for pid, game_date in zip(new_batter_logs['player_id'], new_batter_logs['game_date'])
+        if pd.notna(pid) and game_date
+    }
+    existing_batter_logs['game_date'] = existing_batter_logs['game_date'].map(normalize_game_date)
+    keep_existing = [
+        (int(float(pid)), game_date) not in refresh_keys
+        if pd.notna(pid) else True
+        for pid, game_date in zip(existing_batter_logs['player_id'], existing_batter_logs['game_date'])
+    ]
+    refreshed_batter_rows = len(existing_batter_logs) - sum(keep_existing)
+    existing_batter_logs = existing_batter_logs.loc[keep_existing].copy()
 combined_batter_logs = pd.concat([existing_batter_logs, new_batter_logs], ignore_index=True)
 if len(combined_batter_logs) > 0:
     combined_batter_logs['game_date'] = combined_batter_logs['game_date'].map(normalize_game_date)
     dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
-    combined_batter_logs = combined_batter_logs.drop_duplicates(subset=dedupe_cols, keep='last')
+    has_game_pk = combined_batter_logs['game_pk'].notna() & combined_batter_logs['game_pk'].astype(str).str.strip().ne('')
+    logs_with_pk = combined_batter_logs.loc[has_game_pk].drop_duplicates(subset=['player_id', 'game_pk'], keep='last')
+    logs_without_pk = combined_batter_logs.loc[~has_game_pk].drop_duplicates(subset=dedupe_cols, keep='last')
+    combined_batter_logs = pd.concat([logs_without_pk, logs_with_pk], ignore_index=True)
     combined_batter_logs['game_date'] = pd.to_datetime(combined_batter_logs['game_date'], errors='coerce')
     df_logs = combined_batter_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
 else:
     df_logs = combined_batter_logs
-print(f"✅ Fetched {len(new_batter_logs)} new batter logs; {len(df_logs)} combined logs across {df_logs['player_name'].nunique() if len(df_logs) > 0 else 0} players in {elapsed:.1f}s")
+print(f"✅ Fetched {len(new_batter_logs)} recent/new batter logs; refreshed {refreshed_batter_rows} cached rows; {len(df_logs)} combined logs across {df_logs['player_name'].nunique() if len(df_logs) > 0 else 0} players in {elapsed:.1f}s")
 
 # --- 4. CALCULATE METRICS & ROLLING AVERAGES ---
 print("\nCalculating metrics and rolling averages...")
@@ -3309,9 +3334,12 @@ def get_pitcher_game_log(player_id, season):
         for split in splits:
             stat = split.get('stat', {})
             opp_id = split.get('opponent', {}).get('id')
+            game = split.get('game', {}) or {}
             ip_outs = innings_to_outs(stat.get('inningsPitched', '0'))
             games.append({
-                'player_id': player_id, 'game_date': split.get('date', ''),
+                'player_id': player_id,
+                'game_pk': game.get('gamePk') or game.get('pk') or split.get('gamePk') or '',
+                'game_date': split.get('date', ''),
                 'team_abbr': team_id_to_abbr.get(split.get('team', {}).get('id'), ''),
                 'opp_abbr': team_id_to_abbr.get(opp_id, split.get('opponent', {}).get('abbreviation', '')),
                 'home_away': 'Home' if split.get('isHome', True) else 'Away',
@@ -3328,7 +3356,7 @@ def get_pitcher_game_log(player_id, season):
     except Exception:
         return []
 
-PITCHER_LOG_BASE_COLS = ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
+PITCHER_LOG_BASE_COLS = ['player_id', 'game_pk', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
                          'IP', 'IP_DISPLAY', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP', 'ERA']
 PITCHER_LOG_NUMERIC_COLS = ['player_id', 'IP', 'IP_DISPLAY', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP', 'ERA']
 existing_pitcher_logs = load_existing_log_sheet('Pitcher_Game_Logs', PITCHER_LOG_BASE_COLS, PITCHER_LOG_NUMERIC_COLS)
@@ -3348,7 +3376,8 @@ def fetch_one_pitcher_log(pitcher):
     logs = get_pitcher_game_log(pitcher['player_id'], SEASON)
     cutoff = latest_pitcher_date_by_pid.get(pitcher['player_id'])
     if cutoff:
-        logs = [log for log in logs if normalize_game_date(log.get('game_date')) > cutoff]
+        refresh_from = (pd.to_datetime(cutoff) - pd.Timedelta(days=2)).strftime('%Y-%m-%d')
+        logs = [log for log in logs if normalize_game_date(log.get('game_date')) >= refresh_from]
     for log in logs:
         log['player_name'] = pitcher['player_name']
         log['game_date'] = normalize_game_date(log['game_date'])
@@ -3367,14 +3396,33 @@ with ThreadPoolExecutor(max_workers=15) as executor:
 
 elapsed = time.time() - start_time
 new_pitcher_logs = pd.DataFrame(all_pitcher_logs, columns=PITCHER_LOG_BASE_COLS)
+refreshed_pitcher_rows = 0
+if len(existing_pitcher_logs) > 0 and len(new_pitcher_logs) > 0:
+    new_pitcher_logs['game_date'] = new_pitcher_logs['game_date'].map(normalize_game_date)
+    refresh_keys = {
+        (int(float(pid)), game_date)
+        for pid, game_date in zip(new_pitcher_logs['player_id'], new_pitcher_logs['game_date'])
+        if pd.notna(pid) and game_date
+    }
+    existing_pitcher_logs['game_date'] = existing_pitcher_logs['game_date'].map(normalize_game_date)
+    keep_existing = [
+        (int(float(pid)), game_date) not in refresh_keys
+        if pd.notna(pid) else True
+        for pid, game_date in zip(existing_pitcher_logs['player_id'], existing_pitcher_logs['game_date'])
+    ]
+    refreshed_pitcher_rows = len(existing_pitcher_logs) - sum(keep_existing)
+    existing_pitcher_logs = existing_pitcher_logs.loc[keep_existing].copy()
 combined_pitcher_logs = pd.concat([existing_pitcher_logs, new_pitcher_logs], ignore_index=True)
 if len(combined_pitcher_logs) > 0:
     combined_pitcher_logs['game_date'] = combined_pitcher_logs['game_date'].map(normalize_game_date)
     dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP']
-    combined_pitcher_logs = combined_pitcher_logs.drop_duplicates(subset=dedupe_cols, keep='last')
+    has_game_pk = combined_pitcher_logs['game_pk'].notna() & combined_pitcher_logs['game_pk'].astype(str).str.strip().ne('')
+    logs_with_pk = combined_pitcher_logs.loc[has_game_pk].drop_duplicates(subset=['player_id', 'game_pk'], keep='last')
+    logs_without_pk = combined_pitcher_logs.loc[~has_game_pk].drop_duplicates(subset=dedupe_cols, keep='last')
+    combined_pitcher_logs = pd.concat([logs_without_pk, logs_with_pk], ignore_index=True)
     combined_pitcher_logs['game_date'] = pd.to_datetime(combined_pitcher_logs['game_date'], errors='coerce')
     df_pitcher_logs = combined_pitcher_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
-    print(f"✅ Fetched {len(new_pitcher_logs)} new pitcher logs; {len(df_pitcher_logs)} combined pitcher logs across {df_pitcher_logs['player_name'].nunique()} pitchers in {elapsed:.1f}s")
+    print(f"✅ Fetched {len(new_pitcher_logs)} recent/new pitcher logs; refreshed {refreshed_pitcher_rows} cached rows; {len(df_pitcher_logs)} combined pitcher logs across {df_pitcher_logs['player_name'].nunique()} pitchers in {elapsed:.1f}s")
 else:
     df_pitcher_logs = combined_pitcher_logs
     print("⚠️ No pitcher game logs found")
