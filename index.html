@@ -889,6 +889,7 @@ const ICONS = {
   log:    '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10v10H3z"/><path d="M5.5 6h5M5.5 8.5h5M5.5 11h3"/></svg>',
   picks:  '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/></svg>',
   stats:  '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13V6"/><path d="M6 13V3"/><path d="M10 13V8"/><path d="M14 13V5"/></svg>',
+  leaders:'<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h12"/><path d="M3 13V9h3v4M6.5 13V5h3v8M10 13V7h3v6"/></svg>',
   entry:  '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h12v5H2z"/><path d="M6 5.5v5M10 5.5v5"/></svg>',
   lookup: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>',
   info:   '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 7v4M8 5v0.1"/></svg>',
@@ -2737,7 +2738,8 @@ function renderPickBoardRow(model,index){
 function bestBookKeyForLean(prop,lean){const b=getBestBookForLean(prop,lean);return b?formatBookName(b.book):""}
 function renderCrossBookWarning(legs){const books=[...new Set((legs||[]).map(l=>bestBookKeyForLean(l.prop,l.lean)).filter(Boolean))];return books.length>=2?`<div class="cross-book-warning" style="margin-top:6px;font-size:var(--t-xs);color:var(--warn);background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid var(--warn-line);border-radius:6px;padding:6px">${icon('warn')}Best book differs across legs (${books.join(", ")}). Single-book parlay may not match leg-by-leg EV.</div>`:""}
 
-function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderDailyLeaders()+renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Pick Performance unavailable — grading analytics will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
+function renderLeadersView(){return `${renderDailyLeaders()}<div class="timestamp">Latest completed MLB slate · Click any player to open analysis</div>`}
+function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Pick Performance unavailable — grading analytics will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
 
 function render(){
   var picksHTML="";
@@ -3224,6 +3226,7 @@ function render(){
       <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">${icon('log')}<span>Log</span></button>
       <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">${icon('picks')}<span>Picks</span></button>
       <button class="tab-btn ${activeTab==="stats"?"active":""}" onclick="switchTab('stats')">${icon('stats')}<span>Stats</span></button>
+      <button class="tab-btn ${activeTab==="leaders"?"active":""}" onclick="switchTab('leaders')">${icon('leaders')}<span>Leaders</span></button>
       <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Game Builder</span></button>
       <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">${icon('lookup')}<span>Lookup</span></button>
       <button class="tab-btn ${activeTab==="method"?"active":""}" onclick="switchTab('method')">${icon('info')}<span>Info</span></button>
@@ -3297,6 +3300,7 @@ function render(){
   </div>
 
   <div id="pg-stats" class="page ${activeTab==="stats"?"active":""}">${renderStatsView()}</div>
+  <div id="pg-leaders" class="page ${activeTab==="leaders"?"active":""}">${renderLeadersView()}</div>
   <div id="pg-entry" class="page ${activeTab==="entry"?"active":""}">${renderGameEntryView()}</div>
 
   <div id="pg-lookup" class="page ${activeTab==="lookup"?"active":""}">
@@ -3323,6 +3327,7 @@ function render(){
     <button class="tab-btn ${activeTab==="gamelog"?"active":""}" onclick="switchTab('gamelog')">${icon('log')}<span>Log</span></button>
     <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">${icon('picks')}<span>Picks</span></button>
     <button class="tab-btn ${activeTab==="stats"?"active":""}" onclick="switchTab('stats')">${icon('stats')}<span>Stats</span></button>
+    <button class="tab-btn ${activeTab==="leaders"?"active":""}" onclick="switchTab('leaders')">${icon('leaders')}<span>Leaders</span></button>
     <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Builder</span></button>
     <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">${icon('lookup')}<span>Lookup</span></button>
     <button class="tab-btn ${activeTab==="method"?"active":""}" onclick="switchTab('method')">${icon('info')}<span>Info</span></button>
