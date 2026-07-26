@@ -247,6 +247,15 @@ td.push{color:var(--push);font-weight:700}
 .model-picks-intro{padding:12px 16px 10px}
 .model-picks-title{font-family:"Barlow Condensed",system-ui,sans-serif;color:var(--ink-0);font-size:var(--t-xl);font-weight:800;line-height:1}
 .model-picks-sub{color:var(--ink-muted);font-size:var(--t-xs);line-height:1.45;margin-top:5px;max-width:760px}
+.run-health-strip{display:grid;grid-template-columns:1.05fr .8fr .8fr 1fr 1.15fr;border:1px solid var(--border-1);border-radius:6px;margin-top:11px;overflow:hidden}
+.run-health-item{padding:9px 10px;background:var(--surface-1);border-right:1px solid var(--border-1);min-width:0}
+.run-health-item:last-child{border-right:0}
+.run-health-label{color:var(--ink-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.run-health-value{color:var(--ink-0);font-family:"Barlow Condensed",system-ui,sans-serif;font-size:18px;font-weight:800;line-height:1.05;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-health-meta{color:var(--ink-muted);font-size:10px;line-height:1.25;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run-health-item.good .run-health-value{color:var(--over)}
+.run-health-item.warn .run-health-value{color:var(--warn)}
+.run-health-item.missing .run-health-value{color:var(--under)}
 .freshness-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--border-1);border-radius:6px;margin-top:11px;overflow:hidden}
 .freshness-item{padding:9px 10px;background:var(--surface-1);border-right:1px solid var(--border-1);min-width:0}
 .freshness-item:last-child{border-right:0}
@@ -671,6 +680,10 @@ td.push{color:var(--push);font-weight:700}
   .lineup-risk-badge,.lineup-risk-text{font-size:var(--t-xs);line-height:1.2}
   .pick-editorial{padding:0 10px 12px}
   .model-picks-intro{padding:11px 10px 9px}
+  .run-health-strip{grid-template-columns:1fr 1fr}
+  .run-health-item:nth-child(even){border-right:0}
+  .run-health-item:nth-child(-n+4){border-bottom:1px solid var(--border-1)}
+  .run-health-item:last-child{grid-column:1/-1}
   .freshness-strip{grid-template-columns:1fr 1fr}
   .freshness-item:nth-child(2){border-right:0}
   .freshness-item:nth-child(-n+2){border-bottom:1px solid var(--border-1)}
@@ -1262,6 +1275,48 @@ function getModelFreshness(){
 }
 function renderModelFreshness(){
   return `<div class="freshness-strip">${getModelFreshness().map(signal=>`<div class="freshness-item ${signal.level}"><div class="freshness-label">${esc(signal.label)}</div><div class="freshness-value"><span class="freshness-dot"></span>${esc(signal.value)}</div></div>`).join("")}</div>`;
+}
+function compactRunTime(value){
+  const ms=parseEasternTimestamp(value);
+  if(ms===null)return value?String(value):"Time unavailable";
+  return new Date(ms).toLocaleString("en-US",{
+    timeZone:"America/New_York",month:"short",day:"numeric",
+    hour:"numeric",minute:"2-digit",hour12:true
+  });
+}
+function getModelRunHealth(rows){
+  const picks=rows||[];
+  if(!picks.length)return[
+    {label:"Engine run",value:"No snapshot",meta:"Waiting for current picks",level:"missing"},
+    {label:"Snapshot",value:"0 picks",meta:"No active cohort",level:"missing"},
+    {label:"Playable",value:"0",meta:"No slate-ready picks",level:"missing"},
+    {label:"Validated / research",value:"0 / 0",meta:"No selections",level:"missing"},
+    {label:"Gemini delivery",value:"No output",meta:"Target 14 reviewed picks",level:"missing"},
+  ];
+  const runNumber=Math.max(...picks.map(p=>toNum(rowField(p,"RUN_NUMBER"))||0));
+  const runTime=picks.map(p=>rowField(p,"RUN_TIME")||rowField(p,"LAST_UPDATED")).find(Boolean);
+  const playable=picks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).trim().toUpperCase()==="PLAYABLE").length;
+  const research=picks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).trim().toUpperCase()==="RESEARCH").length;
+  const validated=picks.filter(p=>String(rowField(p,"SELECTION_METHOD")||rowField(p,"CONSENSUS_TAG")).toUpperCase().includes("VALIDATED")).length;
+  const backfills=picks.filter(p=>{
+    const text=`${rowField(p,"CONSENSUS_TAG")} ${rowField(p,"rationale")} ${rowField(p,"reasoning")}`.toUpperCase();
+    return text.includes("BACKFILL");
+  }).length;
+  const geminiReviewed=Math.max(0,picks.length-validated);
+  const target=14;
+  const deliveryLevel=geminiReviewed>=target?"good":backfills?"warn":"missing";
+  const deliveryValue=geminiReviewed>=target?`${geminiReviewed}/${target} met`:`${geminiReviewed}/${target}`;
+  const deliveryMeta=backfills?`${backfills} validated backfill${backfills===1?"":"s"}`:"No backfill required";
+  return[
+    {label:"Engine run",value:runNumber?`#${runNumber}`:"Current",meta:compactRunTime(runTime),level:"good"},
+    {label:"Snapshot",value:`${picks.length} picks`,meta:"Complete current cohort",level:picks.length?"good":"missing"},
+    {label:"Playable",value:String(playable),meta:`${picks.length?Math.round(playable/picks.length*100):0}% of snapshot`,level:playable?"good":"warn"},
+    {label:"Validated / research",value:`${validated} / ${research}`,meta:"Model / learning cohort",level:""},
+    {label:"Gemini delivery",value:deliveryValue,meta:deliveryMeta,level:deliveryLevel},
+  ];
+}
+function renderModelRunHealth(rows){
+  return `<div class="run-health-strip">${getModelRunHealth(rows).map(item=>`<div class="run-health-item ${item.level||""}"><div class="run-health-label">${esc(item.label)}</div><div class="run-health-value">${esc(item.value)}</div><div class="run-health-meta">${esc(item.meta)}</div></div>`).join("")}</div>`;
 }
 
 const COMBO_STATS={
@@ -2838,7 +2893,7 @@ function render(){
     const todayPicks=hasCalibrationStatus?allTodayPicks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).toUpperCase()==="PLAYABLE"):allTodayPicks;
     const researchCount=hasCalibrationStatus?allTodayPicks.length-todayPicks.length:0;
     const pickGuard=st.pickGuard;
-    const modelIntro=`<section class="model-picks-intro"><div class="model-picks-title">Model Picks</div><div class="model-picks-sub">Ranked recommendations from the deterministic market model and Gemini review layer. Provenance, evidence, and source freshness stay visible so every call can be audited.</div>${renderModelFreshness()}</section>`;
+    const modelIntro=`<section class="model-picks-intro"><div class="model-picks-title">Model Picks</div><div class="model-picks-sub">Ranked recommendations from the deterministic market model and Gemini review layer. Provenance, evidence, and source freshness stay visible so every call can be audited.</div>${renderModelRunHealth(allTodayPicks)}${renderModelFreshness()}</section>`;
     if(!todayPicks.length){picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">${hasCalibrationStatus?`No calibrated play qualifies today. ${researchCount} research pick${researchCount===1?"":"s"} remain tracked for model learning.`:"No model picks today. Run the engine to generate."}</div>`}
     else{
       const hits=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="YES"||h==="TRUE"}).length;
