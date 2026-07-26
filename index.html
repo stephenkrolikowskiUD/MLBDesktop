@@ -169,12 +169,29 @@ input::placeholder{color:var(--ink-muted)}
 .hit-val{color:var(--ink-0);font-size:var(--t-sm);font-weight:600}
 .timestamp{text-align:center;padding:16px;color:var(--ink-quiet);font-size:var(--t-xs)}
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px}
+.diamond-loader{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;background:var(--surface-0)}
+.diamond-loader-mark{position:relative;width:112px;height:112px;margin-bottom:20px}
+.diamond-loader-field{position:absolute;width:68px;height:68px;left:22px;top:22px;border:2px solid var(--accent);border-radius:4px;transform:rotate(45deg);background:color-mix(in srgb,var(--accent) 5%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 10%,transparent)}
+.diamond-loader-base{position:absolute;width:9px;height:9px;background:var(--ink-0);border:2px solid var(--surface-0);border-radius:2px;transform:rotate(45deg);z-index:2}
+.diamond-loader-base.home{left:52px;top:100px}.diamond-loader-base.first{left:100px;top:52px}.diamond-loader-base.second{left:52px;top:4px}.diamond-loader-base.third{left:4px;top:52px}
+.diamond-loader-ball{position:absolute;left:51px;top:99px;width:11px;height:11px;border-radius:50%;background:#f8f6ed;border:1px solid #c8c2b4;box-shadow:0 2px 7px rgba(0,0,0,.35);z-index:3}
+.diamond-loader-ball::before,.diamond-loader-ball::after{content:"";position:absolute;top:2px;width:4px;height:6px;border-radius:50%;border-left:1px solid #c74e4e}
+.diamond-loader-ball::before{left:2px;transform:rotate(-18deg)}.diamond-loader-ball::after{right:0;transform:rotate(162deg)}
+.diamond-loader-title{font-family:var(--font-display);font-size:var(--t-xl);color:var(--ink-0);letter-spacing:0;text-transform:uppercase}
+.diamond-loader-copy{margin-top:6px;color:var(--ink-muted);font-size:var(--t-sm)}
 .skeleton-page{padding:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3)}
 .skeleton-row{background:var(--surface-1);border-radius:var(--r-md);overflow:hidden;position:relative}
 .skeleton-row.h-header{height:48px}
 .skeleton-row.h-strip{height:64px}
 .skeleton-row.h-card{height:96px}
 @media (prefers-reduced-motion:no-preference){
+  .diamond-loader-ball{animation:run-bases 2.4s cubic-bezier(.45,.05,.55,.95) infinite}
+  @keyframes run-bases{
+    0%,100%{transform:translate(0,0) rotate(0)}
+    25%{transform:translate(48px,-48px) rotate(180deg)}
+    50%{transform:translate(0,-96px) rotate(360deg)}
+    75%{transform:translate(-48px,-48px) rotate(540deg)}
+  }
   .skeleton-row::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.03) 50%,transparent 100%);animation:sk-shimmer 1.4s ease-in-out infinite}
   @keyframes sk-shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 }
@@ -920,7 +937,7 @@ td.push{color:var(--push);font-weight:700}
 </style>
 </head>
 <body>
-<div id="app"><div class="skeleton-page"><div class="skeleton-row h-header"></div><div class="skeleton-row h-strip"></div><div class="skeleton-row h-card"></div><div class="skeleton-row h-card"></div><div class="skeleton-row h-card"></div></div></div>
+<div id="app"><div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Pulling matchups, markets, and recent form</div></div></div>
 <script>
 const ICONS = {
   dash:   '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="7"/><rect x="9" y="2" width="5" height="4"/><rect x="9" y="8" width="5" height="6"/><rect x="2" y="11" width="5" height="3"/></svg>',
@@ -2860,7 +2877,7 @@ function render(){
   var picksHTML="";
   const focus=saveFocus();
   const app=document.getElementById("app");
-  if(st.loading){app.innerHTML=`<div class="skeleton-page"><div class="skeleton-row h-header"></div><div class="skeleton-row h-strip"></div><div class="skeleton-row h-card"></div><div class="skeleton-row h-card"></div><div class="skeleton-row h-card"></div></div>`;return}
+  if(st.loading){app.innerHTML=`<div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Pulling matchups, markets, and recent form</div></div>`;return}
   if(st.error){app.innerHTML=`<div class="error">⚠️ ${st.error}<br><br><span style="color:var(--ink-muted);font-size:var(--t-sm)">Make sure your Google Sheet is set to "Anyone with the link can view"</span></div>`;return}
 
   const isP=st.mode==="pitcher";
