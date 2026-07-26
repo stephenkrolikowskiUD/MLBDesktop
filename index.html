@@ -365,6 +365,31 @@ td.push{color:var(--push);font-weight:700}
 .props-pass{margin:12px 16px 20px;padding:22px;border:1px solid var(--border-1);border-left:3px solid var(--warn);background:var(--surface-1)}
 .props-pass-title{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-lg);font-weight:800;color:var(--ink-0)}
 .props-pass-copy{margin-top:4px;color:var(--ink-muted);font-size:var(--t-sm);line-height:1.45}
+.entry-shell{padding:18px 20px 8px}
+.entry-header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
+.entry-title{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-xl);font-weight:800;color:var(--ink-0);line-height:1}
+.entry-subtitle{font-size:var(--t-xs);color:var(--ink-muted);margin-top:5px}
+.entry-count{font-size:var(--t-xs);font-weight:800;color:var(--accent);padding:5px 9px;border:1px solid var(--border-1);border-radius:999px;background:var(--surface-2);white-space:nowrap}
+.entry-game-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.entry-game-card{min-width:0;text-align:left;border:1px solid var(--border-1);background:var(--surface-1);color:var(--ink-0);border-radius:7px;padding:11px 12px;cursor:pointer;transition:border-color var(--dur-fast),background var(--dur-fast),transform var(--dur-fast)}
+.entry-game-card:hover{border-color:var(--accent-soft);background:var(--surface-2)}
+.entry-game-card:active{transform:scale(.99)}
+.entry-game-card.selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface-1))}
+.entry-game-card.started{opacity:.48}
+.entry-game-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.entry-game-matchup{font-family:"Barlow Condensed",system-ui,sans-serif;font-size:var(--t-md);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.entry-game-time{font-size:var(--t-xs);font-weight:800;color:var(--accent);white-space:nowrap}
+.entry-game-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;font-size:10px;color:var(--ink-muted)}
+.entry-game-status{font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.entry-game-card.started .entry-game-status{color:var(--warn)}
+.entry-game-props{white-space:nowrap}
+.entry-open-empty{padding:18px;border:1px solid var(--border-1);background:var(--surface-1);color:var(--ink-muted);font-size:var(--t-sm);text-align:center}
+.entry-locked{margin-top:12px;border-top:1px solid var(--border-1);padding-top:10px}
+.entry-locked summary{cursor:pointer;color:var(--ink-muted);font-size:var(--t-xs);font-weight:800;list-style:none}
+.entry-locked summary::-webkit-details-marker{display:none}
+.entry-locked summary::before{content:"+";display:inline-grid;place-items:center;width:16px;height:16px;margin-right:6px;border:1px solid var(--border-1);border-radius:3px;color:var(--accent)}
+.entry-locked[open] summary::before{content:"−"}
+.entry-locked .entry-game-grid{margin-top:9px}
 .props-side{display:inline-flex;align-items:center;gap:4px;font-size:var(--t-xs);font-weight:800;white-space:nowrap}
 .props-side.over{color:var(--over)}
 .props-side.under{color:var(--under)}
@@ -716,6 +741,9 @@ td.push{color:var(--push);font-weight:700}
   .daily-leaders-head{align-items:flex-start;flex-direction:column;gap:9px}
   .daily-leaders-toolbar{justify-content:flex-start}
   .daily-leaders-metrics{justify-content:flex-start}
+  .entry-shell{padding:14px 10px 6px}
+  .entry-header{align-items:flex-start}
+  .entry-game-grid{grid-template-columns:1fr}
   .daily-leader-row{grid-template-columns:30px minmax(0,1fr) 48px;padding:9px 10px}
   .daily-leader-team{display:none}
   .pick-feature{padding:13px}
@@ -2480,11 +2508,47 @@ function entryDateISO(v){if(v===undefined||v===null||String(v).trim()==='')retur
 function entryRowDate(row){return entryField(row,['DATE','date','GAME_DATE','game_date','Date','GAME_DAY','game_day','start_date','START_DATE','commence_time','COMMENCE_TIME','game_time','GAME_TIME','start_time','START_TIME'])}
 function entryRowIsToday(row){const raw=entryRowDate(row);const iso=entryDateISO(raw);return !iso||iso===entryTodayISO()}
 function entryStartValue(row){return entryField(row,['commence_time','COMMENCE_TIME','game_time','GAME_TIME','start_time','START_TIME','GAME_DATE','game_date','DATE','date'])}
-function entryStartMs(v){if(v===undefined||v===null||String(v).trim()==='')return Number.POSITIVE_INFINITY;const d=new Date(String(v));return Number.isNaN(d.getTime())?Number.POSITIVE_INFINITY:d.getTime()}
+function entryStartMeta(v){
+  if(v===undefined||v===null||String(v).trim()==='')return{ms:Number.POSITIVE_INFINITY,quality:0};
+  const raw=String(v).trim();
+  const dateOnly=/^\d{4}-\d{2}-\d{2}$/.test(raw);
+  const timeOnly=raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)(?:\s*(?:EDT|EST|ET))?$/i);
+  let parsed=timeOnly?new Date(`${entryTodayISO()}T${String((Number(timeOnly[1])%12)+(timeOnly[3].toUpperCase()==="PM"?12:0)).padStart(2,"0")}:${timeOnly[2]}:00-04:00`):new Date(raw);
+  if(Number.isNaN(parsed.getTime()))return{ms:Number.POSITIVE_INFINITY,quality:0};
+  return{ms:parsed.getTime(),quality:dateOnly?1:2};
+}
+function entryStartMs(v){return entryStartMeta(v).ms}
 function entryDisplayTime(v){const ms=entryStartMs(v);if(!Number.isFinite(ms))return '';return new Date(ms).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York',timeZoneName:'short'})}
 function entryAllPicks(){return Array.isArray(st.picks)&&st.picks.length?st.picks:(Array.isArray(st.aiPicks)?st.aiPicks:[])}
 function entryRosterRows(){const rows=[];const add=(arr,type)=>{(arr||[]).forEach(r=>{const player=entryPlayer(r),team=entryTeam(r),opp=entryOpp(r);if(player&&team&&opp)rows.push({player,team,opp,type,row:r,id:entryPairId(team,opp)})})};add(st.tonight,'player');add(st.pTonight,'player');add(st.gTonight,'player');return rows}
-function getEntryGames(){return getMemo('gameEntry:games',()=>{const byId=new Map();const add=(id,label,teams=[],time='')=>{if(!id)return;const sortTime=entryStartMs(time);const timeText=entryDisplayTime(time);const baseLabel=label||teams.join(' vs ');const displayLabel=timeText?`${baseLabel} — ${timeText}`:baseLabel;if(!byId.has(id))byId.set(id,{id,label:displayLabel,baseLabel,teams,time,sortTime});else{const g=byId.get(id);if((baseLabel||'').includes('@')){g.baseLabel=baseLabel;g.label=timeText?`${baseLabel} — ${timeText}`:baseLabel}if(Number.isFinite(sortTime)&&!Number.isFinite(g.sortTime)){g.time=time;g.sortTime=sortTime;g.label=timeText?`${g.baseLabel} — ${timeText}`:g.baseLabel}}};entryLatestPicks().forEach(p=>{const g=entryGameFromText(rowField(p,"game","matchup"));if(g)add(g.id,g.label,g.teams,entryStartValue(p))});entryRosterRows().forEach(r=>{if(entryRowIsToday(r.row))add(r.id,`${r.team} vs ${r.opp}`,[r.team,r.opp],entryStartValue(r.row))});(st.schedule||[]).forEach(r=>{if(!entryRowIsToday(r))return;const away=String(entryField(r,['away_team','AWAY_TEAM','away','AWAY','away_abbr','away_team_abbr'])||'').toUpperCase();const home=String(entryField(r,['home_team','HOME_TEAM','home','HOME','home_abbr','home_team_abbr'])||'').toUpperCase();const t=entryStartValue(r);if(away&&home)add(entryPairId(away,home),`${away} @ ${home}`,[away,home],t)});return [...byId.values()].sort((a,b)=>(a.sortTime-b.sortTime)||a.baseLabel.localeCompare(b.baseLabel))})}
+function getEntryGames(){return getMemo('gameEntry:games',()=>{
+  const byId=new Map();
+  const add=(id,label,teams=[],time='')=>{
+    if(!id)return;
+    const start=entryStartMeta(time);
+    const baseLabel=label||teams.join(' vs ');
+    if(!byId.has(id)){
+      byId.set(id,{id,baseLabel,teams,time,sortTime:start.ms,timeQuality:start.quality});
+      return;
+    }
+    const g=byId.get(id);
+    if((baseLabel||'').includes('@'))g.baseLabel=baseLabel;
+    if(start.quality>g.timeQuality||(start.quality===g.timeQuality&&start.ms<g.sortTime)){
+      g.time=time;g.sortTime=start.ms;g.timeQuality=start.quality;
+    }
+  };
+  entryLatestPicks().forEach(p=>{const g=entryGameFromText(rowField(p,"game","matchup"));if(g)add(g.id,`${g.teams[0]} @ ${g.teams[1]}`,g.teams,entryStartValue(p))});
+  entryRosterRows().forEach(r=>{if(entryRowIsToday(r.row))add(r.id,`${r.team} vs ${r.opp}`,[r.team,r.opp],entryStartValue(r.row))});
+  (st.schedule||[]).forEach(r=>{
+    if(!entryRowIsToday(r))return;
+    const away=String(entryField(r,['away_team','AWAY_TEAM','away','AWAY','away_abbr','away_team_abbr'])||'').toUpperCase();
+    const home=String(entryField(r,['home_team','HOME_TEAM','home','HOME','home_abbr','home_team_abbr'])||'').toUpperCase();
+    if(away&&home)add(entryPairId(away,home),`${away} @ ${home}`,[away,home],entryStartValue(r));
+  });
+  const now=Date.now();
+  return [...byId.values()].map(g=>({...g,label:g.baseLabel,timeText:entryDisplayTime(g.time),started:Number.isFinite(g.sortTime)&&g.sortTime<=now}))
+    .sort((a,b)=>(a.started-b.started)||(a.started?(b.sortTime-a.sortTime):(a.sortTime-b.sortTime))||a.baseLabel.localeCompare(b.baseLabel));
+})}
 function setGameEntryGame(gameId){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};st.gameEntry.selectedGame=gameId;st.gameEntry.entry=null;st.dataVersion++;render()}
 function setGameEntryLegs(n){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};st.gameEntry.legCount=Math.max(GAME_ENTRY_MIN_LEGS,Math.min(GAME_ENTRY_MAX_LEGS,parseInt(n)||GAME_ENTRY_DEFAULT_LEGS));st.gameEntry.entry=null;st.dataVersion++;render()}
 function entryLatestPicks(){const rows=entryAllPicks().filter(p=>entryDateISO(rowField(p,"DATE"))===entryTodayISO());const maxRun=Math.max(0,...rows.map(p=>toNum(rowField(p,"RUN_NUMBER"))));return maxRun?rows.filter(p=>toNum(rowField(p,"RUN_NUMBER"))===maxRun):rows}
@@ -2502,9 +2566,26 @@ function entryDecimalToAmerican(dec){if(!Number.isFinite(dec)||dec<=1)return 0;r
 function entryFmtOdds(odds){if(typeof fmtOdds==='function')return fmtOdds(odds);const o=Number(odds);return Number.isFinite(o)?(o>0?`+${o}`:`${o}`):String(odds||'—')}
 function calculateParlayMath(legs){const decimal=legs.reduce((p,l)=>p*entryAmericanToDecimal(l.odds),1);return {decimal,american:entryDecimalToAmerican(decimal),return10:decimal*10,profit10:(decimal*10)-10}}
 function buildGameEntry(){const ge=st.gameEntry||{};if(!ge.selectedGame)return null;const {game,candidates}=buildCandidatePool(ge.selectedGame);if(!game)return null;const requested=ge.legCount||GAME_ENTRY_DEFAULT_LEGS;const legs=selectTopN(candidates,requested);const math=calculateParlayMath(legs);return {game,requested,legs,candidates,math,score:legs.reduce((s,l)=>s+l.leg_score,0)}}
-function renderGameSelector(games){if(!games.length)return `<div class="section"><div class="card"><div class="card-title">TONIGHT'S GAMES</div><div class="empty" style="padding:24px;text-align:center">No games scheduled tonight.</div></div></div>`;const sel=st.gameEntry?.selectedGame;return `<div class="section"><div class="card"><div class="card-title">TONIGHT'S GAMES</div><div style="display:grid;gap:8px;margin-top:10px">${games.map(g=>`<button onclick='setGameEntryGame(${JSON.stringify(g.id)})' style="text-align:left;border:1px solid ${sel===g.id?'var(--accent)':'#334155'};background:${sel===g.id?'color-mix(in srgb, var(--accent) 13%, transparent)':'transparent'};color:${sel===g.id?'var(--accent)':'inherit'};border-radius:8px;padding:10px 12px;font-weight:800;cursor:pointer">${esc(g.label)}${g.time?` <span style="opacity:.75;font-size:var(--t-xs)">— ${esc(g.time)}</span>`:''}</button>`).join('')}</div></div></div>`}
-function renderLegCountSelector(){const cur=st.gameEntry?.legCount||GAME_ENTRY_DEFAULT_LEGS;return `<div class="section"><div class="card"><div class="card-title">LEGS</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0">${Array.from({length:8},(_,i)=>i+1).map(n=>`<button onclick="setGameEntryLegs(${n})" style="border:1px solid ${cur===n?'var(--accent)':'#334155'};background:${cur===n?'var(--accent)':'transparent'};color:${cur===n?'#07130b':'inherit'};border-radius:999px;padding:7px 12px;font-weight:900;cursor:pointer">${n}</button>`).join('')}</div><div style="font-size:var(--t-xs);color:var(--push)">Underdog Pick'em supports 2-8 legs. 1 leg is a straight bet (informational only).</div></div></div>`}
-function renderEntry(entry){if(!entry)return '';if(!entry.candidates.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}GAME BUILDER</div><div class="empty" style="padding:24px;text-align:center">No props available for this game yet.</div></div></div>`;if(!entry.legs.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}GAME BUILDER</div><div class="empty" style="padding:24px;text-align:center">No usable odds for this game yet.</div></div></div>`;const odds=entry.math.american;const oddsText=odds>0?`+${odds}`:`${odds}`;const books=[...new Set(entry.legs.map(entryBestBookKey).filter(Boolean))];const warning=books.length>=2?`<div style="margin-top:12px;background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid color-mix(in srgb, var(--warn) 33%, transparent);color:var(--warn);border-radius:8px;padding:8px;font-size:var(--t-xs)">${icon('warn')}Cross-book: legs split across ${books.join(', ')}. Single-book parlay may price differently.</div>`:'';const shortage=entry.legs.length<entry.requested?`<div style="margin-top:8px;color:var(--warn);font-size:var(--t-xs)">Only ${entry.legs.length} legs available (you requested ${entry.requested}).</div>`:'';return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}GAME BUILDER — ${esc(entry.game.label)} · ${entry.legs.length} legs</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0"><div class="stat-box"><div class="val">${oddsText}</div><div class="lbl">Combined</div></div><div class="stat-box"><div class="val">$${entry.math.return10.toFixed(0)}</div><div class="lbl">$10 return</div></div><div class="stat-box"><div class="val">${entry.score.toFixed(2)}</div><div class="lbl">Score</div></div></div>${shortage}<div style="height:1px;background:#334155;margin:12px 0"></div>${entry.legs.map((l,i)=>`<div style="padding:10px 0;border-bottom:1px solid #263238"><div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:900">${i+1}. ${typeof playerLink==='function'?playerLink(l.player,l.prop_type,l.line):esc(l.player)} — ${l.prop_type} ${l.lean} ${l.line}</div><div style="font-weight:900;color:${l.lean==='OVER'?'var(--over)':'var(--under)'}">${entryFmtOdds(l.odds)}</div></div><div style="font-size:var(--t-xs);color:var(--push);margin-top:4px">Why: ${l.ai_tier} × ${l.prop_type} WLB ${l.wlb.toFixed(2)} = ${l.leg_score.toFixed(2)} · ${l.source}</div>${renderEntryBestBookLine(l.prop,l.lean)}</div>`).join('')}${warning}<button onclick="copyEntryToClipboard()" style="margin-top:14px;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent);border-radius:8px;padding:10px 12px;font-weight:900;cursor:pointer;width:100%">${window.__entryCopied?'✓ Copied':'Copy entry'}</button></div></div>`}
+function renderGameSelector(games){
+  if(!games.length)return `<section class="entry-shell"><div class="entry-header"><div><div class="analysis-eyebrow">Game builder</div><div class="entry-title">1. Choose a matchup</div><div class="entry-subtitle">No current slate is available from the latest engine snapshot.</div></div></div></section>`;
+  const sel=st.gameEntry?.selectedGame;
+  const upcoming=games.filter(g=>!g.started);
+  const started=games.filter(g=>g.started);
+  const renderCard=g=>{
+    const candidateCount=buildCandidatePool(g.id).candidates.length;
+    const selected=sel===g.id;
+    const status=g.started?"Locked":selected?"Selected":"Open";
+    return `<button class="entry-game-card ${selected?"selected":""} ${g.started?"started":""}" onclick='setGameEntryGame(${JSON.stringify(g.id)})'>
+      <div class="entry-game-top"><span class="entry-game-matchup">${esc(g.baseLabel)}</span><span class="entry-game-time">${esc(g.timeText||"Time TBD")}</span></div>
+      <div class="entry-game-meta"><span class="entry-game-status">${status}</span><span class="entry-game-props">${candidateCount?`${candidateCount} options`:"No props"}</span></div>
+    </button>`;
+  };
+  const openBoard=upcoming.length?`<div class="entry-game-grid">${upcoming.map(renderCard).join("")}</div>`:`<div class="entry-open-empty">No games remain open on this slate.</div>`;
+  const lockedBoard=started.length?`<details class="entry-locked"><summary>${started.length} started / locked game${started.length===1?"":"s"}</summary><div class="entry-game-grid">${started.map(renderCard).join("")}</div></details>`:"";
+  return `<section class="entry-shell"><div class="entry-header"><div><div class="analysis-eyebrow">Game builder</div><div class="entry-title">1. Choose a matchup</div><div class="entry-subtitle">Open games first · ordered by first pitch · select one to build an entry</div></div><div class="entry-count">${upcoming.length} open</div></div>${openBoard}${lockedBoard}</section>`;
+}
+function renderLegCountSelector(){const cur=st.gameEntry?.legCount||GAME_ENTRY_DEFAULT_LEGS;const counts=Array.from({length:GAME_ENTRY_MAX_LEGS-GAME_ENTRY_MIN_LEGS+1},(_,i)=>i+GAME_ENTRY_MIN_LEGS);return `<div class="section"><div class="card"><div class="card-title">2. CHOOSE LEG COUNT</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0">${counts.map(n=>`<button onclick="setGameEntryLegs(${n})" style="border:1px solid ${cur===n?'var(--accent)':'#334155'};background:${cur===n?'var(--accent)':'transparent'};color:${cur===n?'#07130b':'inherit'};border-radius:999px;padding:7px 12px;font-weight:900;cursor:pointer">${n}</button>`).join('')}</div><div style="font-size:var(--t-xs);color:var(--push)">Build a 2-8 leg entry from available props in this matchup.</div></div></div>`}
+function renderEntry(entry){if(!entry)return '';if(!entry.candidates.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}3. RECOMMENDED ENTRY</div><div class="empty" style="padding:24px;text-align:center">No props available for this game yet.</div></div></div>`;if(!entry.legs.length)return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}3. RECOMMENDED ENTRY</div><div class="empty" style="padding:24px;text-align:center">No usable odds for this game yet.</div></div></div>`;const odds=entry.math.american;const oddsText=odds>0?`+${odds}`:`${odds}`;const books=[...new Set(entry.legs.map(entryBestBookKey).filter(Boolean))];const warning=books.length>=2?`<div style="margin-top:12px;background:color-mix(in srgb, var(--warn) 8%, transparent);border:1px solid color-mix(in srgb, var(--warn) 33%, transparent);color:var(--warn);border-radius:8px;padding:8px;font-size:var(--t-xs)">${icon('warn')}Cross-book: legs split across ${books.join(', ')}. Single-book parlay may price differently.</div>`:'';const shortage=entry.legs.length<entry.requested?`<div style="margin-top:8px;color:var(--warn);font-size:var(--t-xs)">Only ${entry.legs.length} legs available (you requested ${entry.requested}).</div>`:'';return `<div class="section"><div class="card"><div class="card-title">${icon('entry')}3. RECOMMENDED ENTRY — ${esc(entry.game.label)} · ${entry.legs.length} legs</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0"><div class="stat-box"><div class="val">${oddsText}</div><div class="lbl">Combined</div></div><div class="stat-box"><div class="val">$${entry.math.return10.toFixed(0)}</div><div class="lbl">$10 return</div></div><div class="stat-box"><div class="val">${entry.score.toFixed(2)}</div><div class="lbl">Score</div></div></div>${shortage}<div style="height:1px;background:#334155;margin:12px 0"></div>${entry.legs.map((l,i)=>`<div style="padding:10px 0;border-bottom:1px solid #263238"><div style="display:flex;justify-content:space-between;gap:8px"><div style="font-weight:900">${i+1}. ${typeof playerLink==='function'?playerLink(l.player,l.prop_type,l.line):esc(l.player)} — ${l.prop_type} ${l.lean} ${l.line}</div><div style="font-weight:900;color:${l.lean==='OVER'?'var(--over)':'var(--under)'}">${entryFmtOdds(l.odds)}</div></div><div style="font-size:var(--t-xs);color:var(--push);margin-top:4px">Why: ${l.ai_tier} × ${l.prop_type} WLB ${l.wlb.toFixed(2)} = ${l.leg_score.toFixed(2)} · ${l.source}</div>${renderEntryBestBookLine(l.prop,l.lean)}</div>`).join('')}${warning}<button onclick="copyEntryToClipboard()" style="margin-top:14px;border:1px solid var(--accent);background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent);border-radius:8px;padding:10px 12px;font-weight:900;cursor:pointer;width:100%">${window.__entryCopied?'✓ Copied':'Copy entry'}</button></div></div>`}
 function renderGameEntryView(){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};const games=getEntryGames();let html=renderGameSelector(games);if(st.gameEntry.selectedGame){html+=renderLegCountSelector();html+=renderEntry(buildGameEntry())}return html}
 function entryCopyText(entry){const odds=entry.math.american;const oddsText=odds>0?`+${odds}`:`${odds}`;return `${entry.game.label} — ${entry.legs.length}-leg entry\n${entry.legs.map((l,i)=>`${i+1}. ${l.player} - ${l.prop_type} ${l.lean} ${l.line}`).join('\n')}\nCombined ${oddsText} | $10 → $${entry.math.return10.toFixed(0)}\nBuilt: ${new Date().toLocaleString()}`}
 function copyEntryToClipboard(){const entry=buildGameEntry();if(!entry)return;const text=entryCopyText(entry);if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(()=>{window.__entryCopied=true;render();setTimeout(()=>{window.__entryCopied=false;render()},1200)}).catch(()=>entryShowCopyFallback(text))}else entryShowCopyFallback(text)}
