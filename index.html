@@ -1943,10 +1943,19 @@ function setSlipLegs(n){st.slipLegs=n;render()}
 function toggleDrafted(name){if(st.drafted.has(name))st.drafted.delete(name);else st.drafted.add(name);render()}
 function resetDrafted(){st.drafted.clear();render()}
 function streakToDash(name,metric,line){
+  const metricKey=String(metric||"").toUpperCase();
+  const pitcherMetric=metricKey.startsWith("P_")||["SO","ER","IP","IP_OUTS"].includes(metricKey);
   const b=st.tonight.find(t=>normalizePlayerName(t.player_name)===normalizePlayerName(name));
   const p=st.pTonight.find(t=>normalizePlayerName(t.player_name)===normalizePlayerName(name));
-  if(b){st.mode="batter";st.metric=metric||"H";st.player=b.player_name}
-  else if(p){st.mode="pitcher";st.metric=metric||"SO";st.player=p.player_name}
+  if(pitcherMetric){
+    st.mode="pitcher";
+    st.metric=metricKey==="P_SO"?"SO":metricKey.replace(/^P_/,"")||"SO";
+    st.player=p?.player_name||name;
+  }else if(b){
+    st.mode="batter";st.metric=metric||"H";st.player=b.player_name;
+  }else if(p){
+    st.mode="pitcher";st.metric=metric||"SO";st.player=p.player_name;
+  }
   if(line!==undefined&&line!=="")st.line=String(line);
   else st.line="";
   st.activeTab="dashboard";render();
