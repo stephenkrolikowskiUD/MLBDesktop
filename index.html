@@ -1569,6 +1569,10 @@ function getKsBoard(){
     const l3SO=toNum(most.L3_SO);
     const l7SO=toNum(most.L7_SO);
     const seasSOavg=toNum(most.Seas_SO);
+    const seasonBaseline=seasSOavg||soPerStart;
+    const recent7=l7SO||seasonBaseline;
+    const recent3=l3SO||recent7;
+    const projectedSO=(seasonBaseline*0.5)+(recent7*0.3)+(recent3*0.2);
     const soProp=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)==="P_SO");
     const dkLine=soProp?soProp.DK_LINE:null;
     const overOdds=soProp?parseInt(soProp.OVER_ODDS)||null:null;
@@ -1583,7 +1587,7 @@ function getKsBoard(){
       name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
       venue:p.venue_tonight||"",hand:p.throws||p.player_hand||"?",
       seasSO,totalOuts,ipEquiv,k9,soPerStart,gamesStarted,
-      l3SO,l7SO,seasSOavg,
+      l3SO,l7SO,seasSOavg,projectedSO,
       dkLine,overOdds,score
     });
   }
@@ -3160,12 +3164,13 @@ function render(){
     if(!kb.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No Ks data available. Run the engine first.</div>`}
     else{
       picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's K Board</div></div>
-      <div class="dinger-desc">Ranked by K/9, recent strikeouts, and DK odds. Top 3 are 🔥.</div>`;
+      <div class="dinger-desc">Projected Ks blend season, L7, and L3 form. Rankings also consider K/9 and sportsbook context.</div>`;
       picksHTML+=`<div class="cards-grid">`;
       picksHTML+=kb.map((d,i)=>{
         const isTop=i<3;
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
         const k9Str=d.k9.toFixed(1);
+        const projectionStr=d.projectedSO.toFixed(1);
         const opponentRanking=getTeamRanking(d.opp);
         const teamContext=opponentRanking?`${esc(d.opp)} offense · ${teamRankValue(opponentRanking,"OFF_K_PCT","OFF_K_PCT_MOST_RANK",{digits:1,suffix:"% K",direction:"most"})}`:"";
         const locked=getLockInfo(d.name,true).started;
@@ -3177,8 +3182,8 @@ function render(){
             ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
           </div>
           <div class="dinger-right">
-            <div class="dinger-rate">${k9Str}</div>
-            <div class="dinger-sub">${locked?"started":"K/9 · "+d.soPerStart.toFixed(1)+"/GS"}</div>
+            <div class="dinger-rate">${projectionStr}</div>
+            <div class="dinger-sub">Projected K · ${k9Str} K/9</div>
             ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
           </div>
         </div>`;
