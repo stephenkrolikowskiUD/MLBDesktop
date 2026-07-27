@@ -3,11 +3,11 @@ name: MLB Engine
 on:
   workflow_dispatch:
   schedule:
-    # REDUCED FROM 5x/day to 3x/day on 2026-05-27 for end-of-month quota.
-    # Revisit after 6/1 reset — restore the 14:00 and 20:00 runs if quota allows.
+    # Eastern Daylight Time: 1:45 AM, 9:00 AM, 11:45 AM, and 5:00 PM.
     - cron: "45 5 * * *"
-    - cron: "0 18 * * *"
-    - cron: "0 22 * * *"
+    - cron: "0 13 * * *"
+    - cron: "45 15 * * *"
+    - cron: "0 21 * * *"
 
 jobs:
   run-mlb-engine:
