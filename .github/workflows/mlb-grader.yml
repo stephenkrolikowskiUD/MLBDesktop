@@ -3,7 +3,8 @@ name: MLB Grader
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *"
+    # Eastern Daylight Time: 2:30 AM primary grade, 6:00 AM catch-up.
+    - cron: "30 6 * * *"
     - cron: "0 10 * * *"
 
 jobs:
