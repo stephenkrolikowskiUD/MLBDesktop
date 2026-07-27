@@ -64,6 +64,9 @@ PICK_PERF_TIME_WINDOWS = {
 }
 PICK_PERF_SNAPSHOT_WINDOWS = ('all_time', 'last_30d')
 PICK_PERF_DIMENSIONS = (
+    'model_era',
+    'cohort_norm',
+    'odds_bucket',
     'confidence_norm',
     'selection_method_norm',
     'recommendation_status_norm',
@@ -75,6 +78,37 @@ PICK_PERF_DIMENSIONS = (
     'day_of_week',
     'RUN_NUMBER',
 )
+
+def pick_model_era(row):
+    raw_version = row.get('MODEL_VERSION', '')
+    explicit = '' if pd.isna(raw_version) else str(raw_version).strip()
+    if explicit:
+        return explicit
+    date = row.get('date_parsed')
+    if pd.isna(date):
+        return 'legacy_unknown'
+    date = pd.Timestamp(date)
+    if date < pd.Timestamp('2026-05-24'):
+        return 'legacy_v1'
+    if date < pd.Timestamp('2026-07-17'):
+        return 'market_enriched_v2'
+    if date < pd.Timestamp('2026-07-23'):
+        return 'flash_review_v3'
+    return 'calibrated_hybrid_v4'
+
+def pick_odds_bucket(value):
+    if pd.isna(value):
+        return 'unknown'
+    odds = float(value)
+    if odds >= 100:
+        return 'plus_money'
+    if odds >= -125:
+        return '-101_to_-125'
+    if odds >= -150:
+        return '-126_to_-150'
+    if odds >= -200:
+        return '-151_to_-200'
+    return 'below_-200'
 
 def safe_float(val, default=None):
     if val is None:
@@ -429,6 +463,7 @@ def pick_perf_prepare_df(df_all):
     df['confidence_norm'] = df.get('confidence', pd.Series('', index=idx)).map(normalize_confidence)
     df.loc[df['selection_method_norm'].eq('VALIDATED_MODEL'), 'confidence_norm'] = 'VALIDATED'
     df['pick_odds_f'] = pd.to_numeric(df.get('PICK_ODDS', pd.Series(np.nan, index=idx)), errors='coerce')
+    df['odds_bucket'] = df['pick_odds_f'].map(pick_odds_bucket)
     df['realized_profit_f'] = pd.to_numeric(df.get('REALIZED_PROFIT', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_open_f'] = pd.to_numeric(df.get('CLV_OPEN_LINE', pd.Series(np.nan, index=idx)), errors='coerce')
     df['clv_latest_f'] = pd.to_numeric(df.get('CLV_LATEST_LINE', pd.Series(np.nan, index=idx)), errors='coerce')
@@ -438,6 +473,8 @@ def pick_perf_prepare_df(df_all):
     df['consensus_bucket'] = pd.to_numeric(df.get('CONSENSUS_COUNT', pd.Series(1, index=idx)), errors='coerce').fillna(1).astype(int)
     df['has_lineup_risk'] = df.get('injury_context', pd.Series('', index=idx)).fillna('').astype(str).str.strip().str.startswith('LINEUP RISK')
     df['date_parsed'] = pd.to_datetime(df.get('DATE', pd.Series('', index=idx)), errors='coerce')
+    df['model_era'] = df.apply(pick_model_era, axis=1)
+    df['cohort_norm'] = df['recommendation_status_norm'].astype(str) + ' · ' + df['selection_method_norm'].astype(str)
     bad_dates = int(df['date_parsed'].isna().sum())
     if bad_dates:
         print(f"   ⚠️ Pick_Performance: {bad_dates} graded rows have unparseable DATE and count only all_time")

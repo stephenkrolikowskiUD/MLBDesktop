@@ -48,6 +48,7 @@ MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
 SPORT_LABEL = "MLB"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+MODEL_VERSION = "mlb_hybrid_calibrated_v1"
 ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
 _last_odds_credits_remaining = None
 GEMINI_TARGET_PICKS = 14
@@ -56,7 +57,7 @@ PICK_OUTPUT_COLUMNS = [
     'DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team',
     'opponent', 'opp_pitcher', 'prop_type', 'line', 'lean', 'confidence',
     'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note',
-    'DATA_SOURCE', 'source', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS',
+    'DATA_SOURCE', 'source', 'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS',
     'CALIBRATION_SCORE', 'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK',
     'PICK_ODDS', 'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
     'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE', 'CONSENSUS_COUNT', 'CONSENSUS_RUNS',
@@ -155,6 +156,7 @@ SHEET_SCHEMAS = {
             'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
         ],
         'recommended': [
+            'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
             'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
             'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
             'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
@@ -166,7 +168,7 @@ SHEET_SCHEMAS = {
             'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
         ],
         'recommended': [
-            'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
+            'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
             'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
             'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS',
             'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
@@ -3151,6 +3153,7 @@ Do not explain anything outside the JSON array.
             print(f"   📐 Added {challenger_added} validated-model challenger(s) for calibrated ranking")
 
         for pick in picks_data:
+            pick['MODEL_VERSION'] = MODEL_VERSION
             pick['SELECTION_METHOD'] = pick_selection_method(pick)
             pick['RECOMMENDATION_STATUS'] = recommendation_status(pick)
             pick['CALIBRATION_SCORE'] = round(calibrated_pick_priority(pick), 3)
