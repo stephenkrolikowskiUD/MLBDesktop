@@ -1574,6 +1574,12 @@ function getDingerBoard(){
 function getKsBoard(){
   return getMemo("ksBoard",()=>{
   const rows=[];
+  const leagueKPcts=(st.teamRankings||[])
+    .map(row=>Number(rowField(row,"OFF_K_PCT")))
+    .filter(value=>Number.isFinite(value)&&value>0);
+  const leagueKPct=leagueKPcts.length
+    ?leagueKPcts.reduce((sum,value)=>sum+value,0)/leagueKPcts.length
+    :null;
   for(const p of st.pTonight){
     const name=p.player_name;if(!name)continue;
     const pLogs=getPlayerLogs(name,true);
@@ -1593,6 +1599,16 @@ function getKsBoard(){
     const recent7=l7SO||seasonBaseline;
     const recent3=l3SO||recent7;
     const projectedSO=(seasonBaseline*0.5)+(recent7*0.3)+(recent3*0.2);
+    const opponentRanking=getTeamRanking(p.opp_abbr_tonight);
+    const opponentKPct=Number(rowField(opponentRanking,"OFF_K_PCT"));
+    const hasMatchupRate=Number.isFinite(opponentKPct)&&opponentKPct>0&&Number.isFinite(leagueKPct)&&leagueKPct>0;
+    const matchupFactor=hasMatchupRate
+      ?Math.max(0.75,Math.min(1.25,opponentKPct/leagueKPct))
+      :1;
+    const adjustedProjection=projectedSO*matchupFactor;
+    const projectionAdjustment=adjustedProjection-projectedSO;
+    const modelEdgeScore=Number(rowField(p,"P_SO_EDGE_SCORE"));
+    const modelOpponentAdjustment=Number(rowField(p,"P_SO_OPP_ADJ"));
     const soProp=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)==="P_SO");
     const dkLine=soProp?soProp.DK_LINE:null;
     const overOdds=soProp?parseInt(soProp.OVER_ODDS)||null:null;
@@ -1603,11 +1619,18 @@ function getKsBoard(){
     score+=l7SO*1.5;
     if(dkLine&&soPerStart>parseFloat(dkLine))score+=8;
     if(overOdds&&overOdds<0)score+=5;
+    const legacyScore=score;
+    score=Number.isFinite(modelEdgeScore)?modelEdgeScore:legacyScore;
+    if(dkLine&&Number.isFinite(parseFloat(dkLine))){
+      score+=(adjustedProjection-parseFloat(dkLine))*3;
+    }
     rows.push({
       name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
       venue:p.venue_tonight||"",hand:p.throws||p.player_hand||"?",
       seasSO,totalOuts,ipEquiv,k9,soPerStart,gamesStarted,
-      l3SO,l7SO,seasSOavg,projectedSO,
+      l3SO,l7SO,seasSOavg,projectedSO,adjustedProjection,projectionAdjustment,
+      opponentKPct:hasMatchupRate?opponentKPct:null,
+      modelOpponentAdjustment:Number.isFinite(modelOpponentAdjustment)?modelOpponentAdjustment:null,
       dkLine,overOdds,score
     });
   }
@@ -3249,13 +3272,19 @@ function render(){
     if(!kb.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No Ks data available. Run the engine first.</div>`}
     else{
       picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's K Board</div></div>
-      <div class="dinger-desc">Projected Ks blend season, L7, and L3 form. Rankings also consider K/9 and sportsbook context.</div>`;
+      <div class="dinger-desc">Projected Ks blend season, L7, and L3 form, then adjust for the opponent's strikeout rate. Sportsbook price breaks close calls.</div>`;
       picksHTML+=`<div class="cards-grid">`;
       picksHTML+=kb.map((d,i)=>{
         const isTop=i<3;
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
         const k9Str=d.k9.toFixed(1);
-        const projectionStr=d.projectedSO.toFixed(1);
+        const projectionStr=d.adjustedProjection.toFixed(1);
+        const adjustmentText=`${d.projectionAdjustment>0?"+":""}${d.projectionAdjustment.toFixed(1)} K`;
+        const matchupGrade=d.projectionAdjustment<=-0.35
+          ?{label:"Tough matchup",color:"var(--under)"}
+          :d.projectionAdjustment>=0.35
+            ?{label:"Favorable matchup",color:"var(--over)"}
+            :{label:"Neutral matchup",color:"var(--ink-muted)"};
         const opponentRanking=getTeamRanking(d.opp);
         const teamContext=opponentRanking?`${esc(d.opp)} offense · ${teamRankValue(opponentRanking,"OFF_K_PCT","OFF_K_PCT_MOST_RANK",{digits:1,suffix:"% K",direction:"most"})}`:"";
         const locked=getLockInfo(d.name,true).started;
@@ -3265,10 +3294,11 @@ function render(){
             <div class="dinger-meta">${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}</div>
             <div class="dinger-meta">${d.seasSO} K in ${d.gamesStarted} GS · L7 avg: ${d.l7SO.toFixed(1)} · L3: ${d.l3SO.toFixed(1)}</div>
             ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
+            <div class="dinger-meta" style="color:${matchupGrade.color}">${matchupGrade.label} · raw ${d.projectedSO.toFixed(1)} → adjusted ${projectionStr} (${adjustmentText})</div>
           </div>
           <div class="dinger-right">
             <div class="dinger-rate">${projectionStr}</div>
-            <div class="dinger-sub">Projected K · ${k9Str} K/9</div>
+            <div class="dinger-sub">Matchup projection · ${k9Str} K/9</div>
             ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
           </div>
         </div>`;
