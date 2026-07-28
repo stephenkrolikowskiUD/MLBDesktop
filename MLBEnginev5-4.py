@@ -48,7 +48,7 @@ MLB_API = "https://statsapi.mlb.com/api/v1"
 SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
 SPORT_LABEL = "MLB"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-MODEL_VERSION = "mlb_hybrid_calibrated_v1"
+MODEL_VERSION = "mlb_hybrid_matchup_v2"
 ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
 _last_odds_credits_remaining = None
 GEMINI_TARGET_PICKS = 14
@@ -60,7 +60,10 @@ PICK_OUTPUT_COLUMNS = [
     'DATA_SOURCE', 'source', 'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS',
     'CALIBRATION_SCORE', 'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK',
     'PICK_ODDS', 'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
-    'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE', 'CONSENSUS_COUNT', 'CONSENSUS_RUNS',
+    'H_PLAYER_SCORE', 'H_OPP_ADJ', 'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ',
+    'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+    'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+    'CONSENSUS_COUNT', 'CONSENSUS_RUNS',
     'CONSENSUS_TAG', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA',
     'CLV_LAST_UPDATE', 'RESULT', 'ACTUAL_STAT', 'HIT', 'REALIZED_PROFIT',
     'ACTUAL_ROI_PER_PICK', 'LAST_UPDATED',
@@ -159,7 +162,10 @@ SHEET_SCHEMAS = {
             'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
             'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
             'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
-            'H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
+            'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+            'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+            'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+            'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
         ],
     },
     'Picks_Current': {
@@ -171,8 +177,11 @@ SHEET_SCHEMAS = {
             'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
             'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
             'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS',
-            'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
-            'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE',
+            'IMPLIED_PROBABILITY',
+            'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+            'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+            'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+            'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
         ],
     },
     'DK_Player_Props': {
@@ -806,6 +815,10 @@ def fmt_dec(val, digits=3):
 def fmt_num(val, digits=1):
     num = pd.to_numeric(pd.Series([val]), errors='coerce').iloc[0]
     return "" if pd.isna(num) else f"{num:.{digits}f}"
+
+def fmt_signed_num(val, digits=1):
+    num = pd.to_numeric(pd.Series([val]), errors='coerce').iloc[0]
+    return "+0.0" if pd.isna(num) else f"{num:+.{digits}f}"
 
 def calculate_hit_streak(values, line, lean):
     vals = pd.to_numeric(values, errors='coerce').dropna().tolist()
@@ -1659,10 +1672,18 @@ if df_batter_statcast is not None and len(df_batter_statcast) > 0:
         + (numeric_col(most_recent, 'SC_L14_avg_ev') - 89).fillna(0) * 1.7
         + (numeric_col(most_recent, 'SC_L14_xSLG') - 0.420).fillna(0) * 70
     )
-    most_recent['H_EDGE_SCORE'] = clip_score(h_score)
-    most_recent['POWER_EDGE_SCORE'] = clip_score(power_score)
+    most_recent['H_PLAYER_SCORE'] = clip_score(h_score)
+    most_recent['H_OPP_ADJ'] = 0.0
+    most_recent['H_EDGE_SCORE'] = most_recent['H_PLAYER_SCORE']
+    most_recent['POWER_PLAYER_SCORE'] = clip_score(power_score)
+    most_recent['POWER_OPP_ADJ'] = 0.0
+    most_recent['POWER_EDGE_SCORE'] = most_recent['POWER_PLAYER_SCORE']
 else:
+    most_recent['H_PLAYER_SCORE'] = np.nan
+    most_recent['H_OPP_ADJ'] = np.nan
     most_recent['H_EDGE_SCORE'] = np.nan
+    most_recent['POWER_PLAYER_SCORE'] = np.nan
+    most_recent['POWER_OPP_ADJ'] = np.nan
     most_recent['POWER_EDGE_SCORE'] = np.nan
 
 split_stats = ['AVG', 'OPS', 'H', 'HR', 'TB', 'RBI', 'SO', 'BB']
@@ -1673,7 +1694,10 @@ for stat in split_stats:
         most_recent.get(f'SPLIT_vs_RHP_{stat}', np.nan))
 
 rolling_cols = [c for c in most_recent.columns if any(c.startswith(p) for p in ['L7_', 'L14_', 'L30_', 'Seas_'])]
-statcast_cols = [c for c in most_recent.columns if c.startswith('SC_')] + ['H_EDGE_SCORE', 'POWER_EDGE_SCORE']
+statcast_cols = [c for c in most_recent.columns if c.startswith('SC_')] + [
+    'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+    'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+]
 ha_prompt_cols = ['Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB_Away',
                   'HR_Home', 'HR_Away', 'RBI_Home', 'RBI_Away', 'UD_FP_Home', 'UD_FP_Away']
 final_cols = (
@@ -2496,9 +2520,17 @@ def generate_gemini_picks():
                 'opp_pitcher': row.get('opp_pitcher_name', row.get('opp_starter', 'TBD')),
                 'venue': row.get('venue_tonight', ''),
                 'lineup_risk_note': row.get('LINEUP_PROTECTION_NOTE', ''),
+                'H_PLAYER_SCORE': row.get('H_PLAYER_SCORE', np.nan),
+                'H_OPP_ADJ': row.get('H_OPP_ADJ', np.nan),
                 'H_EDGE_SCORE': row.get('H_EDGE_SCORE', np.nan),
+                'POWER_PLAYER_SCORE': row.get('POWER_PLAYER_SCORE', np.nan),
+                'POWER_OPP_ADJ': row.get('POWER_OPP_ADJ', np.nan),
                 'POWER_EDGE_SCORE': row.get('POWER_EDGE_SCORE', np.nan),
+                'P_SO_PLAYER_SCORE': row.get('P_SO_PLAYER_SCORE', np.nan),
+                'P_SO_OPP_ADJ': row.get('P_SO_OPP_ADJ', np.nan),
                 'P_SO_EDGE_SCORE': row.get('P_SO_EDGE_SCORE', np.nan),
+                'P_ER_PLAYER_RISK_SCORE': row.get('P_ER_PLAYER_RISK_SCORE', np.nan),
+                'P_ER_OPP_ADJ': row.get('P_ER_OPP_ADJ', np.nan),
                 'P_ER_RISK_SCORE': row.get('P_ER_RISK_SCORE', np.nan),
             }
             for _, row in gemini_pool.iterrows()
@@ -2557,9 +2589,17 @@ def generate_gemini_picks():
                     'opp_pitcher': source.get('opp_pitcher_name', source.get('opp_starter', 'TBD')),
                     'venue': source.get('venue_tonight', ''),
                     'lineup_risk_note': source.get('LINEUP_PROTECTION_NOTE', ''),
+                    'H_PLAYER_SCORE': source.get('H_PLAYER_SCORE', np.nan),
+                    'H_OPP_ADJ': source.get('H_OPP_ADJ', np.nan),
                     'H_EDGE_SCORE': source.get('H_EDGE_SCORE', np.nan),
+                    'POWER_PLAYER_SCORE': source.get('POWER_PLAYER_SCORE', np.nan),
+                    'POWER_OPP_ADJ': source.get('POWER_OPP_ADJ', np.nan),
                     'POWER_EDGE_SCORE': source.get('POWER_EDGE_SCORE', np.nan),
+                    'P_SO_PLAYER_SCORE': source.get('P_SO_PLAYER_SCORE', np.nan),
+                    'P_SO_OPP_ADJ': source.get('P_SO_OPP_ADJ', np.nan),
                     'P_SO_EDGE_SCORE': source.get('P_SO_EDGE_SCORE', np.nan),
+                    'P_ER_PLAYER_RISK_SCORE': source.get('P_ER_PLAYER_RISK_SCORE', np.nan),
+                    'P_ER_OPP_ADJ': source.get('P_ER_OPP_ADJ', np.nan),
                     'P_ER_RISK_SCORE': source.get('P_ER_RISK_SCORE', np.nan),
                 })
                 season_col, recent_col = stat_fields[metric]
@@ -2600,9 +2640,17 @@ def generate_gemini_picks():
                     'injury_context': lineup_risk_note,
                     'venue': venue,
                     'weather_note': weather_note_for_venue(venue),
+                    'H_PLAYER_SCORE': player_meta.get('H_PLAYER_SCORE', np.nan),
+                    'H_OPP_ADJ': player_meta.get('H_OPP_ADJ', np.nan),
                     'H_EDGE_SCORE': player_meta.get('H_EDGE_SCORE', np.nan),
+                    'POWER_PLAYER_SCORE': player_meta.get('POWER_PLAYER_SCORE', np.nan),
+                    'POWER_OPP_ADJ': player_meta.get('POWER_OPP_ADJ', np.nan),
                     'POWER_EDGE_SCORE': player_meta.get('POWER_EDGE_SCORE', np.nan),
+                    'P_SO_PLAYER_SCORE': player_meta.get('P_SO_PLAYER_SCORE', np.nan),
+                    'P_SO_OPP_ADJ': player_meta.get('P_SO_OPP_ADJ', np.nan),
                     'P_SO_EDGE_SCORE': player_meta.get('P_SO_EDGE_SCORE', np.nan),
+                    'P_ER_PLAYER_RISK_SCORE': player_meta.get('P_ER_PLAYER_RISK_SCORE', np.nan),
+                    'P_ER_OPP_ADJ': player_meta.get('P_ER_OPP_ADJ', np.nan),
                     'P_ER_RISK_SCORE': player_meta.get('P_ER_RISK_SCORE', np.nan),
                     'CONSENSUS_COUNT': 0,
                     'CONSENSUS_RUNS': '',
@@ -2655,11 +2703,33 @@ def generate_gemini_picks():
                     sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
                 if sc_bits:
                     ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
+                opponent_bits = []
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_K_PCT')]), errors='coerce').iloc[0]):
+                    opponent_bits.append(
+                        f"K%={fmt_num(p.get('OPP_OFF_K_PCT'), 1)}"
+                        f"(rank {safe_int(p.get('OPP_OFF_K_PCT_MOST_RANK'))})"
+                    )
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_OPS')]), errors='coerce').iloc[0]):
+                    opponent_bits.append(f"OPS={fmt_dec(p.get('OPP_OFF_OPS'))}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_RUNS_PER_GAME')]), errors='coerce').iloc[0]):
+                    opponent_bits.append(f"R/G={fmt_num(p.get('OPP_OFF_RUNS_PER_GAME'), 2)}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_HR_PER_GAME')]), errors='coerce').iloc[0]):
+                    opponent_bits.append(f"HR/G={fmt_num(p.get('OPP_OFF_HR_PER_GAME'), 2)}")
+                if opponent_bits:
+                    ln += f" | Opp offense: {' '.join(opponent_bits)}"
                 edge_bits = []
                 if pd.notna(pd.to_numeric(pd.Series([p.get('P_SO_EDGE_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(f"KEdge={fmt_num(p.get('P_SO_EDGE_SCORE'), 0)}")
+                    edge_bits.append(
+                        f"K={fmt_num(p.get('P_SO_PLAYER_SCORE'), 1)}"
+                        f"{fmt_signed_num(p.get('P_SO_OPP_ADJ'), 1)}"
+                        f"->{fmt_num(p.get('P_SO_EDGE_SCORE'), 1)}"
+                    )
                 if pd.notna(pd.to_numeric(pd.Series([p.get('P_ER_RISK_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(f"ERRisk={fmt_num(p.get('P_ER_RISK_SCORE'), 0)}")
+                    edge_bits.append(
+                        f"ERRisk={fmt_num(p.get('P_ER_PLAYER_RISK_SCORE'), 1)}"
+                        f"{fmt_signed_num(p.get('P_ER_OPP_ADJ'), 1)}"
+                        f"->{fmt_num(p.get('P_ER_RISK_SCORE'), 1)}"
+                    )
                 if edge_bits:
                     ln += f" | Model edge: {' '.join(edge_bits)}"
                 if not df_pitcher_props.empty:
@@ -2722,11 +2792,30 @@ def generate_gemini_picks():
                     sc_bits.append(f"EV={fmt_num(p.get('SC_L14_avg_ev'))}")
                 if sc_bits:
                     ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
+                starter_bits = []
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_ERA')]), errors='coerce').iloc[0]):
+                    starter_bits.append(f"ERA={fmt_num(p.get('OPP_SP_SEAS_ERA'), 2)}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_WHIP')]), errors='coerce').iloc[0]):
+                    starter_bits.append(f"WHIP={fmt_num(p.get('OPP_SP_SEAS_WHIP'), 2)}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_HR')]), errors='coerce').iloc[0]):
+                    starter_bits.append(f"HR/start={fmt_num(p.get('OPP_SP_SEAS_HR'), 2)}")
+                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SC_L14_XWOBA')]), errors='coerce').iloc[0]):
+                    starter_bits.append(f"xwOBA={fmt_dec(p.get('OPP_SP_SC_L14_XWOBA'))}")
+                if starter_bits:
+                    ln += f" | Opp starter form: {' '.join(starter_bits)}"
                 edge_bits = []
                 if pd.notna(pd.to_numeric(pd.Series([p.get('H_EDGE_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(f"HEdge={fmt_num(p.get('H_EDGE_SCORE'), 0)}")
+                    edge_bits.append(
+                        f"H={fmt_num(p.get('H_PLAYER_SCORE'), 1)}"
+                        f"{fmt_signed_num(p.get('H_OPP_ADJ'), 1)}"
+                        f"->{fmt_num(p.get('H_EDGE_SCORE'), 1)}"
+                    )
                 if pd.notna(pd.to_numeric(pd.Series([p.get('POWER_EDGE_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(f"PowEdge={fmt_num(p.get('POWER_EDGE_SCORE'), 0)}")
+                    edge_bits.append(
+                        f"Power={fmt_num(p.get('POWER_PLAYER_SCORE'), 1)}"
+                        f"{fmt_signed_num(p.get('POWER_OPP_ADJ'), 1)}"
+                        f"->{fmt_num(p.get('POWER_EDGE_SCORE'), 1)}"
+                    )
                 if edge_bits:
                     ln += f" | Model edge: {' '.join(edge_bits)}"
                 if truthy_flag(p.get('RETURNING', False)):
@@ -3043,7 +3132,12 @@ Do not explain anything outside the JSON array.
             pk['venue'] = pk.get('venue') or player_meta['venue']
             pk['game'] = pk.get('game') or f"{player_meta['team']} @ {player_meta['opp']}"
             pk['weather_note'] = pk.get('weather_note') or weather_note_for_venue(player_meta['venue'])
-            for edge_col in ['H_EDGE_SCORE', 'POWER_EDGE_SCORE', 'P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE']:
+            for edge_col in [
+                'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+                'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+                'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+                'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+            ]:
                 pk[edge_col] = player_meta.get(edge_col, np.nan)
             lineup_risk_note = str(player_meta.get('lineup_risk_note', '') or '').strip()
             if lineup_risk_note:
@@ -3606,6 +3700,29 @@ if len(games_tonight) > 0:
     df_pitcher_tonight['home_away_tonight'] = df_pitcher_tonight['player_id'].map({k: v['home_away'] for k, v in pitcher_to_game.items()})
     df_pitcher_tonight['opp_starter'] = df_pitcher_tonight['player_id'].map({k: v['opp_pitcher'] for k, v in pitcher_to_game.items()})
 
+    opponent_offense_cols = [
+        'TEAM_ABBR', 'OFF_K_PCT', 'OFF_OPS', 'OFF_RUNS_PER_GAME', 'OFF_HR_PER_GAME',
+        'OFF_K_PCT_MOST_RANK', 'OFF_OPS_BEST_RANK',
+    ]
+    if df_team_rankings is not None and not df_team_rankings.empty:
+        opponent_offense = df_team_rankings[
+            [c for c in opponent_offense_cols if c in df_team_rankings.columns]
+        ].copy()
+        opponent_offense = opponent_offense.rename(columns={
+            'TEAM_ABBR': 'opp_abbr_tonight',
+            'OFF_K_PCT': 'OPP_OFF_K_PCT',
+            'OFF_OPS': 'OPP_OFF_OPS',
+            'OFF_RUNS_PER_GAME': 'OPP_OFF_RUNS_PER_GAME',
+            'OFF_HR_PER_GAME': 'OPP_OFF_HR_PER_GAME',
+            'OFF_K_PCT_MOST_RANK': 'OPP_OFF_K_PCT_MOST_RANK',
+            'OFF_OPS_BEST_RANK': 'OPP_OFF_OPS_BEST_RANK',
+        })
+        df_pitcher_tonight = df_pitcher_tonight.merge(
+            opponent_offense,
+            on='opp_abbr_tonight',
+            how='left',
+        )
+
     if df_pitcher_statcast is not None and len(df_pitcher_statcast) > 0:
         p_statcast_merge_cols = ['player_id'] + [c for c in df_pitcher_statcast.columns if c.startswith('SC_')]
         df_pitcher_tonight = df_pitcher_tonight.merge(df_pitcher_statcast[p_statcast_merge_cols], on='player_id', how='left')
@@ -3621,15 +3738,53 @@ if len(games_tonight) > 0:
             + (numeric_col(df_pitcher_tonight, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
             + (numeric_col(df_pitcher_tonight, 'SC_L14_hard_hit_pct') - 38).fillna(0) * 0.5
         )
-        df_pitcher_tonight['P_SO_EDGE_SCORE'] = clip_score(k_score)
-        df_pitcher_tonight['P_ER_RISK_SCORE'] = clip_score(er_risk_score)
+        df_pitcher_tonight['P_SO_PLAYER_SCORE'] = clip_score(k_score)
+        df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] = clip_score(er_risk_score)
+
+        league_k_pct = safe_numeric_mean(df_team_rankings.get('OFF_K_PCT', pd.Series(dtype=float)))
+        league_ops = safe_numeric_mean(df_team_rankings.get('OFF_OPS', pd.Series(dtype=float)))
+        league_runs = safe_numeric_mean(df_team_rankings.get('OFF_RUNS_PER_GAME', pd.Series(dtype=float)))
+        league_hr = safe_numeric_mean(df_team_rankings.get('OFF_HR_PER_GAME', pd.Series(dtype=float)))
+
+        k_adjustment = (
+            (numeric_col(df_pitcher_tonight, 'OPP_OFF_K_PCT') - league_k_pct) * 1.5
+            if pd.notna(league_k_pct)
+            else pd.Series(0.0, index=df_pitcher_tonight.index)
+        )
+        er_adjustment = pd.Series(0.0, index=df_pitcher_tonight.index)
+        if pd.notna(league_ops):
+            er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_OPS') - league_ops) * 50
+        if pd.notna(league_runs):
+            er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_RUNS_PER_GAME') - league_runs) * 2
+        if pd.notna(league_hr):
+            er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_HR_PER_GAME') - league_hr) * 2
+
+        df_pitcher_tonight['P_SO_OPP_ADJ'] = k_adjustment.fillna(0).clip(-10, 10).round(1)
+        df_pitcher_tonight['P_ER_OPP_ADJ'] = er_adjustment.fillna(0).clip(-10, 10).round(1)
+        df_pitcher_tonight['P_SO_EDGE_SCORE'] = clip_score(
+            df_pitcher_tonight['P_SO_PLAYER_SCORE'] + df_pitcher_tonight['P_SO_OPP_ADJ']
+        )
+        df_pitcher_tonight['P_ER_RISK_SCORE'] = clip_score(
+            df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] + df_pitcher_tonight['P_ER_OPP_ADJ']
+        )
     else:
+        df_pitcher_tonight['P_SO_PLAYER_SCORE'] = np.nan
+        df_pitcher_tonight['P_SO_OPP_ADJ'] = np.nan
         df_pitcher_tonight['P_SO_EDGE_SCORE'] = np.nan
+        df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] = np.nan
+        df_pitcher_tonight['P_ER_OPP_ADJ'] = np.nan
         df_pitcher_tonight['P_ER_RISK_SCORE'] = np.nan
 
     p_rolling_cols = [c for c in df_pitcher_tonight.columns if any(c.startswith(p) for p in ['L3_', 'L7_', 'L15_', 'Seas_'])]
-    p_statcast_cols = [c for c in df_pitcher_tonight.columns if c.startswith('SC_')] + ['P_SO_EDGE_SCORE', 'P_ER_RISK_SCORE']
-    p_final_cols = ['player_name', 'team_abbr', 'opp_abbr_tonight', 'venue_tonight', 'home_away_tonight', 'opp_starter'] + p_rolling_cols + p_statcast_cols + ['LAST_UPDATED']
+    p_statcast_cols = [c for c in df_pitcher_tonight.columns if c.startswith('SC_')]
+    p_matchup_cols = [
+        c for c in df_pitcher_tonight.columns
+        if c.startswith('OPP_OFF_') or c in {
+            'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+            'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+        }
+    ]
+    p_final_cols = ['player_name', 'team_abbr', 'opp_abbr_tonight', 'venue_tonight', 'home_away_tonight', 'opp_starter'] + p_rolling_cols + p_statcast_cols + p_matchup_cols + ['LAST_UPDATED']
     p_final_cols = [c for c in p_final_cols if c in df_pitcher_tonight.columns]
     df_pitcher_tonight = df_pitcher_tonight[p_final_cols].copy()
     df_pitcher_tonight = df_pitcher_tonight.sort_values('player_name').reset_index(drop=True)
@@ -3642,6 +3797,67 @@ if len(games_tonight) > 0:
 else:
     df_pitcher_tonight = pd.DataFrame()
     print("⚠️ No games tonight — skipping tonight's pitcher sheet")
+
+if not df_tonight.empty and not df_pitcher_tonight.empty:
+    starter_matchup_cols = [
+        'player_name', 'Seas_HR', 'Seas_ERA', 'Seas_WHIP',
+        'SC_L14_xwOBA', 'SC_L14_barrel_pct', 'SC_L14_hard_hit_pct',
+    ]
+    starter_matchups = df_pitcher_tonight[
+        [c for c in starter_matchup_cols if c in df_pitcher_tonight.columns]
+    ].copy()
+    starter_matchups['_opp_pitcher_norm'] = starter_matchups['player_name'].map(normalize_player_name)
+    starter_matchups = starter_matchups.drop_duplicates('_opp_pitcher_norm').rename(columns={
+        'Seas_HR': 'OPP_SP_SEAS_HR',
+        'Seas_ERA': 'OPP_SP_SEAS_ERA',
+        'Seas_WHIP': 'OPP_SP_SEAS_WHIP',
+        'SC_L14_xwOBA': 'OPP_SP_SC_L14_XWOBA',
+        'SC_L14_barrel_pct': 'OPP_SP_SC_L14_BARREL_PCT',
+        'SC_L14_hard_hit_pct': 'OPP_SP_SC_L14_HARD_HIT_PCT',
+    })
+    starter_matchups = starter_matchups.drop(columns=['player_name'], errors='ignore')
+
+    df_tonight['_opp_pitcher_norm'] = df_tonight['opp_pitcher_name'].map(normalize_player_name)
+    df_tonight = df_tonight.merge(starter_matchups, on='_opp_pitcher_norm', how='left')
+    df_tonight = df_tonight.drop(columns=['_opp_pitcher_norm'])
+
+    league_sp_whip = safe_numeric_mean(df_pitcher_tonight.get('Seas_WHIP', pd.Series(dtype=float)))
+    league_sp_hr = safe_numeric_mean(df_pitcher_tonight.get('Seas_HR', pd.Series(dtype=float)))
+    league_sp_xwoba = safe_numeric_mean(df_pitcher_tonight.get('SC_L14_xwOBA', pd.Series(dtype=float)))
+    league_sp_barrel = safe_numeric_mean(df_pitcher_tonight.get('SC_L14_barrel_pct', pd.Series(dtype=float)))
+
+    hit_adjustment = pd.Series(0.0, index=df_tonight.index)
+    if pd.notna(league_sp_whip):
+        hit_adjustment += (numeric_col(df_tonight, 'OPP_SP_SEAS_WHIP') - league_sp_whip) * 12
+    if pd.notna(league_sp_xwoba):
+        hit_adjustment += (numeric_col(df_tonight, 'OPP_SP_SC_L14_XWOBA') - league_sp_xwoba) * 40
+    hit_adjustment += (
+        numeric_col(df_tonight, 'vs_OPP_AVG') - numeric_col(df_tonight, 'Seas_AVG')
+    ).fillna(0) * 12
+
+    power_adjustment = pd.Series(0.0, index=df_tonight.index)
+    if pd.notna(league_sp_hr):
+        power_adjustment += (numeric_col(df_tonight, 'OPP_SP_SEAS_HR') - league_sp_hr) * 3
+    if pd.notna(league_sp_xwoba):
+        power_adjustment += (numeric_col(df_tonight, 'OPP_SP_SC_L14_XWOBA') - league_sp_xwoba) * 35
+    if pd.notna(league_sp_barrel):
+        power_adjustment += (
+            numeric_col(df_tonight, 'OPP_SP_SC_L14_BARREL_PCT') - league_sp_barrel
+        ) * 0.4
+    power_adjustment += (
+        numeric_col(df_tonight, 'vs_OPP_OPS') - numeric_col(df_tonight, 'Seas_OPS')
+    ).fillna(0) * 4
+
+    df_tonight['H_OPP_ADJ'] = hit_adjustment.fillna(0).clip(-10, 10).round(1)
+    df_tonight['POWER_OPP_ADJ'] = power_adjustment.fillna(0).clip(-10, 10).round(1)
+    df_tonight['H_EDGE_SCORE'] = clip_score(
+        numeric_col(df_tonight, 'H_PLAYER_SCORE') + df_tonight['H_OPP_ADJ']
+    )
+    df_tonight['POWER_EDGE_SCORE'] = clip_score(
+        numeric_col(df_tonight, 'POWER_PLAYER_SCORE') + df_tonight['POWER_OPP_ADJ']
+    )
+    matched_starters = numeric_col(df_tonight, 'OPP_SP_SEAS_WHIP').notna().sum()
+    print(f"✅ Opposing-starter adjustments applied to {matched_starters}/{len(df_tonight)} hitters")
 
 # --- 10.75 GEMINI AI DAILY PICKS GENERATOR ---
 df_picks = generate_gemini_picks()
