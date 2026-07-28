@@ -540,6 +540,26 @@ td.push{color:var(--push);font-weight:700}
 .draft-controls{display:flex;justify-content:space-between;align-items:center;padding:6px 16px}
 .draft-reset{background:var(--surface-2);border:1px solid var(--border-1);color:var(--ink-muted);font-size:var(--t-xs);padding:4px 10px;border-radius:6px;cursor:pointer}
 .draft-count{color:var(--ink-muted);font-size:var(--t-xs)}
+.draft-slate{margin:8px 16px 10px;border:1px solid var(--border-1);background:var(--surface-1)}
+.draft-slate-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px}
+.draft-slate-title{font-size:var(--t-sm);font-weight:800;color:var(--ink-0)}
+.draft-slate-summary{margin-top:2px;color:var(--ink-muted);font-size:var(--t-xs)}
+.draft-slate-toggle{border:1px solid var(--accent);background:transparent;color:var(--accent);padding:6px 9px;font-size:var(--t-xs);font-weight:800;cursor:pointer}
+.draft-slate-games{display:flex;gap:5px;flex-wrap:wrap;padding:0 12px 10px}
+.draft-slate-chip{padding:3px 7px;border:1px solid var(--border-1);background:var(--surface-2);color:var(--ink-1);font-size:var(--t-xs);font-weight:700}
+.draft-slate-panel{padding:10px 12px 12px;border-top:1px solid var(--border-1)}
+.draft-slate-presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.draft-slate-preset{border:1px solid var(--border-1);background:var(--surface-2);color:var(--ink-1);padding:5px 8px;font-size:var(--t-xs);font-weight:700;cursor:pointer}
+.draft-slate-preset:hover,.draft-slate-preset.active{border-color:var(--accent);color:var(--accent)}
+.draft-slate-note{margin-top:9px;color:var(--ink-muted);font-size:var(--t-xs)}
+.draft-game-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.draft-game-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;min-height:52px;padding:8px 9px;border:1px solid var(--border-1);background:var(--surface-0);color:var(--ink-1);text-align:left;cursor:pointer}
+.draft-game-option.selected{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface-0))}
+.draft-game-check{display:grid;place-items:center;width:16px;height:16px;border:1px solid var(--border-1);color:transparent;font-size:10px;font-weight:900}
+.draft-game-option.selected .draft-game-check{border-color:var(--accent);background:var(--accent);color:var(--surface-0)}
+.draft-game-matchup{display:block;color:var(--ink-0);font-size:var(--t-xs);font-weight:800}
+.draft-game-status{display:block;margin-top:2px;color:var(--ink-muted);font-size:9px;text-transform:uppercase;letter-spacing:.06em}
+.draft-game-time{color:var(--accent-soft);font-size:var(--t-xs);font-weight:700;white-space:nowrap}
 /* ═══ Market-edge signals ═══ */
 .ev-badge{display:inline-block;font-size:var(--t-xs);font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px}
 .ev-pos{background:var(--over-soft);color:var(--over);border:1px solid var(--over-line)}
@@ -755,6 +775,10 @@ td.push{color:var(--push);font-weight:700}
   .entry-shell{padding:14px 10px 6px}
   .entry-header{align-items:flex-start}
   .entry-game-grid{grid-template-columns:1fr}
+  .draft-slate{margin-left:10px;margin-right:10px}
+  .draft-slate-head{align-items:flex-start}
+  .draft-slate-games{max-height:110px;overflow:auto}
+  .draft-game-grid{grid-template-columns:1fr}
   .daily-leader-row{grid-template-columns:30px minmax(0,1fr) 48px;padding:9px 10px}
   .daily-leader-team{display:none}
   .pick-feature{padding:13px}
@@ -969,6 +993,7 @@ const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","UD_FP","H+R+RBI"];
 const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
 const SHORTLIST_TRAY_KEY="mlb-shortlist-tray";
+const DRAFT_SLATE_KEY="mlb-draft-slate-v1";
 
 function loadShortlistTray(){
   try{
@@ -977,6 +1002,17 @@ function loadShortlistTray(){
   }catch(e){return[]}
 }
 
+function loadDraftSlate(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(DRAFT_SLATE_KEY)||"{}");
+    return{
+      signature:String(parsed.signature||""),
+      selectedIds:new Set(Array.isArray(parsed.selectedIds)?parsed.selectedIds.map(String):[])
+    };
+  }catch(e){return{signature:"",selectedIds:new Set()}}
+}
+
+const initialDraftSlate=loadDraftSlate();
 let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
@@ -989,6 +1025,7 @@ let st={
   loading:true,error:null,loadedAt:null,latestPickDate:"",pickGuard:null,
   picksView:"shortlist",propsMetric:"ALL",propsSearch:"",propsTeam:"ALL",propsSort:"EDGE",propsMinHit:"0",propsMinEdge:"5",
   streakFilter:"all",drafted:new Set(),slipLegs:"3",
+  draftSlate:{signature:initialDraftSlate.signature,selectedIds:initialDraftSlate.selectedIds,panelOpen:false},
   vsSP:[],
   lkPlayer:null,lkResults:[],lkQuery:"",lkSubTab:"career",lkPlayerType:"batter",
   lkCareer:null,lkYby:null,lkVsTeamStats:null,lkVsPlayerId:null,
@@ -2227,12 +2264,139 @@ function renderMarketParlays(stat,label){
   return html+renderCombos(combos2,2)+renderCombos(combos3,3)+`</section>`;
 }
 
+function draftGameId(row){
+  const gamePk=String(rowField(row,"game_pk","GAME_PK","game_id","GAME_ID")||"").trim();
+  if(gamePk)return`pk:${gamePk}`;
+  const home=String(rowField(row,"home_abbr","HOME_ABBR")||"").trim().toUpperCase();
+  const away=String(rowField(row,"away_abbr","AWAY_ABBR")||"").trim().toUpperCase();
+  const pair=entryPairId(home,away);
+  return pair?`pair:${pair}`:"";
+}
+
+function getDraftSlateGames(){
+  return getMemo("draftSlateGames",()=>{
+    const games=[];const seen=new Set();
+    for(const row of st.schedule||[]){
+      const id=draftGameId(row);
+      if(!id||seen.has(id))continue;
+      seen.add(id);
+      const home=String(rowField(row,"home_abbr","HOME_ABBR")||"").trim().toUpperCase();
+      const away=String(rowField(row,"away_abbr","AWAY_ABBR")||"").trim().toUpperCase();
+      const startMs=parseStartMs(rowField(row,"game_time","commence_time","start_time"));
+      games.push({id,home,away,label:`${away} @ ${home}`,startMs,started:!!(startMs&&Date.now()>=startMs)});
+    }
+    if(!games.length){
+      for(const row of [...(st.tonight||[]),...(st.pTonight||[])]){
+        const team=String(rowField(row,"team_abbr")||"").trim().toUpperCase();
+        const opp=String(rowField(row,"opp_abbr_tonight","tonight_opp","opp_abbr")||"").trim().toUpperCase();
+        const pair=entryPairId(team,opp);
+        const id=pair?`pair:${pair}`:"";
+        if(!id||seen.has(id))continue;
+        seen.add(id);
+        const startMs=getScheduleStartMs(team,opp);
+        games.push({id,home:"",away:"",label:`${team} vs ${opp}`,startMs,started:!!(startMs&&Date.now()>=startMs)});
+      }
+    }
+    return games.sort((a,b)=>(a.startMs||Number.MAX_SAFE_INTEGER)-(b.startMs||Number.MAX_SAFE_INTEGER)||a.label.localeCompare(b.label));
+  });
+}
+
+function draftSlateSignature(games=getDraftSlateGames()){return games.map(game=>game.id).sort().join("|")}
+function persistDraftSlate(){
+  localStorage.setItem(DRAFT_SLATE_KEY,JSON.stringify({
+    signature:st.draftSlate.signature,
+    selectedIds:[...st.draftSlate.selectedIds]
+  }));
+}
+function syncDraftSlateSelection(){
+  const games=getDraftSlateGames();
+  const signature=draftSlateSignature(games);
+  const valid=new Set(games.map(game=>game.id));
+  if(st.draftSlate.signature!==signature){
+    st.draftSlate.signature=signature;
+    st.draftSlate.selectedIds=new Set(valid);
+    st.drafted.clear();
+  }else{
+    st.draftSlate.selectedIds=new Set([...st.draftSlate.selectedIds].filter(id=>valid.has(id)));
+  }
+  persistDraftSlate();
+}
+function draftSlateSelection(){
+  const games=getDraftSlateGames();
+  if(!st.draftSlate.signature)return new Set(games.map(game=>game.id));
+  return st.draftSlate.selectedIds;
+}
+function draftRowGameId(row){
+  const direct=draftGameId(row);
+  if(direct)return direct;
+  const team=String(rowField(row,"team_abbr")||"").trim().toUpperCase();
+  const opp=String(rowField(row,"opp_abbr_tonight","tonight_opp","opp_abbr")||"").trim().toUpperCase();
+  const pair=entryPairId(team,opp);
+  const matches=getDraftSlateGames().filter(game=>entryPairId(game.home,game.away)===pair);
+  return matches[0]?.id||(pair?`pair:${pair}`:"");
+}
+function draftRowInSlate(row){return draftSlateSelection().has(draftRowGameId(row))}
+function draftSlateMemoKey(){return [...draftSlateSelection()].sort().join(",")||"none"}
+function applyDraftSlateSelection(ids){
+  st.draftSlate.signature=draftSlateSignature();
+  st.draftSlate.selectedIds=new Set(ids);
+  st.drafted.clear();
+  persistDraftSlate();
+  render();
+}
+function toggleDraftSlatePanel(){st.draftSlate.panelOpen=!st.draftSlate.panelOpen;render()}
+function toggleDraftSlateGame(id){
+  const selected=new Set(draftSlateSelection());
+  if(selected.has(id))selected.delete(id);else selected.add(id);
+  applyDraftSlateSelection(selected);
+}
+function draftEasternHour(startMs){
+  if(!startMs)return null;
+  const hour=Number(new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"numeric",hour12:false}).format(new Date(startMs)));
+  return Number.isFinite(hour)?hour:null;
+}
+function setDraftSlatePreset(preset){
+  const games=getDraftSlateGames();
+  let selected=[];
+  if(preset==="all")selected=games.map(game=>game.id);
+  else if(preset==="open")selected=games.filter(game=>!game.started).map(game=>game.id);
+  else if(preset==="after7")selected=games.filter(game=>(draftEasternHour(game.startMs)??-1)>=19).map(game=>game.id);
+  else if(preset==="after9")selected=games.filter(game=>(draftEasternHour(game.startMs)??-1)>=21).map(game=>game.id);
+  applyDraftSlateSelection(selected);
+}
+function draftSlatePreset(){
+  const games=getDraftSlateGames();
+  const selected=draftSlateSelection();
+  const same=ids=>ids.length===selected.size&&ids.every(id=>selected.has(id));
+  if(same(games.map(game=>game.id)))return"all";
+  if(same(games.filter(game=>!game.started).map(game=>game.id)))return"open";
+  if(same(games.filter(game=>(draftEasternHour(game.startMs)??-1)>=19).map(game=>game.id)))return"after7";
+  if(same(games.filter(game=>(draftEasternHour(game.startMs)??-1)>=21).map(game=>game.id)))return"after9";
+  if(!selected.size)return"clear";
+  return"custom";
+}
+function draftDisplayTime(startMs){
+  if(!Number.isFinite(startMs))return"";
+  return new Date(startMs).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",timeZone:"America/New_York",timeZoneName:"short"});
+}
+function renderDraftSlateSelector(){
+  const games=getDraftSlateGames();
+  const selected=draftSlateSelection();
+  const selectedGames=games.filter(game=>selected.has(game.id));
+  const starts=selectedGames.map(game=>game.startMs).filter(Boolean).sort((a,b)=>a-b);
+  const range=starts.length?starts.length===1?draftDisplayTime(starts[0]):`${draftDisplayTime(starts[0])}–${draftDisplayTime(starts[starts.length-1])}`:"No start window";
+  const preset=draftSlatePreset();
+  const summary=selectedGames.length?`${selectedGames.length} of ${games.length} games · ${range}`:`0 of ${games.length} games selected`;
+  return`<section class="draft-slate"><div class="draft-slate-head"><div><div class="draft-slate-title">Contest slate</div><div class="draft-slate-summary">${summary}</div></div><button class="draft-slate-toggle" onclick="toggleDraftSlatePanel()">${st.draftSlate.panelOpen?"Done":"Choose games"}</button></div>${selectedGames.length?`<div class="draft-slate-games">${selectedGames.map(game=>`<span class="draft-slate-chip">${esc(game.label)} · ${draftDisplayTime(game.startMs)||"Time TBD"}</span>`).join("")}</div>`:""}${st.draftSlate.panelOpen?`<div class="draft-slate-panel"><div class="draft-slate-presets"><button class="draft-slate-preset${preset==="all"?" active":""}" onclick="setDraftSlatePreset('all')">Full slate</button><button class="draft-slate-preset${preset==="open"?" active":""}" onclick="setDraftSlatePreset('open')">Open games</button><button class="draft-slate-preset${preset==="after7"?" active":""}" onclick="setDraftSlatePreset('after7')">7 PM+</button><button class="draft-slate-preset${preset==="after9"?" active":""}" onclick="setDraftSlatePreset('after9')">9 PM+</button><button class="draft-slate-preset${preset==="clear"?" active":""}" onclick="setDraftSlatePreset('clear')">Clear</button></div><div class="draft-game-grid">${games.map(game=>`<button class="draft-game-option${selected.has(game.id)?" selected":""}" onclick="toggleDraftSlateGame('${esc(game.id)}')"><span class="draft-game-check">✓</span><span><span class="draft-game-matchup">${esc(game.label)}</span><span class="draft-game-status">${game.started?"Started / locked":"Available"}</span></span><span class="draft-game-time">${draftDisplayTime(game.startMs)||"TBD"}</span></button>`).join("")}</div><div class="draft-slate-note">Changing games resets drafted marks so the board stays aligned with this contest.</div></div>`:""}</section>`;
+}
+
 function getDraftBoard(){
-  return getMemo("draftBoard",()=>{
+  return getMemo(`draftBoard:${draftSlateMemoKey()}`,()=>{
   const board=[];
   const aiMap=new Map();
   st.picks.forEach(p=>{if(p.player)aiMap.set(normalizePlayerName(p.player),p)});
   for(const p of st.tonight){
+    if(!draftRowInSlate(p))continue;
     const name=p.player_name;if(!name)continue;
     const logs=getPlayerLogs(name,false);
     if(!logs.length)continue;const most=logs[0]||{};
@@ -2256,6 +2420,7 @@ function getDraftBoard(){
     board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos,returning:flags.returning,limitedSample:flags.limited});
   }
   for(const p of st.pTonight){
+    if(!draftRowInSlate(p))continue;
     const name=p.player_name;if(!name)continue;
     const logs=getPlayerLogs(name,true);
     if(!logs.length)continue;const most=logs[0]||{};
@@ -2281,7 +2446,7 @@ function getMlbPitcherEra(name){
 }
 
 function getDraftStacks(){
-  return getMemo("draftStacks",()=>{
+  return getMemo(`draftStacks:${draftSlateMemoKey()}`,()=>{
     const board=getDraftBoard().filter(p=>!p.isPitcher);
     const byName=new Map(board.map(p=>[normalizePlayerName(p.name),p]));
     const byTeam=new Map();
@@ -2322,7 +2487,7 @@ function getDraftStacks(){
 }
 
 function getDraftStackTagMap(){
-  return getMemo("draftStackTags",()=>{
+  return getMemo(`draftStackTags:${draftSlateMemoKey()}`,()=>{
     const map=new Map();
     getDraftStacks().forEach(stack=>{
       stack.players.forEach(p=>{
@@ -3082,18 +3247,26 @@ function render(){
     }
   }else if(st.picksView==="draft"){
     const board=getDraftBoard();
+    const slateGames=getDraftSlateGames();
+    const selectedGames=draftSlateSelection();
     const available=board.filter(p=>!st.drafted.has(p.name));
     const stacks=getDraftStacks().slice(0,5);
     const stackTags=getDraftStackTagMap();
     const draftedCount=st.drafted.size;
     function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
     function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
-    if(!board.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No draft data available. Run the engine first.</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
+    const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
       <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
       <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
-      <div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
+      ${renderDraftSlateSelector()}`;
+    if(!board.length){
+      const emptyMessage=slateGames.length&&!selectedGames.size
+        ?"No contest games selected. Choose the games included in this UD contest."
+        :"No draftable players loaded for the selected games.";
+      picksHTML=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
+    }
+    else{
+      picksHTML=draftHeader+`<div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
       picksHTML+=`<div class="cards-grid draft-board">`;
       let lastTier="";
       board.forEach((p,i)=>{
@@ -3469,6 +3642,7 @@ function loadAllData(){
 	    console.log('✅ Dashboard schema audit: all expected columns present');
 	  }
 	  st.dataVersion+=1;
+  syncDraftSlateSelection();
   st.latestPickDate=getLatestPickDate();
   const latestPickRun=getLatestPickRun();
   const latestPicks=st.latestPickDate?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===st.latestPickDate&&toNum(rowField(p,"RUN_NUMBER"))===latestPickRun):[];
