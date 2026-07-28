@@ -3767,6 +3767,13 @@ if len(games_tonight) > 0:
         df_pitcher_tonight['P_ER_RISK_SCORE'] = clip_score(
             df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] + df_pitcher_tonight['P_ER_OPP_ADJ']
         )
+        matched_pitcher_opponents = numeric_col(
+            df_pitcher_tonight, 'OPP_OFF_K_PCT'
+        ).notna().sum()
+        print(
+            "✅ Opponent-offense adjustments applied to "
+            f"{matched_pitcher_opponents}/{len(df_pitcher_tonight)} starting pitchers"
+        )
     else:
         df_pitcher_tonight['P_SO_PLAYER_SCORE'] = np.nan
         df_pitcher_tonight['P_SO_OPP_ADJ'] = np.nan
