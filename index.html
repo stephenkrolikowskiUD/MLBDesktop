@@ -2982,7 +2982,15 @@ function render(){
     }
   }else if(st.picksView==="dingers"){
     const db=getDingerBoard();
-    if(!db.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No dinger data available. Run the engine first.</div>`}
+    if(!db.length){
+      const missing=[];
+      if(!st.tonight.length)missing.push("tonight's batters");
+      if(!st.gameLogs.length)missing.push("batter game logs");
+      const detail=missing.length
+        ?`Google Sheets did not return ${missing.join(" or ")} on this page load.`
+        :"No eligible hitters had usable at-bats and game-log history.";
+      picksHTML=convergenceHTML+`<div class="empty" style="padding:40px;text-align:center"><div style="font-weight:800;color:var(--ink-1)">Dinger Board unavailable</div><div style="margin-top:6px">${detail}</div><button class="refresh-btn" style="margin-top:12px" onclick="loadAllData()">${icon("refresh")}Retry data load</button></div>`;
+    }
     else{
       picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's Dinger Board</div></div>
       <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
