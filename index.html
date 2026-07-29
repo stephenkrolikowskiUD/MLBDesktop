@@ -1843,6 +1843,16 @@ function getShortlistMatchupEvidence(leg){
   return `${leg.opp} staff WHIP ${teamRankValue(opponent,"PIT_WHIP","PIT_WHIP_BEST_RANK",{digits:2,direction:"best"})}`;
 }
 
+function getShortlistOpponentEffect(leg){
+  const source=(leg.isP?st.pTonight:st.tonight).find(row=>normalizePlayerName(row.player_name)===normalizePlayerName(leg.name));
+  if(!source)return null;
+  const raw=getPropOpponentAdjustment(source,leg.metric);
+  if(raw===null)return null;
+  const effect=leg.lean==="UNDER"?-raw:raw;
+  const label=effect>=2?"Favorable matchup":effect<=-2?"Tough matchup":"Neutral matchup";
+  return{effect,label};
+}
+
 function getTonightShortlist(){
   return getMemo("tonightShortlist",()=>{
     const qualified=getConvictionLegs().filter(leg=>
@@ -1863,7 +1873,10 @@ function getTonightShortlist(){
       const current=bestByPlayer.get(key);
       if(!current||leg.conviction>current.conviction||(leg.conviction===current.conviction&&leg.edge>current.edge))bestByPlayer.set(key,leg);
     }
-    return [...bestByPlayer.values()].sort((a,b)=>b.conviction-a.conviction||b.edge-a.edge||b.hitRate-a.hitRate).slice(0,12);
+    return [...bestByPlayer.values()]
+      .map(leg=>({...leg,opponentEffect:getShortlistOpponentEffect(leg)}))
+      .sort((a,b)=>b.conviction-a.conviction||b.edge-a.edge||b.hitRate-a.hitRate)
+      .slice(0,12);
   });
 }
 
@@ -1934,9 +1947,12 @@ function renderTonightShortlist(){
     const impliedPct=(row.impliedProb*100).toFixed(0);
     const callClass=row.lean==="OVER"?"prop-over":"prop-under";
     const matchup=getShortlistMatchupEvidence(row);
+    const opponentEffect=row.opponentEffect;
     const tags=[row.hasAI?`${row.aiConfidence||"AI"} backed`:"Market model",row.hasStreak?`${row.streakLength}G streak`:"Stable sample",row.edge>=0.15?"Elite edge":row.edge>=0.08?"Strong edge":"Qualified edge"];
+    if(opponentEffect)tags.push(opponentEffect.label);
     const inTray=isInShortlistTray(row);
-    return`<article class="shortlist-card${index===0?" top":""}" onclick="streakToDash('${esc(row.name)}','${propToLogCol(row.metric)}','${row.dkLine}')"><div><div class="shortlist-rank">${index===0?"Top play":`#${String(index+1).padStart(2,"0")}`}</div><div class="shortlist-name">${playerLink(row.name,row.metric,row.dkLine)}</div><div class="shortlist-meta">${esc(row.team)} vs ${esc(row.opp||"TBD")} · ${esc(propTypeLabel(row.metric))} · ${row.hits}/${row.total} decisive games</div></div><div class="shortlist-call"><span class="shortlist-market">${esc(propTypeLabel(row.metric))}</span><strong class="${callClass}">${row.lean} ${esc(row.dkLine)}</strong><span>${fmtOdds(row.odds)} · +${edgePct}% edge</span></div><div class="shortlist-evidence"><span><strong>${hitPct}% historical hit rate</strong> across the available sample</span><span><strong>${edgePct} points above market</strong> (${hitPct}% model vs ${impliedPct}% implied)</span><span>${esc(matchup)}</span><span><strong>Playable price:</strong> ${fmtOdds(row.odds)}${row.hasAI?` · ${esc(row.aiConfidence||"AI")} agrees`:" · no AI conflict"}</span></div><div class="shortlist-tags">${tags.map(tag=>`<span class="shortlist-tag">${esc(tag)}</span>`).join("")}<button class="shortlist-action${inTray?" added":""}" onclick="event.stopPropagation();toggleShortlistTray('${esc(row.name)}','${esc(row.metric)}','${esc(row.dkLine)}','${row.lean}')">${inTray?"Remove":"Add to tray"}</button></div></article>`;
+    const opponentEffectText=opponentEffect?`<span><strong>Opponent effect:</strong> ${opponentEffect.effect>=0?"+":""}${opponentEffect.effect.toFixed(1)} model points for this ${row.lean.toLowerCase()}</span>`:"";
+    return`<article class="shortlist-card${index===0?" top":""}" onclick="streakToDash('${esc(row.name)}','${propToLogCol(row.metric)}','${row.dkLine}')"><div><div class="shortlist-rank">${index===0?"Top play":`#${String(index+1).padStart(2,"0")}`}</div><div class="shortlist-name">${playerLink(row.name,row.metric,row.dkLine)}</div><div class="shortlist-meta">${esc(row.team)} vs ${esc(row.opp||"TBD")} · ${esc(propTypeLabel(row.metric))} · ${row.hits}/${row.total} decisive games</div></div><div class="shortlist-call"><span class="shortlist-market">${esc(propTypeLabel(row.metric))}</span><strong class="${callClass}">${row.lean} ${esc(row.dkLine)}</strong><span>${fmtOdds(row.odds)} · +${edgePct}% edge</span></div><div class="shortlist-evidence"><span><strong>${hitPct}% historical hit rate</strong> across the available sample</span><span><strong>${edgePct} points above market</strong> (${hitPct}% model vs ${impliedPct}% implied)</span><span><strong>Opponent profile:</strong> ${esc(matchup)}</span>${opponentEffectText}<span><strong>Playable price:</strong> ${fmtOdds(row.odds)}${row.hasAI?` · ${esc(row.aiConfidence||"AI")} agrees`:" · no AI conflict"}</span></div><div class="shortlist-tags">${tags.map(tag=>`<span class="shortlist-tag">${esc(tag)}</span>`).join("")}<button class="shortlist-action${inTray?" added":""}" onclick="event.stopPropagation();toggleShortlistTray('${esc(row.name)}','${esc(row.metric)}','${esc(row.dkLine)}','${row.lean}')">${inTray?"Remove":"Add to tray"}</button></div></article>`;
   }).join("")}</div></section>`;
 }
 
