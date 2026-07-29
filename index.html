@@ -1218,8 +1218,9 @@ function fetchSheet(name,attempt=1){
 
 const toNum=v=>parseFloat(v)||0;
 function outsToIPStr(outs){const w=Math.floor(outs/3);const r=outs%3;return r===0?w+".0":w+"."+r;}
-const barColor=(v,l)=>!l?"var(--accent)":v>l?"var(--over)":v===l?"var(--push)":"var(--under)";
-const avgColor=(v,l)=>!l?"var(--accent)":v>=l?"var(--accent)":"#f97316";
+const clearsPropLine=(v,l,lean="OVER")=>lean==="UNDER"?v<l:v>l;
+const barColor=(v,l,lean="OVER")=>!l?"var(--accent)":v===l?"var(--push)":clearsPropLine(v,l,lean)?"var(--over)":"var(--under)";
+const avgColor=(v,l,lean="OVER")=>!l?"var(--accent)":clearsPropLine(v,l,lean)?"var(--accent)":"#f97316";
 const esc=s=>{if(!s)return"";return String(s).replace(/[&<>'"]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[t]))};
 const fmtOdds=v=>{if(!v&&v!==0)return"—";v=parseInt(v);return v>0?`+${v}`:`${v}`};
 function cleanName(v){return String(v||"").trim()}
@@ -1951,8 +1952,9 @@ function renderTonightShortlist(){
     const tags=[row.hasAI?`${row.aiConfidence||"AI"} backed`:"Market model",row.hasStreak?`${row.streakLength}G streak`:"Stable sample",row.edge>=0.15?"Elite edge":row.edge>=0.08?"Strong edge":"Qualified edge"];
     if(opponentEffect)tags.push(opponentEffect.label);
     const inTray=isInShortlistTray(row);
+    const gameTime=gameStartTimeForTeams(row.team,row.opp);
     const opponentEffectText=opponentEffect?`<span><strong>Opponent effect:</strong> ${opponentEffect.effect>=0?"+":""}${opponentEffect.effect.toFixed(1)} model points for this ${row.lean.toLowerCase()}</span>`:"";
-    return`<article class="shortlist-card${index===0?" top":""}" onclick="streakToDash('${esc(row.name)}','${propToLogCol(row.metric)}','${row.dkLine}')"><div><div class="shortlist-rank">${index===0?"Top play":`#${String(index+1).padStart(2,"0")}`}</div><div class="shortlist-name">${playerLink(row.name,row.metric,row.dkLine)}</div><div class="shortlist-meta">${esc(row.team)} vs ${esc(row.opp||"TBD")} · ${esc(propTypeLabel(row.metric))} · ${row.hits}/${row.total} decisive games</div></div><div class="shortlist-call"><span class="shortlist-market">${esc(propTypeLabel(row.metric))}</span><strong class="${callClass}">${row.lean} ${esc(row.dkLine)}</strong><span>${fmtOdds(row.odds)} · +${edgePct}% edge</span></div><div class="shortlist-evidence"><span><strong>${hitPct}% historical hit rate</strong> across the available sample</span><span><strong>${edgePct} points above market</strong> (${hitPct}% model vs ${impliedPct}% implied)</span><span><strong>Opponent profile:</strong> ${esc(matchup)}</span>${opponentEffectText}<span><strong>Playable price:</strong> ${fmtOdds(row.odds)}${row.hasAI?` · ${esc(row.aiConfidence||"AI")} agrees`:" · no AI conflict"}</span></div><div class="shortlist-tags">${tags.map(tag=>`<span class="shortlist-tag">${esc(tag)}</span>`).join("")}<button class="shortlist-action${inTray?" added":""}" onclick="event.stopPropagation();toggleShortlistTray('${esc(row.name)}','${esc(row.metric)}','${esc(row.dkLine)}','${row.lean}')">${inTray?"Remove":"Add to tray"}</button></div></article>`;
+    return`<article class="shortlist-card${index===0?" top":""}" onclick="streakToDash('${esc(row.name)}','${propToLogCol(row.metric)}','${row.dkLine}')"><div><div class="shortlist-rank">${index===0?"Top play":`#${String(index+1).padStart(2,"0")}`}</div><div class="shortlist-name">${playerLink(row.name,row.metric,row.dkLine)}</div><div class="shortlist-meta">${esc(row.team)} vs ${esc(row.opp||"TBD")}${gameTime?` · ${esc(gameTime)}`:""} · ${esc(propTypeLabel(row.metric))} · ${row.hits}/${row.total} decisive games</div></div><div class="shortlist-call"><span class="shortlist-market">${esc(propTypeLabel(row.metric))}</span><strong class="${callClass}">${row.lean} ${esc(row.dkLine)}</strong><span>${fmtOdds(row.odds)} · +${edgePct}% edge</span></div><div class="shortlist-evidence"><span><strong>${hitPct}% historical hit rate</strong> across the available sample</span><span><strong>${edgePct} points above market</strong> (${hitPct}% model vs ${impliedPct}% implied)</span><span><strong>Opponent profile:</strong> ${esc(matchup)}</span>${opponentEffectText}<span><strong>Playable price:</strong> ${fmtOdds(row.odds)}${row.hasAI?` · ${esc(row.aiConfidence||"AI")} agrees`:" · no AI conflict"}</span></div><div class="shortlist-tags">${tags.map(tag=>`<span class="shortlist-tag">${esc(tag)}</span>`).join("")}<button class="shortlist-action${inTray?" added":""}" onclick="event.stopPropagation();toggleShortlistTray('${esc(row.name)}','${esc(row.metric)}','${esc(row.dkLine)}','${row.lean}')">${inTray?"Remove":"Add to tray"}</button></div></article>`;
   }).join("")}</div></section>`;
 }
 
@@ -3016,6 +3018,9 @@ function render(){
   const allLogs=getPlayerLogs(player,isP);
   const last10=[...allLogs].reverse().slice(-10);
   const most=allLogs[0]||{};
+  const pPick=getPick(player);
+  const pickMatchesMetric=pPick&&propToLogCol(pPick.prop_type)===metric;
+  const analysisLean=pickMatchesMetric?normalizeLeanText(pPick.lean):(isP&&(metric==="ER"||metric==="BB")?"UNDER":"OVER");
 
   const seasAvg=getRollingVal(most,"Seas_",metric);
   const midAvg=isP?getRollingVal(most,"L7_",metric):getRollingVal(most,"L30_",metric);
@@ -3023,15 +3028,15 @@ function render(){
   const lastGame=getMetricVal(most,metric);
   const midLbl=isP?"L7":"L30",shortLbl=isP?"L3":"L7";
 
-  const hL5=lineNum?allLogs.slice(0,5).filter(g=>getMetricVal(g,metric)>lineNum).length:null;
-  const hL10=lineNum?allLogs.slice(0,10).filter(g=>getMetricVal(g,metric)>lineNum).length:null;
-  const hSeas=lineNum?allLogs.filter(g=>getMetricVal(g,metric)>lineNum).length:null;
+  const hL5=lineNum?allLogs.slice(0,5).filter(g=>clearsPropLine(getMetricVal(g,metric),lineNum,analysisLean)).length:null;
+  const hL10=lineNum?allLogs.slice(0,10).filter(g=>clearsPropLine(getMetricVal(g,metric),lineNum,analysisLean)).length:null;
+  const hSeas=lineNum?allLogs.filter(g=>clearsPropLine(getMetricVal(g,metric),lineNum,analysisLean)).length:null;
   const sRate=hSeas!==null&&allLogs.length>0?hSeas/allLogs.length:null;
   const maxLog=Math.max(...last10.map(g=>getMetricVal(g,metric)),lineNum||0,1);
 
   const metricOpts=curMetrics.map(m=>`<option value="${m}" ${m===metric?"selected":""}>${m}</option>`).join("");
-  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div><div class="bar-date" style="color:var(--ink-muted);margin-top:0">${g.opp_abbr?(g.home_away==="Home"?"vs":"@")+g.opp_abbr:""}</div></div>`}).join("");
-  const avgs=[{l:"Season",v:seasAvg},{l:midLbl,v:midAvg},{l:shortLbl,v:shortAvg},{l:"Last",v:lastGame}].map(a=>`<div class="avg-card" style="border:1px solid ${lineNum&&a.v>=lineNum?"var(--over-line)":lineNum?"color-mix(in srgb, var(--under) 20%, transparent)":"var(--border-1)"}"><div class="avg-label">${a.l}</div><div class="avg-val" style="color:${avgColor(a.v,lineNum)}">${a.v.toFixed(2)}</div></div>`).join("");
+  const bars=last10.map(g=>{const v=getMetricVal(g,metric);const h=Math.max(4,(v/maxLog)*80);return`<div class="bar-wrap"><div class="bar-val">${v}</div><div class="bar" style="height:${h}px;background:${barColor(v,lineNum,analysisLean)}"></div><div class="bar-date">${(g.game_date||"").slice(5)}</div><div class="bar-date" style="color:var(--ink-muted);margin-top:0">${g.opp_abbr?(g.home_away==="Home"?"vs":"@")+g.opp_abbr:""}</div></div>`}).join("");
+  const avgs=[{l:"Season",v:seasAvg},{l:midLbl,v:midAvg},{l:shortLbl,v:shortAvg},{l:"Last",v:lastGame}].map(a=>`<div class="avg-card" style="border:1px solid ${lineNum&&clearsPropLine(a.v,lineNum,analysisLean)?"var(--over-line)":lineNum?"color-mix(in srgb, var(--under) 20%, transparent)":"var(--border-1)"}"><div class="avg-label">${a.l}</div><div class="avg-val" style="color:${avgColor(a.v,lineNum,analysisLean)}">${a.v.toFixed(2)}</div></div>`).join("");
 
   const sT={};let statStrip="";
   if(isP){
@@ -3069,7 +3074,6 @@ function render(){
   const earlyBanner=!pHasLogs&&player?`<div class="early-banner"><div class="msg">Early Season — No Game Logs Yet</div><div class="sub">${esc(player)} is on the active roster. Matchup info, props, and Lookup are available.</div></div>`:"";
 
   const pProps=getProps(player);
-  const pPick=getPick(player);
   let propsHTML="";
   if(pProps.length>0){propsHTML=`<div class="analysis-market-list">${pProps.map(p=>`<div class="analysis-market-row"><div class="analysis-market-name">${esc(propTypeLabel(p.METRIC))}</div><div class="analysis-market-line">${esc(p.DK_LINE)}</div><div class="analysis-market-odds"><span class="prop-over">O ${fmtOdds(p.OVER_ODDS)}</span><br><span class="prop-under">U ${fmtOdds(p.UNDER_ODDS)}</span></div><div class="analysis-market-best">${renderPropBestBookBlock(p)}</div></div>`).join("")}</div>`}
   let pickBanner="";
@@ -3558,11 +3562,11 @@ function render(){
       ${earlyBanner}
       <header class="analysis-hero">
         <div class="analysis-hero-top"><div><div class="analysis-eyebrow">${isP?"Pitcher analysis":"Batter analysis"}</div><div class="analysis-player">${esc(player)}</div><div class="analysis-context">${esc(pT.team_abbr||"Team TBD")} · ${esc(pT.home_away_tonight||"—")} vs ${esc(pT.opp_abbr_tonight||"—")} · ${esc(venue||pT.venue_tonight||"Venue TBD")}${gameStartTimeForTeams(pT.team_abbr,pT.opp_abbr_tonight)?` · ${esc(gameStartTimeForTeams(pT.team_abbr,pT.opp_abbr_tonight))}`:""}</div></div><div class="analysis-focus"><div class="analysis-focus-value">${esc(metric)}</div><div class="analysis-focus-label">${lineNum?`Prop line ${lineNum}`:"Selected metric"}</div></div></div>
-        ${pHasLogs?`<div class="analysis-kpis"><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(seasAvg,lineNum)}">${seasAvg.toFixed(2)}</div><div class="analysis-kpi-label">Season</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(midAvg,lineNum)}">${midAvg.toFixed(2)}</div><div class="analysis-kpi-label">${midLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(shortAvg,lineNum)}">${shortAvg.toFixed(2)}</div><div class="analysis-kpi-label">${shortLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(lastGame,lineNum)}">${lastGame.toFixed(2)}</div><div class="analysis-kpi-label">Last game</div></div></div><div class="analysis-season-strip">${statStrip}</div>`:""}
+        ${pHasLogs?`<div class="analysis-kpis"><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(seasAvg,lineNum,analysisLean)}">${seasAvg.toFixed(2)}</div><div class="analysis-kpi-label">Season</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(midAvg,lineNum,analysisLean)}">${midAvg.toFixed(2)}</div><div class="analysis-kpi-label">${midLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(shortAvg,lineNum,analysisLean)}">${shortAvg.toFixed(2)}</div><div class="analysis-kpi-label">${shortLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(lastGame,lineNum,analysisLean)}">${lastGame.toFixed(2)}</div><div class="analysis-kpi-label">Last game</div></div></div><div class="analysis-season-strip">${statStrip}</div>`:""}
       </header>
       <div class="analysis-layout">
         <main class="analysis-primary">
-          ${pHasLogs?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Last 10 · ${esc(propTypeLabel(metric))}</div><div class="analysis-section-meta">${last10.length} games · green clears line</div></div><div class="analysis-chart"><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Reference line ${lineNum}</div>`:""}</div></section>`:""}
+          ${pHasLogs?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Last 10 · ${esc(propTypeLabel(metric))}</div><div class="analysis-section-meta">${last10.length} games · green marks ${analysisLean.toLowerCase()} wins</div></div><div class="analysis-chart"><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Reference line ${lineNum}</div>`:""}</div></section>`:""}
           ${pickBanner?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Decision</div><div class="analysis-section-meta">Model-ranked recommendation</div></div>${pickBanner}</section>`:""}
           ${propsHTML?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Sportsbook markets</div><div class="analysis-section-meta">Live comparison by book</div></div>${propsHTML}</section>`:""}
         </main>
@@ -3570,7 +3574,7 @@ function render(){
           <section class="analysis-rail-section"><div class="analysis-rail-title">Tonight's matchup</div>${matchupAnalysisHTML}</section>
           ${modelContextHTML}
           ${opponentProfileHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Opponent profile</div>${opponentProfileHTML}</section>`:""}
-          ${hitRateAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Hit rates · ${esc(metric)} ${lineNum?`over ${lineNum}`:""}</div>${hitRateAnalysisHTML}</section>`:""}
+          ${hitRateAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Hit rates · ${esc(metric)} ${lineNum?`${analysisLean.toLowerCase()} ${lineNum}`:""}</div>${hitRateAnalysisHTML}</section>`:""}
           ${pHasLogs?`<section class="analysis-rail-section"><div class="analysis-rail-title">${isP?"Season rates":`Handedness split · ${esc(oppH)}HP`}</div>${splitAnalysisHTML}</section><section class="analysis-rail-section"><div class="analysis-rail-title">Home / away</div><div class="mini-bars-container">${haBars}</div></section>`:""}
           ${weatherAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Weather</div>${weatherAnalysisHTML}</section>`:""}
         </aside>
