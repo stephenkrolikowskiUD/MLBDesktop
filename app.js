@@ -63,7 +63,7 @@ let st={
   mode:"batter",
   player:"",metric:"H",line:"",activeTab:"picks",oppFilter:"",showFullLog:false,
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
-  loading:true,error:null,loadedAt:null,latestPickDate:"",pickGuard:null,
+  loading:true,error:null,dataWarnings:[],lookupError:"",loadedAt:null,latestPickDate:"",pickGuard:null,
   picksView:"shortlist",propsMetric:"ALL",propsSearch:"",propsTeam:"ALL",propsSort:"EDGE",propsMinHit:"0",propsMinEdge:"5",
   streakFilter:"all",drafted:new Set(),slipLegs:"3",
   draftSlate:{signature:initialDraftSlate.signature,selectedIds:initialDraftSlate.selectedIds,panelOpen:false},
@@ -75,6 +75,22 @@ let st={
   dataVersion:0,
   theme:(localStorage.getItem("mlb-dashboard-theme")||"dark")
 };
+function reportNonFatal(context,error,userMessage=""){
+  console.warn(`⚠️ ${context}`,error);
+  if(userMessage&&!st.dataWarnings.includes(userMessage))st.dataWarnings.push(userMessage);
+}
+function fetchOptionalSheet(name,userMessage=""){
+  return fetchSheet(name).catch(error=>{
+    reportNonFatal(`Optional sheet unavailable: ${name}`,error,userMessage);
+    return[];
+  });
+}
+function renderDataWarnings(){
+  if(!st.dataWarnings.length)return"";
+  const visible=st.dataWarnings.slice(0,2);
+  const extra=st.dataWarnings.length-visible.length;
+  return `<div class="data-warning" role="status"><strong>Limited data:</strong> ${visible.map(esc).join(" " )}${extra?` <span>+${extra} more source${extra===1?"":"s"} unavailable.</span>`:""}<button type="button" onclick="loadAllData()">Retry</button></div>`;
+}
 function applyTheme(){document.body.classList.toggle("light-theme",st.theme==="light")}
 function toggleTheme(){st.theme=st.theme==="light"?"dark":"light";localStorage.setItem("mlb-dashboard-theme",st.theme);applyTheme();render()}
 
@@ -799,7 +815,7 @@ function getConvictionLegs(){
   try{
     const streaks=getStreaks();
     streaks.forEach(s=>{const k=`${normalizePlayerName(s.player)}|${normalizePropMetric(s.stat)}`;streakMap.set(k,s)});
-  }catch(e){}
+  }catch(e){reportNonFatal("Slip streak enrichment unavailable; continuing without streak context.",e)}
 
   const legs=[];
   for(const b of bets){
@@ -2589,6 +2605,7 @@ function render(){
       </div>
     </div>`:""}
   </div>
+  ${renderDataWarnings()}
 
   <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
     ${player?`<div class="analysis-shell">
@@ -2639,6 +2656,7 @@ function render(){
 
   <div id="pg-lookup" class="page ${activeTab==="lookup"?"active":""}">
     <section class="lookup-search-shell"><div class="lookup-search-inner"><div class="lookup-search-kicker">MLB player database</div><div class="lookup-search-title">Player lookup</div><div class="search-wrap lookup-search-wrap"><input type="search" id="lkSearch" placeholder="Search any active MLB player" value="${esc(st.lkQuery)}" autocomplete="off"/>${lkSugs}</div></div></section>
+    ${st.lookupError?`<div class="lookup-warning" role="status">${esc(st.lookupError)}</div>`:""}
     ${lk?`<div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>${lkSum}<div class="sub-tabs"><div class="sub-tab ${st.lkSubTab==="career"?"active":""}" onclick="switchLkSub('career')">Career</div><div class="sub-tab ${st.lkSubTab==="vsTeam"?"active":""}" onclick="switchLkSub('vsTeam')">vs Team</div><div class="sub-tab ${st.lkSubTab==="vsPlayer"?"active":""}" onclick="switchLkSub('vsPlayer')">vs Player</div></div>${lkBody}`:`<div class="lookup-empty">Search by player name to begin.</div>`}
     <div class="timestamp">Data from MLB Stats API · Live</div>
   </div>
@@ -2684,9 +2702,9 @@ function render(){
 }
 
 async function searchLkPlayers(q){
-  st.lkQuery=q;
+  st.lkQuery=q;st.lookupError="";
   if(q.length<2){st.lkResults=[];render();return}
-  try{const d=await mlbFetch(`${MLB_API}/people/search?names=${encodeURIComponent(q)}&sportId=1&hydrate=currentTeam&limit=10`);st.lkResults=(d.people||[]).filter(p=>p.active).map(p=>({id:p.id,name:p.fullName,team:p.currentTeam?.abbreviation||"",pos:p.primaryPosition?.abbreviation||"",number:p.primaryNumber||"",bats:p.batSide?.code||"",throws:p.pitchHand?.code||"",img:`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${p.id}/headshot/67/current`}));render()}catch(e){console.error(e)}
+  try{const d=await mlbFetch(`${MLB_API}/people/search?names=${encodeURIComponent(q)}&sportId=1&hydrate=currentTeam&limit=10`);st.lkResults=(d.people||[]).filter(p=>p.active).map(p=>({id:p.id,name:p.fullName,team:p.currentTeam?.abbreviation||"",pos:p.primaryPosition?.abbreviation||"",number:p.primaryNumber||"",bats:p.batSide?.code||"",throws:p.pitchHand?.code||"",img:`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${p.id}/headshot/67/current`}));render()}catch(e){st.lkResults=[];st.lookupError="Player search is temporarily unavailable.";reportNonFatal("Lookup player search failed.",e);render()}
 }
 function pickLkPlayer(i){
   const p=st.lkResults[i];st.lkPlayer=p;st.lkQuery=p.name;st.lkResults=[];st.lkSubTab="career";
@@ -2699,18 +2717,44 @@ function pickLkPlayer(i){
   render();fetchLkCareer(p.id);
 }
 async function fetchLkCareer(id){
-  st.lkLoading.career=true;render();
-  try{const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";const[cr,yby]=await Promise.all([mlbFetch(`${MLB_API}/people/${id}/stats?stats=career&group=${g}`),mlbFetch(`${MLB_API}/people/${id}/stats?stats=yearByYear&group=${g}&sportId=1`)]);st.lkCareer=(cr.stats||[])[0]?.splits?.[0]?.stat||null;st.lkYby=((yby.stats||[])[0]?.splits||[]).filter(s=>s.sport?.id===1).map(s=>({season:s.season,team:s.team?.abbreviation||"",stat:s.stat}))}catch(e){console.error(e)}
+  st.lkLoading.career=true;st.lookupError="";render();
+  try{const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";const[cr,yby]=await Promise.all([mlbFetch(`${MLB_API}/people/${id}/stats?stats=career&group=${g}`),mlbFetch(`${MLB_API}/people/${id}/stats?stats=yearByYear&group=${g}&sportId=1`)]);st.lkCareer=(cr.stats||[])[0]?.splits?.[0]?.stat||null;st.lkYby=((yby.stats||[])[0]?.splits||[]).filter(s=>s.sport?.id===1).map(s=>({season:s.season,team:s.team?.abbreviation||"",stat:s.stat}))}catch(e){st.lkCareer=null;st.lkYby=null;st.lookupError="Career stats are temporarily unavailable.";reportNonFatal("Lookup career request failed.",e)}
   st.lkLoading.career=false;render();
 }
 async function fetchLkVsTeam(id,teamId){
-  st.lkLoading.vsTeam=true;render();
+  st.lkLoading.vsTeam=true;st.lookupError="";render();
   try{
     const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";
-    if(teamId){const d=await mlbFetch(`${MLB_API}/people/${id}/stats?stats=vsTeam&group=${g}&opposingTeamId=${teamId}&sportId=1`);const sp=(d.stats||[])[0]?.splits||[];const tm=st.lkTeamList.find(t=>t.id===teamId);st.lkVsTeamStats=sp.length?[{teamId,team:tm?.abbr||"",stat:sp.length===1?sp[0].stat:combSplits(sp)}]:[]}
-    else{const results=[];for(let i=0;i<st.lkTeamList.length;i+=10){const batch=st.lkTeamList.slice(i,i+10);const pr=batch.map(async tm=>{try{const d=await mlbFetch(`${MLB_API}/people/${id}/stats?stats=vsTeam&group=${g}&opposingTeamId=${tm.id}&sportId=1`);const sp=(d.stats||[])[0]?.splits||[];if(sp.length)return{teamId:tm.id,team:tm.abbr,stat:sp.length===1?sp[0].stat:combSplits(sp)}}catch(e){}return null});results.push(...(await Promise.all(pr)).filter(Boolean));if(i+10<st.lkTeamList.length)await new Promise(r=>setTimeout(r,500))}st.lkVsTeamStats=results}
+    if(teamId){
+      const d=await mlbFetch(`${MLB_API}/people/${id}/stats?stats=vsTeam&group=${g}&opposingTeamId=${teamId}&sportId=1`);
+      const sp=(d.stats||[])[0]?.splits||[];
+      const tm=st.lkTeamList.find(t=>t.id===teamId);
+      st.lkVsTeamStats=sp.length?[{teamId,team:tm?.abbr||"",stat:sp.length===1?sp[0].stat:combSplits(sp)}]:[];
+    }else{
+      const results=[];
+      const failedTeams=[];
+      for(let i=0;i<st.lkTeamList.length;i+=10){
+        const batch=st.lkTeamList.slice(i,i+10);
+        const requests=batch.map(async tm=>{
+          try{
+            const d=await mlbFetch(`${MLB_API}/people/${id}/stats?stats=vsTeam&group=${g}&opposingTeamId=${tm.id}&sportId=1`);
+            const sp=(d.stats||[])[0]?.splits||[];
+            if(sp.length)return{teamId:tm.id,team:tm.abbr,stat:sp.length===1?sp[0].stat:combSplits(sp)};
+          }catch(error){failedTeams.push(tm.abbr||String(tm.id))}
+          return null;
+        });
+        results.push(...(await Promise.all(requests)).filter(Boolean));
+        if(i+10<st.lkTeamList.length)await new Promise(resolve=>setTimeout(resolve,500));
+      }
+      if(failedTeams.length)console.warn(`⚠️ Lookup vs-team stats unavailable for ${failedTeams.length} team(s): ${failedTeams.join(", ")}`);
+      st.lkVsTeamStats=results;
+    }
     st.lkVsTeamStats.sort((a,b)=>(parseInt(b.stat?.gamesPlayed)||0)-(parseInt(a.stat?.gamesPlayed)||0));
-  }catch(e){console.error(e);st.lkVsTeamStats=[]}
+  }catch(e){
+    st.lkVsTeamStats=[];
+    st.lookupError="Team matchup stats are temporarily unavailable.";
+    reportNonFatal("Lookup vs-team request failed.",e);
+  }
   st.lkLoading.vsTeam=false;render();
 }
 function combSplits(splits){
@@ -2723,34 +2767,34 @@ function combSplits(splits){
 }
 async function searchVsP(q){if(q.length<2){st.lkVsPlayerResults=[];render();return}try{const d=await mlbFetch(`${MLB_API}/people/search?names=${encodeURIComponent(q)}&sportId=1&limit=8`);st.lkVsPlayerResults=(d.people||[]).map(p=>({id:p.id,name:p.fullName,pos:p.primaryPosition?.abbreviation||"",team:p.currentTeam?.abbreviation||""}));render()}catch(e){console.error(e)}}
 function pickVsP(id,name){st.lkVsPlayerId=id;st.lkVsPlayerName=name;st.lkVsPlayerResults=[];fetchLkVsPlayer(st.lkPlayer.id,id)}
-async function fetchLkVsPlayer(pid,oid){st.lkLoading.vsPlayer=true;st.lkVsPlayerResults=[];render();try{const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";const d=await mlbFetch(`${MLB_API}/people/${pid}/stats?stats=vsPlayer&group=${g}&opposingPlayerId=${oid}`);const sp=(d.stats||[])[0]?.splits||[];st.lkVsPlayerStats=sp.length?sp[0].stat:null}catch(e){st.lkVsPlayerStats=null}st.lkLoading.vsPlayer=false;render()}
+async function fetchLkVsPlayer(pid,oid){st.lkLoading.vsPlayer=true;st.lkVsPlayerResults=[];st.lookupError="";render();try{const g=st.lkPlayerType==="pitcher"?"pitching":"hitting";const d=await mlbFetch(`${MLB_API}/people/${pid}/stats?stats=vsPlayer&group=${g}&opposingPlayerId=${oid}`);const sp=(d.stats||[])[0]?.splits||[];st.lkVsPlayerStats=sp.length?sp[0].stat:null}catch(e){st.lkVsPlayerStats=null;st.lookupError="Head-to-head stats are temporarily unavailable.";reportNonFatal("Lookup head-to-head request failed.",e)}st.lkLoading.vsPlayer=false;render()}
 function switchLkSub(t){st.lkSubTab=t;if(t==="vsTeam")st.lkVsTeamStats=null;render()}
 
-async function loadTeams(){const yr=new Date().getMonth()>=3?new Date().getFullYear():new Date().getFullYear()-1;try{const d=await mlbFetch(`${MLB_API}/teams?sportId=1&season=${yr}`);st.lkTeamList=(d.teams||[]).map(t=>({id:t.id,name:t.name,abbr:t.abbreviation}))}catch(e){}}
+async function loadTeams(){const yr=new Date().getMonth()>=3?new Date().getFullYear():new Date().getFullYear()-1;try{const d=await mlbFetch(`${MLB_API}/teams?sportId=1&season=${yr}`);st.lkTeamList=(d.teams||[]).map(t=>({id:t.id,name:t.name,abbr:t.abbreviation}))}catch(e){reportNonFatal("MLB team directory unavailable; Lookup team splits may be limited.",e)}}
 
 function loadAllData(){
-  st.loading=true;st.error=null;resetDerived();render();
+  st.loading=true;st.error=null;st.dataWarnings=[];st.lookupError="";resetDerived();render();
   Promise.all([
   loadTeams(),
-  fetchSheet("Tonights_Batters").catch(()=>[]),
-  fetchSheet("Batter_Game_Logs").catch(()=>[]),
-  fetchSheet("Home_Away_Splits").catch(()=>[]),
-  fetchSheet("Venue_Weather").catch(()=>[]),
-  fetchSheet("Tonights_Pitchers").catch(()=>[]),
-  fetchSheet("Tonights_Schedule").catch(()=>[]),
-  fetchSheet("Tonights_Starters").catch(()=>[]),
-  fetchSheet("Pitcher_Game_Logs").catch(()=>[]),
-  fetchSheet("Pitcher_Home_Away").catch(()=>[]),
+  fetchOptionalSheet("Tonights_Batters","Tonight’s batter pool is unavailable."),
+  fetchOptionalSheet("Batter_Game_Logs","Recent batter history is unavailable."),
+  fetchOptionalSheet("Home_Away_Splits"),
+  fetchOptionalSheet("Venue_Weather"),
+  fetchOptionalSheet("Tonights_Pitchers"),
+  fetchOptionalSheet("Tonights_Schedule"),
+  fetchOptionalSheet("Tonights_Starters","Tonight’s probable starters are unavailable."),
+  fetchOptionalSheet("Pitcher_Game_Logs","Recent pitcher history is unavailable."),
+  fetchOptionalSheet("Pitcher_Home_Away"),
   fetchSheet("Picks_Current")
     .then(rows=>({available:true,rows}))
-    .catch(()=>({available:false,rows:[]})),
-  fetchSheet("Daily_Picks").catch(()=>[]),
-  fetchSheet("DK_Player_Props").catch(()=>[]),
-  fetchSheet("All_Books_Props").catch(()=>[]),
-  fetchSheet("Batter_vs_SP").catch(()=>[]),
-  fetchSheet("Team_Rankings").catch(()=>[]),
-  fetchSheet("Pick_Performance").catch(()=>[]),
-  fetchSheet("Pick_Performance_Snapshots").catch(()=>[])
+    .catch(error=>{reportNonFatal("Picks_Current unavailable; using Daily_Picks history fallback.",error,"Current model picks are unavailable; showing the latest history snapshot.");return{available:false,rows:[]}}),
+  fetchOptionalSheet("Daily_Picks"),
+  fetchOptionalSheet("DK_Player_Props","Sportsbook markets are unavailable."),
+  fetchOptionalSheet("All_Books_Props"),
+  fetchOptionalSheet("Batter_vs_SP"),
+  fetchOptionalSheet("Team_Rankings"),
+  fetchOptionalSheet("Pick_Performance"),
+  fetchOptionalSheet("Pick_Performance_Snapshots")
 ]).then(([_,tonight,logs,splits,weather,pitchers,schedule,pTonight,pLogs,pSplits,currentPickSource,picksHistory,props,allBooksProps,vsSP,teamRankings,pickPerformance,pickPerformanceSnaps])=>{
   resetDerived();
   st.tonight=normalizeKeys(cleanRows(tonight));

@@ -187,6 +187,11 @@ input::placeholder{color:var(--ink-muted)}
   @keyframes sk-shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 }
 .error{padding:24px;color:var(--under);font-size:var(--t-md)}
+.data-warning{margin:10px 16px 0;padding:10px 12px;display:flex;align-items:center;gap:6px;border:1px solid var(--warn-line);border-left:3px solid var(--warn);background:var(--warn-soft);color:var(--ink-1);font-size:var(--t-sm)}
+.data-warning strong{color:var(--warn)}
+.data-warning span{color:var(--ink-muted)}
+.data-warning button{margin-left:auto;padding:5px 9px;border:1px solid var(--warn-line);background:transparent;color:var(--warn);font:inherit;font-weight:700;cursor:pointer}
+.lookup-warning{max-width:980px;margin:14px auto 0;padding:10px 12px;border-left:3px solid var(--warn);background:var(--warn-soft);color:var(--warn);font-size:var(--t-sm)}
 .no-data{color:var(--ink-muted);font-size:var(--t-xs)}
 body.light-theme .bet-card,body.light-theme .pick-card,body.light-theme .slip-card,body.light-theme .streak-card,body.light-theme .draft-card,.light-theme .combo-card,.light-theme .prop-card{background:var(--surface-1);box-shadow:0 1px 2px rgba(15,23,42,.06)}
 body.light-theme .tab-bar{border-top-color:#d8e7db}
