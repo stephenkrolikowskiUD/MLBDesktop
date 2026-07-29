@@ -1530,6 +1530,12 @@ function teamDisplayName(teamAbbr){
   const row=getTeamRanking(abbr);
   return String(rowField(row,"TEAM","TEAM_NAME","team_name")||abbr).trim();
 }
+function optionalRowNumber(row,key){
+  const raw=rowField(row,key);
+  if(raw===null||raw===undefined||raw==="")return null;
+  const value=Number(raw);
+  return Number.isFinite(value)?value:null;
+}
 
 function getDingerBoard(){
   return getMemo("dingerBoard",()=>{
@@ -1558,11 +1564,16 @@ function getDingerBoard(){
     score+=hrPerGame*20;
     if(overOdds&&overOdds<0)score+=10;
     if(overOdds&&overOdds>0&&overOdds<=200)score+=5;
+    const legacyScore=score;
+    const modelEdgeScore=optionalRowNumber(p,"POWER_EDGE_SCORE");
+    const modelOpponentAdjustment=optionalRowNumber(p,"POWER_OPP_ADJ");
+    score=modelEdgeScore===null?legacyScore:modelEdgeScore;
     rows.push({
       name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",
       hand:p.opp_pitcher_hand||"?",venue:p.venue_tonight||"",
       seasHR:seasHRtotal,totalAB,hrRate,hrPerGame,gamesPlayed,
       l7HR,l14HR,seasAvgHR:seasHR,
+      modelOpponentAdjustment,
       dkLine,overOdds,score
     });
   }
@@ -1575,8 +1586,8 @@ function getKsBoard(){
   return getMemo("ksBoard",()=>{
   const rows=[];
   const leagueKPcts=(st.teamRankings||[])
-    .map(row=>Number(rowField(row,"OFF_K_PCT")))
-    .filter(value=>Number.isFinite(value)&&value>0);
+    .map(row=>optionalRowNumber(row,"OFF_K_PCT"))
+    .filter(value=>value!==null&&value>0);
   const leagueKPct=leagueKPcts.length
     ?leagueKPcts.reduce((sum,value)=>sum+value,0)/leagueKPcts.length
     :null;
@@ -1600,15 +1611,15 @@ function getKsBoard(){
     const recent3=l3SO||recent7;
     const projectedSO=(seasonBaseline*0.5)+(recent7*0.3)+(recent3*0.2);
     const opponentRanking=getTeamRanking(p.opp_abbr_tonight);
-    const opponentKPct=Number(rowField(opponentRanking,"OFF_K_PCT"));
-    const hasMatchupRate=Number.isFinite(opponentKPct)&&opponentKPct>0&&Number.isFinite(leagueKPct)&&leagueKPct>0;
+    const opponentKPct=optionalRowNumber(opponentRanking,"OFF_K_PCT");
+    const hasMatchupRate=opponentKPct!==null&&opponentKPct>0&&Number.isFinite(leagueKPct)&&leagueKPct>0;
     const matchupFactor=hasMatchupRate
       ?Math.max(0.75,Math.min(1.25,opponentKPct/leagueKPct))
       :1;
     const adjustedProjection=projectedSO*matchupFactor;
     const projectionAdjustment=adjustedProjection-projectedSO;
-    const modelEdgeScore=Number(rowField(p,"P_SO_EDGE_SCORE"));
-    const modelOpponentAdjustment=Number(rowField(p,"P_SO_OPP_ADJ"));
+    const modelEdgeScore=optionalRowNumber(p,"P_SO_EDGE_SCORE");
+    const modelOpponentAdjustment=optionalRowNumber(p,"P_SO_OPP_ADJ");
     const soProp=st.props.find(pr=>normalizePlayerName(pr.PLAYER_NAME)===normalizePlayerName(name)&&normalizePropMetric(pr.METRIC)==="P_SO");
     const dkLine=soProp?soProp.DK_LINE:null;
     const overOdds=soProp?parseInt(soProp.OVER_ODDS)||null:null;
@@ -1620,7 +1631,7 @@ function getKsBoard(){
     if(dkLine&&soPerStart>parseFloat(dkLine))score+=8;
     if(overOdds&&overOdds<0)score+=5;
     const legacyScore=score;
-    score=Number.isFinite(modelEdgeScore)?modelEdgeScore:legacyScore;
+    score=modelEdgeScore===null?legacyScore:modelEdgeScore;
     if(dkLine&&Number.isFinite(parseFloat(dkLine))){
       score+=(adjustedProjection-parseFloat(dkLine))*3;
     }
@@ -1630,7 +1641,7 @@ function getKsBoard(){
       seasSO,totalOuts,ipEquiv,k9,soPerStart,gamesStarted,
       l3SO,l7SO,seasSOavg,projectedSO,adjustedProjection,projectionAdjustment,
       opponentKPct:hasMatchupRate?opponentKPct:null,
-      modelOpponentAdjustment:Number.isFinite(modelOpponentAdjustment)?modelOpponentAdjustment:null,
+      modelOpponentAdjustment,
       dkLine,overOdds,score
     });
   }
@@ -2130,6 +2141,19 @@ function getVsSP(playerName){
 }
 
 // ═══ STAT PARLAY ENGINE ═══
+function getPropOpponentAdjustment(player,metric){
+  const normalized=normalizePropMetric(metric);
+  const field=normalized==="H"
+    ?"H_OPP_ADJ"
+    :["HR","TB"].includes(normalized)
+      ?"POWER_OPP_ADJ"
+      :normalized==="P_SO"
+        ?"P_SO_OPP_ADJ"
+        :normalized==="P_ER"
+          ?"P_ER_OPP_ADJ"
+          :null;
+  return field?optionalRowNumber(player,field):null;
+}
 function getStatParlayBoard(stat){
   return getMemo(`statParlay:${stat}`,()=>{
   const rows=[];
@@ -2180,9 +2204,11 @@ function getStatParlayBoard(stat){
         else if(cAB>=5&&cAVG>=0.250)matchupScore+=1;
       }
     }
+    const opponentAdjustment=getPropOpponentAdjustment(p,stat);
 
     // Composite score: hit rate is king, edge matters, matchup bonus
-    const score=hitRate*40+Math.max(edge,0)*30+matchupScore*3+(l7Avg>seasAvg?5:0);
+    const matchupComponent=opponentAdjustment!==null?opponentAdjustment:matchupScore*3;
+    const score=hitRate*40+Math.max(edge,0)*30+matchupComponent+(l7Avg>seasAvg?5:0);
 
     rows.push({
       name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",
@@ -2191,7 +2217,7 @@ function getStatParlayBoard(stat){
       venue:p.venue_tonight||"",
       stat,dkLine,overOdds,underOdds,
       hitRate,hitsOver,total:logs.length,
-      edge,seasAvg,l7Avg,matchupScore,score
+      edge,seasAvg,l7Avg,matchupScore,opponentAdjustment,matchupComponent,score
     });
   }
   rows.sort((a,b)=>b.score-a.score);
@@ -2228,7 +2254,13 @@ function getRankedPropsBoard(){
       const hitComponent=hitRate!==null?hitRate*20:0;
       const edgeComponent=edge!==null?Math.max(edge,0)*60:0;
       const formComponent=ranked&&side?(side==="OVER"?ranked.l7Avg>ranked.seasAvg:ranked.l7Avg<ranked.seasAvg)?5:0:0;
-      const matchupComponent=ranked&&side==="OVER"?(ranked.matchupScore||0)*3:0;
+      const matchupComponent=ranked&&side
+        ?ranked.opponentAdjustment!==null
+          ?(side==="OVER"?ranked.opponentAdjustment:-ranked.opponentAdjustment)
+          :side==="OVER"
+            ?(ranked.matchupScore||0)*3
+            :0
+        :0;
       const score=hitComponent+edgeComponent+formComponent+matchupComponent;
       const team=String(player.team_abbr||"").toUpperCase();
       return {prop,index,isP,player,team,teamName:teamDisplayName(team),opp:String(player.opp_abbr_tonight||"").toUpperCase(),side,odds,hitRate,edge,score,components:{hit:hitComponent,edge:edgeComponent,form:formComponent,matchup:matchupComponent}};
@@ -3240,13 +3272,21 @@ function render(){
     }
     else{
       picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's Dinger Board</div></div>
-      <div class="dinger-desc">Ranked by HR rate, recent power, and DK odds. Top 3 are 🔥.</div>`;
+      <div class="dinger-desc">Ranked by hitter power, recent form, opposing-starter quality, and sportsbook price. Top 3 are 🔥.</div>`;
       picksHTML+=`<div class="cards-grid">`;
       picksHTML+=db.map((d,i)=>{
         const isTop=i<3;
         const odds=d.overOdds?fmtOdds(d.overOdds):"—";
         const ratePct=(d.hrRate*100).toFixed(1);
         const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
+        const matchupAdjustment=d.modelOpponentAdjustment;
+        const matchupGrade=matchupAdjustment===null
+          ?null
+          :matchupAdjustment>=2
+            ?{label:"Favorable pitcher matchup",color:"var(--over)"}
+            :matchupAdjustment<=-2
+              ?{label:"Tough pitcher matchup",color:"var(--under)"}
+              :{label:"Neutral pitcher matchup",color:"var(--ink-muted)"};
         const opponentRanking=getTeamRanking(d.opp);
         const teamContext=opponentRanking?`${esc(d.opp)} staff · ${teamRankValue(opponentRanking,"PIT_HR9","PIT_HR9_MOST_RANK",{digits:2,suffix:" HR/9",direction:"most"})}`:"";
         const locked=getLockInfo(d.name,false).started;
@@ -3256,6 +3296,7 @@ function render(){
             <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
             <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
             ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
+            ${matchupGrade?`<div class="dinger-meta" style="color:${matchupGrade.color}">${matchupGrade.label} · opponent adjustment ${matchupAdjustment>0?"+":""}${matchupAdjustment.toFixed(1)}</div>`:""}
           </div>
           <div class="dinger-right">
             <div class="dinger-rate">${ratePct}%</div>
@@ -3424,9 +3465,10 @@ function render(){
       const locked=getLockInfo(p.PLAYER_NAME,row.isP).started;
       const hrPct=row.hitRate!==null?`${(row.hitRate*100).toFixed(0)}%`:"—";
       const edgeStr=row.edge!==null?`<span class="ev-badge ${row.edge>0.08?"ev-pos":row.edge>0?"ev-neutral":"ev-neg"}">${row.edge>0?"+":""}${(row.edge*100).toFixed(0)}%</span>`:"—";
-      const breakdown=`Hit ${row.components.hit.toFixed(1)} · Edge ${row.components.edge.toFixed(1)} · Form ${row.components.form.toFixed(0)} · Matchup ${row.components.matchup.toFixed(0)}`;
+      const matchupDisplay=Math.abs(row.components.matchup)<0.5?0:row.components.matchup;
+      const breakdown=`Hit ${row.components.hit.toFixed(1)} · Edge ${row.components.edge.toFixed(1)} · Form ${row.components.form.toFixed(0)} · Matchup ${matchupDisplay.toFixed(0)}`;
       const weak=row.edge===null||row.edge<0.05;
-      return`<tr class="${flags.returning?"props-returning":""}${locked?" props-locked":""}${weak?" props-weak":""}" style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="color:var(--ink-muted);font-weight:700">${i+1}</td><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}${flags.returning?` <span class="risk-badge risk-returning">⚠️</span>`:flags.limited?` <span class="risk-badge risk-limited">⚠️</span>`:""}${locked?` <span class="locked-badge">🔒</span>`:""}</td><td title="${esc(row.teamName)}"><strong>${esc(row.team||"—")}</strong>${row.opp?` <span style="color:var(--ink-muted)">vs ${esc(row.opp)}</span>`:""}</td><td><span style="color:var(--accent);font-weight:600">${p.METRIC}</span><div style="color:var(--ink-muted);font-size:9px">line ${esc(p.DK_LINE)}</div></td><td>${row.side?`<span class="props-side ${row.side.toLowerCase()}">${row.side} ${fmtOdds(row.odds)}</span>`:"—"}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:700">${hrPct}</td><td>${edgeStr}</td><td title="${esc(breakdown)}"><span class="props-score">${row.score.toFixed(1)}</span><div class="props-score-detail">H ${row.components.hit.toFixed(1)} · E ${row.components.edge.toFixed(1)} · F ${row.components.form.toFixed(0)} · M ${row.components.matchup.toFixed(0)}</div></td></tr>${renderPropBestBookTableRow(p,10,{collapsed:true})}`}).join("")}</tbody></table></div>`:`<div class="props-pass"><div class="props-pass-title">No props clear these filters</div><div class="props-pass-copy">That is a valid result, not a broken board. Lower the minimum edge or change the team/market filter to explore the wider slate.</div></div>`}`;
+      return`<tr class="${flags.returning?"props-returning":""}${locked?" props-locked":""}${weak?" props-weak":""}" style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="color:var(--ink-muted);font-weight:700">${i+1}</td><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}${flags.returning?` <span class="risk-badge risk-returning">⚠️</span>`:flags.limited?` <span class="risk-badge risk-limited">⚠️</span>`:""}${locked?` <span class="locked-badge">🔒</span>`:""}</td><td title="${esc(row.teamName)}"><strong>${esc(row.team||"—")}</strong>${row.opp?` <span style="color:var(--ink-muted)">vs ${esc(row.opp)}</span>`:""}</td><td><span style="color:var(--accent);font-weight:600">${p.METRIC}</span><div style="color:var(--ink-muted);font-size:9px">line ${esc(p.DK_LINE)}</div></td><td>${row.side?`<span class="props-side ${row.side.toLowerCase()}">${row.side} ${fmtOdds(row.odds)}</span>`:"—"}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:700">${hrPct}</td><td>${edgeStr}</td><td title="${esc(breakdown)}"><span class="props-score">${row.score.toFixed(1)}</span><div class="props-score-detail">H ${row.components.hit.toFixed(1)} · E ${row.components.edge.toFixed(1)} · F ${row.components.form.toFixed(0)} · M ${matchupDisplay.toFixed(0)}</div></td></tr>${renderPropBestBookTableRow(p,10,{collapsed:true})}`}).join("")}</tbody></table></div>`:`<div class="props-pass"><div class="props-pass-title">No props clear these filters</div><div class="props-pass-copy">That is a valid result, not a broken board. Lower the minimum edge or change the team/market filter to explore the wider slate.</div></div>`}`;
   }
 
   // === LOOKUP ===
