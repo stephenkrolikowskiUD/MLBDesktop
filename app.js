@@ -2094,6 +2094,128 @@ function renderModelPicksView(convergenceHTML){
   return html+`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${board}</div>`;
 }
 
+function renderDingerBoardView(convergenceHTML){
+  const db=getDingerBoard();
+  if(!db.length){
+    const missing=[];
+    if(!st.tonight.length)missing.push("tonight's batters");
+    if(!st.gameLogs.length)missing.push("batter game logs");
+    const detail=missing.length
+      ?`Google Sheets did not return ${missing.join(" or ")} on this page load.`
+      :"No eligible hitters had usable at-bats and game-log history.";
+    return convergenceHTML+`<div class="empty" style="padding:40px;text-align:center"><div style="font-weight:800;color:var(--ink-1)">Dinger Board unavailable</div><div style="margin-top:6px">${detail}</div><button class="refresh-btn" style="margin-top:12px" onclick="loadAllData()">${icon("refresh")}Retry data load</button></div>`;
+  }
+  let html=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's Dinger Board</div></div>
+  <div class="dinger-desc">Ranked by hitter power, recent form, opposing-starter quality, and sportsbook price. Top 3 are 🔥.</div>`;
+  html+=`<div class="cards-grid">`;
+  html+=db.map((d,i)=>{
+    const isTop=i<3;
+    const odds=d.overOdds?fmtOdds(d.overOdds):"—";
+    const ratePct=(d.hrRate*100).toFixed(1);
+    const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
+    const matchupAdjustment=d.modelOpponentAdjustment;
+    const matchupGrade=matchupAdjustment===null
+      ?null
+      :matchupAdjustment>=2
+        ?{label:"Favorable pitcher matchup",color:"var(--over)"}
+        :matchupAdjustment<=-2
+          ?{label:"Tough pitcher matchup",color:"var(--under)"}
+          :{label:"Neutral pitcher matchup",color:"var(--ink-muted)"};
+    const opponentRanking=getTeamRanking(d.opp);
+    const teamContext=opponentRanking?`${esc(d.opp)} staff · ${teamRankValue(opponentRanking,"PIT_HR9","PIT_HR9_MOST_RANK",{digits:2,suffix:" HR/9",direction:"most"})}`:"";
+    const locked=getLockInfo(d.name,false).started;
+    return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','HR','${d.dkLine||""}')">
+      <div class="dinger-left">
+        <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"HR",d.dkLine||"")}${lockBadge(d.name,false)}</span></div>
+        <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
+        <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
+        ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
+        ${matchupGrade?`<div class="dinger-meta" style="color:${matchupGrade.color}">${matchupGrade.label} · opponent adjustment ${matchupAdjustment>0?"+":""}${matchupAdjustment.toFixed(1)}</div>`:""}
+      </div>
+      <div class="dinger-right">
+        <div class="dinger-rate">${ratePct}%</div>
+        <div class="dinger-sub">${locked?"started":"HR/AB · 1 per "+abPerHR+" AB"}</div>
+        ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
+      </div>
+    </div>`;
+  }).join("");
+  html+=`</div>`;
+  html+=renderMarketParlays("HR","Dinger");
+  return html;
+}
+
+function renderKsBoardView(convergenceHTML){
+  const kb=getKsBoard();
+  if(!kb.length){
+    return convergenceHTML+`<div class="empty" style="padding:40px">No Ks data available. Run the engine first.</div>`;
+  }
+  let html=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's K Board</div></div>
+  <div class="dinger-desc">Projected Ks blend season, L7, and L3 form, then adjust for the opponent's strikeout rate. Sportsbook price breaks close calls.</div>`;
+  html+=`<div class="cards-grid">`;
+  html+=kb.map((d,i)=>{
+    const isTop=i<3;
+    const odds=d.overOdds?fmtOdds(d.overOdds):"—";
+    const k9Str=d.k9.toFixed(1);
+    const projectionStr=d.adjustedProjection.toFixed(1);
+    const adjustmentText=`${d.projectionAdjustment>0?"+":""}${d.projectionAdjustment.toFixed(1)} K`;
+    const matchupGrade=d.projectionAdjustment<=-0.35
+      ?{label:"Tough matchup",color:"var(--under)"}
+      :d.projectionAdjustment>=0.35
+        ?{label:"Favorable matchup",color:"var(--over)"}
+        :{label:"Neutral matchup",color:"var(--ink-muted)"};
+    const opponentRanking=getTeamRanking(d.opp);
+    const teamContext=opponentRanking?`${esc(d.opp)} offense · ${teamRankValue(opponentRanking,"OFF_K_PCT","OFF_K_PCT_MOST_RANK",{digits:1,suffix:"% K",direction:"most"})}`:"";
+    const locked=getLockInfo(d.name,true).started;
+    return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','P_SO','${d.dkLine||""}')">
+      <div class="dinger-left">
+        <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"P_SO",d.dkLine||"")}${lockBadge(d.name,true)}</span></div>
+        <div class="dinger-meta">${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}</div>
+        <div class="dinger-meta">${d.seasSO} K in ${d.gamesStarted} GS · L7 avg: ${d.l7SO.toFixed(1)} · L3: ${d.l3SO.toFixed(1)}</div>
+        ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
+        <div class="dinger-meta" style="color:${matchupGrade.color}">${matchupGrade.label} · raw ${d.projectedSO.toFixed(1)} → adjusted ${projectionStr} (${adjustmentText})</div>
+      </div>
+      <div class="dinger-right">
+        <div class="dinger-rate">${projectionStr}</div>
+        <div class="dinger-sub">Matchup projection · ${k9Str} K/9</div>
+        ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
+      </div>
+    </div>`;
+  }).join("");
+  html+=`</div>`;
+  html+=renderMarketParlays("P_SO","K");
+  return html;
+}
+
+function renderStreaksBoardView(convergenceHTML){
+  const allStreaks=getStreaks();
+  const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
+  if(!fil.length){
+    return convergenceHTML+`<div class="empty" style="padding:40px">${allStreaks.length?`No ${st.streakFilter} streaks found.`:"No active streaks yet. Need 3+ games of data."}</div>`;
+  }
+  let html=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#ffaa00;font-size:var(--t-sm);font-weight:700">🔥 Active Streaks</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">${fil.length} streaks found</div></div>
+  <div class="streak-filters"><div class="pf-btn ${st.streakFilter==="all"?"active":""}" onclick="setStreakFilter('all')">All</div><div class="pf-btn ${st.streakFilter==="bat"?"active":""}" onclick="setStreakFilter('bat')">${icon('bat')} Batters</div><div class="pf-btn ${st.streakFilter==="pitch"?"active":""}" onclick="setStreakFilter('pitch')">${icon('ball')} Pitchers</div></div>`;
+  html+=`<div class="cards-grid">`;
+  html+=fil.map(s=>{
+    const heat=getStreakHeat(s.streak);
+    const odds=s.overOdds?fmtOdds(s.overOdds):"";
+    const locked=getLockInfo(s.player,s.propType==="pitch").started;
+    return`<div class="streak-card ${heat.cls}${locked?" locked-card":""}" onclick="streakToDash('${esc(s.player)}')">
+      <div class="streak-left">
+        <div><span class="streak-emoji">${s.emoji}</span><span class="streak-name">${playerLink(s.player,s.stat,s.dkLine||"")}${lockBadge(s.player,s.propType==="pitch")}</span><span class="streak-label">${s.label}</span></div>
+        <div class="streak-meta">${esc(s.team)} vs ${s.propType==="pitch"?esc(s.opp):esc(s.pitcher)+" ("+s.hand+"HP)"} · ${s.desc}</div>
+        <div class="streak-chart">${miniChart(s.recentVals,s.threshold)}</div>
+        ${s.dkLine?`<div class="streak-prop">DK ${s.stat} ${s.dkLine} ${odds?" O:"+odds:""} · Avg during: ${s.avgDuring}</div>`:`<div class="streak-prop">Avg during streak: ${s.avgDuring} · Season: ${s.seasAvg}</div>`}
+      </div>
+      <div class="streak-right">
+        <div class="streak-count">${s.streak}</div>
+        <div class="streak-sub">${locked?"started":"games"}</div>
+      </div>
+    </div>`;
+  }).join("");
+  html+=`</div>`;
+  return html;
+}
+
 function renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight}){
   const navItems=[
     ["dashboard","dash","Dash"],
@@ -2480,120 +2602,11 @@ function render(){
   }else if(st.picksView==="picks"){
     picksHTML=renderModelPicksView(convergenceHTML);
   }else if(st.picksView==="dingers"){
-    const db=getDingerBoard();
-    if(!db.length){
-      const missing=[];
-      if(!st.tonight.length)missing.push("tonight's batters");
-      if(!st.gameLogs.length)missing.push("batter game logs");
-      const detail=missing.length
-        ?`Google Sheets did not return ${missing.join(" or ")} on this page load.`
-        :"No eligible hitters had usable at-bats and game-log history.";
-      picksHTML=convergenceHTML+`<div class="empty" style="padding:40px;text-align:center"><div style="font-weight:800;color:var(--ink-1)">Dinger Board unavailable</div><div style="margin-top:6px">${detail}</div><button class="refresh-btn" style="margin-top:12px" onclick="loadAllData()">${icon("refresh")}Retry data load</button></div>`;
-    }
-    else{
-      picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's Dinger Board</div></div>
-      <div class="dinger-desc">Ranked by hitter power, recent form, opposing-starter quality, and sportsbook price. Top 3 are 🔥.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=db.map((d,i)=>{
-        const isTop=i<3;
-        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
-        const ratePct=(d.hrRate*100).toFixed(1);
-        const abPerHR=d.seasHR>0?Math.round(d.totalAB/d.seasHR):"—";
-        const matchupAdjustment=d.modelOpponentAdjustment;
-        const matchupGrade=matchupAdjustment===null
-          ?null
-          :matchupAdjustment>=2
-            ?{label:"Favorable pitcher matchup",color:"var(--over)"}
-            :matchupAdjustment<=-2
-              ?{label:"Tough pitcher matchup",color:"var(--under)"}
-              :{label:"Neutral pitcher matchup",color:"var(--ink-muted)"};
-        const opponentRanking=getTeamRanking(d.opp);
-        const teamContext=opponentRanking?`${esc(d.opp)} staff · ${teamRankValue(opponentRanking,"PIT_HR9","PIT_HR9_MOST_RANK",{digits:2,suffix:" HR/9",direction:"most"})}`:"";
-        const locked=getLockInfo(d.name,false).started;
-        return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','HR','${d.dkLine||""}')">
-          <div class="dinger-left">
-            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"HR",d.dkLine||"")}${lockBadge(d.name,false)}</span></div>
-            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.pitcher)} (${d.hand}HP) · ${esc(d.venue)}</div>
-            <div class="dinger-meta">${d.seasHR} HR in ${d.gamesPlayed} G · L7 avg: ${d.l7HR.toFixed(2)} · L14: ${d.l14HR.toFixed(2)}</div>
-            ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
-            ${matchupGrade?`<div class="dinger-meta" style="color:${matchupGrade.color}">${matchupGrade.label} · opponent adjustment ${matchupAdjustment>0?"+":""}${matchupAdjustment.toFixed(1)}</div>`:""}
-          </div>
-          <div class="dinger-right">
-            <div class="dinger-rate">${ratePct}%</div>
-            <div class="dinger-sub">${locked?"started":"HR/AB · 1 per "+abPerHR+" AB"}</div>
-            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-      picksHTML+=renderMarketParlays("HR","Dinger");
-    }
+    picksHTML=renderDingerBoardView(convergenceHTML);
   }else if(st.picksView==="ks"){
-    const kb=getKsBoard();
-    if(!kb.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No Ks data available. Run the engine first.</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div class="dinger-header"><div class="dinger-title">Tonight's K Board</div></div>
-      <div class="dinger-desc">Projected Ks blend season, L7, and L3 form, then adjust for the opponent's strikeout rate. Sportsbook price breaks close calls.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=kb.map((d,i)=>{
-        const isTop=i<3;
-        const odds=d.overOdds?fmtOdds(d.overOdds):"—";
-        const k9Str=d.k9.toFixed(1);
-        const projectionStr=d.adjustedProjection.toFixed(1);
-        const adjustmentText=`${d.projectionAdjustment>0?"+":""}${d.projectionAdjustment.toFixed(1)} K`;
-        const matchupGrade=d.projectionAdjustment<=-0.35
-          ?{label:"Tough matchup",color:"var(--under)"}
-          :d.projectionAdjustment>=0.35
-            ?{label:"Favorable matchup",color:"var(--over)"}
-            :{label:"Neutral matchup",color:"var(--ink-muted)"};
-        const opponentRanking=getTeamRanking(d.opp);
-        const teamContext=opponentRanking?`${esc(d.opp)} offense · ${teamRankValue(opponentRanking,"OFF_K_PCT","OFF_K_PCT_MOST_RANK",{digits:1,suffix:"% K",direction:"most"})}`:"";
-        const locked=getLockInfo(d.name,true).started;
-        return`<div class="dinger-card ${isTop?"top3":""}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(d.name)}','P_SO','${d.dkLine||""}')">
-          <div class="dinger-left">
-            <div><span class="dinger-rank">${i+1}</span><span class="dinger-name">${playerLink(d.name,"P_SO",d.dkLine||"")}${lockBadge(d.name,true)}</span></div>
-            <div class="dinger-meta">${esc(d.team)} vs ${esc(d.opp)} · ${esc(d.venue)}</div>
-            <div class="dinger-meta">${d.seasSO} K in ${d.gamesStarted} GS · L7 avg: ${d.l7SO.toFixed(1)} · L3: ${d.l3SO.toFixed(1)}</div>
-            ${teamContext?`<div class="dinger-meta" style="color:var(--accent)">${teamContext}</div>`:""}
-            <div class="dinger-meta" style="color:${matchupGrade.color}">${matchupGrade.label} · raw ${d.projectedSO.toFixed(1)} → adjusted ${projectionStr} (${adjustmentText})</div>
-          </div>
-          <div class="dinger-right">
-            <div class="dinger-rate">${projectionStr}</div>
-            <div class="dinger-sub">Matchup projection · ${k9Str} K/9</div>
-            ${d.dkLine!==null?`<div class="dinger-odds">DK ${d.dkLine} O:${odds}</div>`:""}
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-      picksHTML+=renderMarketParlays("P_SO","K");
-    }
+    picksHTML=renderKsBoardView(convergenceHTML);
   }else if(st.picksView==="streaks"){
-    const allStreaks=getStreaks();
-    const fil=st.streakFilter==="all"?allStreaks:st.streakFilter==="bat"?allStreaks.filter(s=>s.propType==="bat"):allStreaks.filter(s=>s.propType==="pitch");
-    if(!fil.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">${allStreaks.length?`No ${st.streakFilter} streaks found.`:"No active streaks yet. Need 3+ games of data."}</div>`}
-    else{
-      picksHTML=convergenceHTML+`<div style="padding:12px 16px 4px;display:flex;justify-content:space-between;align-items:center"><div style="color:#ffaa00;font-size:var(--t-sm);font-weight:700">🔥 Active Streaks</div><div style="color:var(--ink-muted);font-size:var(--t-xs)">${fil.length} streaks found</div></div>
-      <div class="streak-filters"><div class="pf-btn ${st.streakFilter==="all"?"active":""}" onclick="setStreakFilter('all')">All</div><div class="pf-btn ${st.streakFilter==="bat"?"active":""}" onclick="setStreakFilter('bat')">${icon('bat')} Batters</div><div class="pf-btn ${st.streakFilter==="pitch"?"active":""}" onclick="setStreakFilter('pitch')">${icon('ball')} Pitchers</div></div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=fil.map(s=>{
-        const heat=getStreakHeat(s.streak);
-        const odds=s.overOdds?fmtOdds(s.overOdds):"";
-        const locked=getLockInfo(s.player,s.propType==="pitch").started;
-        return`<div class="streak-card ${heat.cls}${locked?" locked-card":""}" onclick="streakToDash('${esc(s.player)}')">
-          <div class="streak-left">
-            <div><span class="streak-emoji">${s.emoji}</span><span class="streak-name">${playerLink(s.player,s.stat,s.dkLine||"")}${lockBadge(s.player,s.propType==="pitch")}</span><span class="streak-label">${s.label}</span></div>
-            <div class="streak-meta">${esc(s.team)} vs ${s.propType==="pitch"?esc(s.opp):esc(s.pitcher)+" ("+s.hand+"HP)"} · ${s.desc}</div>
-            <div class="streak-chart">${miniChart(s.recentVals,s.threshold)}</div>
-            ${s.dkLine?`<div class="streak-prop">DK ${s.stat} ${s.dkLine} ${odds?" O:"+odds:""} · Avg during: ${s.avgDuring}</div>`:`<div class="streak-prop">Avg during streak: ${s.avgDuring} · Season: ${s.seasAvg}</div>`}
-          </div>
-          <div class="streak-right">
-            <div class="streak-count">${s.streak}</div>
-            <div class="streak-sub">${locked?"started":"games"}</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
+    picksHTML=renderStreaksBoardView(convergenceHTML);
   }else if(st.picksView==="draft"){
     const board=getDraftBoard();
     const slateGames=getDraftSlateGames();
