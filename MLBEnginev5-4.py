@@ -127,16 +127,40 @@ def check_quota_or_abort(resp, context: str) -> None:
 
 
 def cached_odds_fetch(cache_key: str, fetch_fn):
-    """Return cached payload if fresh, else fetch and cache."""
+    """Return cached payload if fresh, else fetch and cache.
+
+    Only non-empty payloads are cached. An empty result means the upstream fetch
+    failed (fetch_fn returns [] on non-200 or exception); caching that would pin
+    the failure for the whole TTL, so a manual re-run to recover from a transient
+    outage would keep replaying the empty payload without touching the API.
+    """
     path = os.path.join(CACHE_DIR, f"{SPORT_LABEL}_{cache_key}.json")
     if os.path.exists(path) and (time.time() - os.path.getmtime(path)) < CACHE_TTL_SECONDS:
         age = int(time.time() - os.path.getmtime(path))
-        with open(path) as f:
+        try:
+            with open(path) as f:
+                cached = json.load(f)
             print(f"💾 Cache hit: {cache_key} (age {age}s)")
-            return json.load(f)
+            return cached
+        except Exception as e:
+            # Truncated/corrupt cache file (e.g. process killed mid-write) — treat as a miss.
+            print(f"⚠️  Cache unreadable for {cache_key} ({e}) — refetching")
     data = fetch_fn()
-    with open(path, 'w') as f:
-        json.dump(data, f)
+    if data:
+        # Write atomically so an interrupted write can't leave a truncated file.
+        tmp_path = f"{path}.tmp"
+        try:
+            with open(tmp_path, 'w') as f:
+                json.dump(data, f)
+            os.replace(tmp_path, path)
+        except Exception as e:
+            print(f"⚠️  Could not cache {cache_key}: {e}")
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+    else:
+        print(f"⚠️  {cache_key}: empty result — NOT caching, so a re-run can retry")
     return data
 
 SHEET_SCHEMAS = {
@@ -487,12 +511,36 @@ def normalize_game_date(val):
         return text[:10]
 
 def load_existing_log_sheet(sheet_name, keep_cols, numeric_cols):
+    """Load an existing log tab as the incremental-fetch seed.
+
+    A read FAILURE must never be confused with an EMPTY sheet. These tabs are the
+    only copy of season history, and the write phase does clear()+rewrite: if a
+    transient 429/500 made this return empty, the engine would treat every player
+    as unseen, re-fetch all of them, and any player whose API call timed out would
+    contribute zero rows — permanently destroying their season on the rewrite.
+    So: a missing tab returns empty (correct for a first run), but any other error
+    aborts the run. All writes happen at the very end, so aborting here is
+    fail-safe (nothing is written) and the next scheduled run picks up.
+    """
     try:
         ws = sh.worksheet(sheet_name)
-        rows = ws.get_all_records()
-    except Exception:
+    except gspread.exceptions.WorksheetNotFound:
+        print(f"   🆕 {sheet_name} does not exist yet — starting fresh")
         return pd.DataFrame(columns=keep_cols)
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not open '{sheet_name}' to seed incremental fetch ({e}). "
+            f"Aborting before the write phase rather than risk overwriting history."
+        ) from e
+    try:
+        rows = ws.get_all_records()
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not read '{sheet_name}' to seed incremental fetch ({e}). "
+            f"Aborting before the write phase rather than risk overwriting history."
+        ) from e
     if not rows:
+        print(f"   🆕 {sheet_name} is empty — starting fresh")
         return pd.DataFrame(columns=keep_cols)
     df = pd.DataFrame(rows)
     for col in keep_cols:
@@ -509,11 +557,29 @@ def load_existing_log_sheet(sheet_name, keep_cols, numeric_cols):
     return df
 
 def load_existing_daily_picks(sheet, target_date):
+    """Load today's already-recorded picks, used for run numbering and dedupe.
+
+    As with load_existing_log_sheet, a read failure must not look like "no picks
+    yet": that would reset today_run_number to 1 (colliding with the real run 1)
+    and empty the dedupe key set, so picks already appended by an earlier run get
+    appended a second time — double-counting them for grading and ROI.
+    """
     try:
         ws = sheet.worksheet('Daily_Picks')
-        rows = ws.get_all_records()
-    except Exception:
+    except gspread.exceptions.WorksheetNotFound:
         return pd.DataFrame()
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not open 'Daily_Picks' ({e}). Aborting rather than risk "
+            f"duplicating today's picks with a reset run number."
+        ) from e
+    try:
+        rows = ws.get_all_records()
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not read 'Daily_Picks' ({e}). Aborting rather than risk "
+            f"duplicating today's picks with a reset run number."
+        ) from e
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
@@ -1463,6 +1529,12 @@ try:
                 'home_team_id': home['team']['id'], 'away_team_id': away['team']['id'],
                 'venue_name': venue_name, 'venue_id': venue.get('id', ''),
                 'venue_lat': venue_lat, 'venue_lon': venue_lon,
+                # game_time is the raw MLB StatsAPI UTC instant (…T23:05:00Z). For any
+                # game after 8pm ET its UTC *date* is already tomorrow, so consumers
+                # must convert before comparing. game_date is the Eastern slate date
+                # this run actually requested, so a stale tab is self-identifying
+                # instead of requiring the date to be inferred from a UTC timestamp.
+                'game_date': schedule_date,
                 'game_time': game.get('gameDate', ''),
                 'home_pitcher_id': home_pitcher.get('id'),
                 'home_pitcher_name': home_pitcher.get('fullName', 'TBD'),
