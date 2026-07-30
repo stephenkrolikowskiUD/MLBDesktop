@@ -2546,13 +2546,7 @@ function bindRenderedControls(){
   if(propsSearch)propsSearch.addEventListener("input",event=>{st.propsSearch=event.target.value;render()});
 }
 
-function render(){
-  var picksHTML="";
-  const focus=saveFocus();
-  const app=document.getElementById("app");
-  if(st.loading){app.innerHTML=`<div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Finding the signal between the foul lines.</div></div>`;return}
-  if(st.error){app.innerHTML=`<div class="error">⚠️ ${st.error}<br><br><span style="color:var(--ink-muted);font-size:var(--t-sm)">Make sure your Google Sheet is set to "Anyone with the link can view"</span></div>`;return}
-
+function renderDashboardPage(){
   const isP=st.mode==="pitcher";
   const curMetrics=isP?P_METRICS:METRICS;
   const {player,metric,line,activeTab,oppFilter}=st;
@@ -2705,6 +2699,48 @@ function render(){
   const tHeaders=logCols.map(c=>`<th class="${c===metric?"hl":""}">${c}</th>`).join("");
   const tRows=visibleLogs.map(g=>{const cells=logCols.map(c=>{const v=toNum(g[c]);let cls=c===metric?"hl":"";if(c===metric&&lineNum){cls=v>lineNum?"hit":v===lineNum?"push":"miss"}return`<td class="${cls}">${c==="UD_FP"?v.toFixed(1):v}</td>`}).join("");return`<tr><td>${(g.game_date||"").slice(5)}</td><td>${g.opp_abbr||"—"}</td><td>${g.home_away||"—"}</td>${cells}</tr>`}).join("");
 
+  return `<div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
+    ${player?`<div class="analysis-shell">
+      ${earlyBanner}
+      <header class="analysis-hero">
+        <div class="analysis-hero-top"><div><div class="analysis-eyebrow">${isP?"Pitcher analysis":"Batter analysis"}</div><div class="analysis-player">${esc(player)}</div><div class="analysis-context">${esc(pT.team_abbr||"Team TBD")} · ${esc(pT.home_away_tonight||"—")} vs ${esc(pT.opp_abbr_tonight||"—")} · ${esc(venue||pT.venue_tonight||"Venue TBD")}${gameStartTimeForTeams(pT.team_abbr,pT.opp_abbr_tonight)?` · ${esc(gameStartTimeForTeams(pT.team_abbr,pT.opp_abbr_tonight))}`:""}</div></div><div class="analysis-focus"><div class="analysis-focus-value">${esc(metric)}</div><div class="analysis-focus-label">${lineNum?`Prop line ${lineNum}`:"Selected metric"}</div></div></div>
+        ${pHasLogs?`<div class="analysis-kpis"><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(seasAvg,lineNum,analysisLean)}">${seasAvg.toFixed(2)}</div><div class="analysis-kpi-label">Season</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(midAvg,lineNum,analysisLean)}">${midAvg.toFixed(2)}</div><div class="analysis-kpi-label">${midLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(shortAvg,lineNum,analysisLean)}">${shortAvg.toFixed(2)}</div><div class="analysis-kpi-label">${shortLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(lastGame,lineNum,analysisLean)}">${lastGame.toFixed(2)}</div><div class="analysis-kpi-label">Last game</div></div></div><div class="analysis-season-strip">${statStrip}</div>`:""}
+      </header>
+      <div class="analysis-layout">
+        <main class="analysis-primary">
+          ${pHasLogs?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Last 10 · ${esc(propTypeLabel(metric))}</div><div class="analysis-section-meta">${last10.length} games · green marks ${analysisLean.toLowerCase()} wins</div></div><div class="analysis-chart"><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Reference line ${lineNum}</div>`:""}</div></section>`:""}
+          ${pickBanner?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Decision</div><div class="analysis-section-meta">Model-ranked recommendation</div></div>${pickBanner}</section>`:""}
+          ${propsHTML?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Sportsbook markets</div><div class="analysis-section-meta">Live comparison by book</div></div>${propsHTML}</section>`:""}
+        </main>
+        <aside class="analysis-rail">
+          <section class="analysis-rail-section"><div class="analysis-rail-title">Tonight's matchup</div>${matchupAnalysisHTML}</section>
+          ${modelContextHTML}
+          ${opponentProfileHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Opponent profile</div>${opponentProfileHTML}</section>`:""}
+          ${hitRateAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Hit rates · ${esc(metric)} ${lineNum?`${analysisLean.toLowerCase()} ${lineNum}`:""}</div>${hitRateAnalysisHTML}</section>`:""}
+          ${pHasLogs?`<section class="analysis-rail-section"><div class="analysis-rail-title">${isP?"Season rates":`Handedness split · ${esc(oppH)}HP`}</div>${splitAnalysisHTML}</section><section class="analysis-rail-section"><div class="analysis-rail-title">Home / away</div><div class="mini-bars-container">${haBars}</div></section>`:""}
+          ${weatherAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Weather</div>${weatherAnalysisHTML}</section>`:""}
+        </aside>
+      </div>
+      ${pHasLogs?`<section class="analysis-game-log"><div class="analysis-section-head"><div><div class="analysis-section-title">Game log · ${st.showFullLog?"Full history":"Recent 10"}</div><div class="analysis-section-meta">${esc(metric)} results · ${fLogs.length} matching game${fLogs.length===1?"":"s"} loaded</div></div></div><div class="log-controls"><label for="oppFilter">Opponent</label><select id="oppFilter">${oppOpts}</select>${fLogs.length>10?`<button class="log-expand-btn" onclick="toggleFullLog()">${st.showFullLog?"Show recent 10":`Show full history (${fLogs.length})`}</button>`:""}</div><div class="log-table-wrap"><table><thead><tr><th>DATE</th><th>OPP</th><th>H/A</th>${tHeaders}</tr></thead><tbody>${tRows}</tbody></table></div></section>`:""}
+    </div>`:`<div class="empty" style="padding:70px 20px">Select a player above to open the analysis workspace.</div>`}
+    <div class="timestamp">As of: ${fmtNowEastern()} · Last Refreshed: ${lastUp}</div>
+    <div class="timestamp" style="color:var(--border-1);font-size:var(--t-xs);padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
+  </div>`;
+}
+
+function render(){
+  var picksHTML="";
+  const focus=saveFocus();
+  const app=document.getElementById("app");
+  if(st.loading){app.innerHTML=`<div class="diamond-loader" role="status" aria-live="polite"><div class="diamond-loader-mark" aria-hidden="true"><div class="diamond-loader-field"></div><span class="diamond-loader-base home"></span><span class="diamond-loader-base first"></span><span class="diamond-loader-base second"></span><span class="diamond-loader-base third"></span><span class="diamond-loader-ball"></span></div><div class="diamond-loader-title">Loading the slate</div><div class="diamond-loader-copy">Finding the signal between the foul lines.</div></div>`;return}
+  if(st.error){app.innerHTML=`<div class="error">⚠️ ${st.error}<br><br><span style="color:var(--ink-muted);font-size:var(--t-sm)">Make sure your Google Sheet is set to "Anyone with the link can view"</span></div>`;return}
+
+  const isP=st.mode==="pitcher";
+  const curMetrics=isP?P_METRICS:METRICS;
+  const {player,metric,activeTab}=st;
+  const curTonight=isP?st.pTonight:st.tonight;
+  const metricOpts=curMetrics.map(m=>`<option value="${m}" ${m===metric?"selected":""}>${m}</option>`).join("");
+
   // === PICKS TAB ===
   const convergenceHTML=renderConvergenceHTML();
   picksHTML="";
@@ -2766,33 +2802,7 @@ function render(){
   ${renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight})}
   ${renderDataWarnings()}
 
-  <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
-    ${player?`<div class="analysis-shell">
-      ${earlyBanner}
-      <header class="analysis-hero">
-        <div class="analysis-hero-top"><div><div class="analysis-eyebrow">${isP?"Pitcher analysis":"Batter analysis"}</div><div class="analysis-player">${esc(player)}</div><div class="analysis-context">${esc(pT.team_abbr||"Team TBD")} · ${esc(pT.home_away_tonight||"—")} vs ${esc(pT.opp_abbr_tonight||"—")} · ${esc(venue||pT.venue_tonight||"Venue TBD")}${gameStartTimeForTeams(pT.team_abbr,pT.opp_abbr_tonight)?` · ${esc(gameStartTimeForTeams(pT.team_abbr,pT.opp_abbr_tonight))}`:""}</div></div><div class="analysis-focus"><div class="analysis-focus-value">${esc(metric)}</div><div class="analysis-focus-label">${lineNum?`Prop line ${lineNum}`:"Selected metric"}</div></div></div>
-        ${pHasLogs?`<div class="analysis-kpis"><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(seasAvg,lineNum,analysisLean)}">${seasAvg.toFixed(2)}</div><div class="analysis-kpi-label">Season</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(midAvg,lineNum,analysisLean)}">${midAvg.toFixed(2)}</div><div class="analysis-kpi-label">${midLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(shortAvg,lineNum,analysisLean)}">${shortAvg.toFixed(2)}</div><div class="analysis-kpi-label">${shortLbl}</div></div><div class="analysis-kpi"><div class="analysis-kpi-value" style="color:${avgColor(lastGame,lineNum,analysisLean)}">${lastGame.toFixed(2)}</div><div class="analysis-kpi-label">Last game</div></div></div><div class="analysis-season-strip">${statStrip}</div>`:""}
-      </header>
-      <div class="analysis-layout">
-        <main class="analysis-primary">
-          ${pHasLogs?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Last 10 · ${esc(propTypeLabel(metric))}</div><div class="analysis-section-meta">${last10.length} games · green marks ${analysisLean.toLowerCase()} wins</div></div><div class="analysis-chart"><div class="bar-chart">${bars}</div>${lineNum?`<div class="line-indicator">Reference line ${lineNum}</div>`:""}</div></section>`:""}
-          ${pickBanner?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Decision</div><div class="analysis-section-meta">Model-ranked recommendation</div></div>${pickBanner}</section>`:""}
-          ${propsHTML?`<section class="analysis-section"><div class="analysis-section-head"><div class="analysis-section-title">Sportsbook markets</div><div class="analysis-section-meta">Live comparison by book</div></div>${propsHTML}</section>`:""}
-        </main>
-        <aside class="analysis-rail">
-          <section class="analysis-rail-section"><div class="analysis-rail-title">Tonight's matchup</div>${matchupAnalysisHTML}</section>
-          ${modelContextHTML}
-          ${opponentProfileHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Opponent profile</div>${opponentProfileHTML}</section>`:""}
-          ${hitRateAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Hit rates · ${esc(metric)} ${lineNum?`${analysisLean.toLowerCase()} ${lineNum}`:""}</div>${hitRateAnalysisHTML}</section>`:""}
-          ${pHasLogs?`<section class="analysis-rail-section"><div class="analysis-rail-title">${isP?"Season rates":`Handedness split · ${esc(oppH)}HP`}</div>${splitAnalysisHTML}</section><section class="analysis-rail-section"><div class="analysis-rail-title">Home / away</div><div class="mini-bars-container">${haBars}</div></section>`:""}
-          ${weatherAnalysisHTML?`<section class="analysis-rail-section"><div class="analysis-rail-title">Weather</div>${weatherAnalysisHTML}</section>`:""}
-        </aside>
-      </div>
-      ${pHasLogs?`<section class="analysis-game-log"><div class="analysis-section-head"><div><div class="analysis-section-title">Game log · ${st.showFullLog?"Full history":"Recent 10"}</div><div class="analysis-section-meta">${esc(metric)} results · ${fLogs.length} matching game${fLogs.length===1?"":"s"} loaded</div></div></div><div class="log-controls"><label for="oppFilter">Opponent</label><select id="oppFilter">${oppOpts}</select>${fLogs.length>10?`<button class="log-expand-btn" onclick="toggleFullLog()">${st.showFullLog?"Show recent 10":`Show full history (${fLogs.length})`}</button>`:""}</div><div class="log-table-wrap"><table><thead><tr><th>DATE</th><th>OPP</th><th>H/A</th>${tHeaders}</tr></thead><tbody>${tRows}</tbody></table></div></section>`:""}
-    </div>`:`<div class="empty" style="padding:70px 20px">Select a player above to open the analysis workspace.</div>`}
-    <div class="timestamp">As of: ${fmtNowEastern()} · Last Refreshed: ${lastUp}</div>
-    <div class="timestamp" style="color:var(--border-1);font-size:var(--t-xs);padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
-  </div>
+  ${renderDashboardPage()}
 
   ${renderPicksPage(activeTab,picksHTML)}
 
