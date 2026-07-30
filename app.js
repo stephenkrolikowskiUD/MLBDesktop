@@ -2481,7 +2481,38 @@ function renderPicksPage(activeTab,picksHTML){
     </div>`;
 }
 
-function renderLookupPage({activeTab,lk,lkSum,lkSugs,lkBody}){
+function renderLookupPage(activeTab){
+  const lk=st.lkPlayer;
+  const lkC=st.lkPlayerType==="pitcher"?[{k:"gamesPlayed",l:"G"},{k:"gamesStarted",l:"GS"},{k:"wins",l:"W"},{k:"losses",l:"L"},{k:"era",l:"ERA"},{k:"inningsPitched",l:"IP"},{k:"strikeOuts",l:"SO"},{k:"baseOnBalls",l:"BB"},{k:"whip",l:"WHIP"},{k:"avg",l:"BAA"}]:[{k:"gamesPlayed",l:"G"},{k:"atBats",l:"AB"},{k:"hits",l:"H"},{k:"homeRuns",l:"HR"},{k:"rbi",l:"RBI"},{k:"runs",l:"R"},{k:"stolenBases",l:"SB"},{k:"baseOnBalls",l:"BB"},{k:"strikeOuts",l:"SO"},{k:"avg",l:"AVG"},{k:"obp",l:"OBP"},{k:"slg",l:"SLG"},{k:"ops",l:"OPS"}];
+  const fv=(s,k)=>{if(!s)return"—";const v=s[k];return v===undefined||v===null?"—":v};
+  const mkT=(h,r)=>{if(!r||!r.length)return`<div class="empty">No data</div>`;return`<div class="lk-tbl-wrap"><table><thead><tr>${r[0].label?`<th></th>`:""}${h.map(x=>`<th>${x.l}</th>`).join("")}</tr></thead><tbody>${r.map(x=>`<tr>${x.label?`<td class="hl">${x.label}</td>`:""}${h.map(c=>`<td>${fv(x.stat||x,c.k)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`};
+
+  let lkSum="",lkBody="";
+  if(lk&&st.lkCareer){
+    const cs=st.lkCareer;
+    const bx=st.lkPlayerType==="pitcher"?[{v:cs.era||"—",l:"ERA"},{v:cs.wins||"—",l:"W"},{v:cs.strikeOuts||"—",l:"K"},{v:cs.whip||"—",l:"WHIP"}]:[{v:cs.avg||"—",l:"AVG"},{v:cs.homeRuns||"—",l:"HR"},{v:cs.hits||"—",l:"H"},{v:cs.ops||"—",l:"OPS"}];
+    lkSum=`<div class="stat-grid">${bx.map(b=>`<div class="stat-box"><div class="val">${b.v}</div><div class="lbl">${b.l}</div></div>`).join("")}</div>`;
+  }
+  if(st.lkSubTab==="career"){
+    if(st.lkYby){const rows=st.lkYby.map(y=>({label:`${y.season} ${y.team}`,stat:y.stat}));if(st.lkCareer)rows.push({label:"CAREER",stat:st.lkCareer});lkBody=mkT(lkC,rows)}
+    else if(st.lkLoading.career)lkBody=`<div class="loading-sm">Loading...</div>`;
+  }
+  if(st.lkSubTab==="vsTeam"){
+    const tO=st.lkTeamList.map(t=>`<option value="${t.id}" ${t.id===st.lkVsTeamId?"selected":""}>${t.abbr} — ${t.name}</option>`).join("");
+    let tbl=`<div class="empty">Select a team</div>`;
+    if(st.lkLoading.vsTeam)tbl=`<div class="loading-sm">Loading...</div>`;
+    else if(st.lkVsTeamStats){const rows=st.lkVsTeamStats.map(t=>({label:st.lkTeamList.find(x=>x.id===t.teamId)?.abbr||t.team,stat:t.stat}));tbl=rows.length?mkT(lkC,rows):`<div class="empty">No data</div>`}
+    lkBody=`<div class="lk-section"><select id="vsTeamSel"><option value="">All Teams</option>${tO}</select></div><div style="margin-top:8px">${tbl}</div>`;
+  }
+  if(st.lkSubTab==="vsPlayer"){
+    const sugs=st.lkVsPlayerResults.length?`<div class="suggestions" style="display:block;position:relative;margin:8px 16px">${st.lkVsPlayerResults.map(r=>`<div class="sug-item" onclick="pickVsP(${r.id},'${r.name.replace(/'/g,"\\'")}')"><span class="sug-name">${r.name}</span> <span class="sug-meta">${r.team} · ${r.pos}</span></div>`).join("")}</div>`:"";
+    let res=`<div class="empty">Search for a ${st.lkPlayerType==="pitcher"?"batter":"pitcher"}</div>`;
+    if(st.lkLoading.vsPlayer)res=`<div class="loading-sm">Loading...</div>`;
+    else if(st.lkVsPlayerStats){const s=st.lkVsPlayerStats;const bx=st.lkPlayerType==="pitcher"?[{v:s.era||"—",l:"ERA"},{v:s.inningsPitched||"—",l:"IP"},{v:s.strikeOuts||"—",l:"K"},{v:s.avg||"—",l:"BAA"}]:[{v:s.avg||"—",l:"AVG"},{v:s.homeRuns||"—",l:"HR"},{v:s.atBats||"—",l:"AB"},{v:s.ops||"—",l:"OPS"}];res=`<div style="padding:0 16px"><div class="card"><div class="card-title">${lk.name} vs ${st.lkVsPlayerName}</div><div class="stat-grid" style="margin:0">${bx.map(b=>`<div class="stat-box"><div class="val">${b.v}</div><div class="lbl">${b.l}</div></div>`).join("")}</div></div></div>${mkT(lkC,[{stat:s}])}`}
+    else if(st.lkVsPlayerId)res=`<div class="empty">No head-to-head data</div>`;
+    lkBody=`<div class="lk-section"><input type="text" id="vsPlayerInput" placeholder="Search ${st.lkPlayerType==="pitcher"?"batter":"pitcher"}..."/></div>${sugs}${res}`;
+  }
+  const lkSugs=st.lkResults.length?`<div class="suggestions" style="display:block">${st.lkResults.map((r,i)=>`<div class="sug-item" onclick="pickLkPlayer(${i})"><div class="sug-name">${r.name}</div><div class="sug-meta">${r.team} · ${r.pos} · #${r.number}</div></div>`).join("")}</div>`:"";
   const profile=lk?`
     <div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>
     ${lkSum}
@@ -2498,6 +2529,21 @@ function renderLookupPage({activeTab,lk,lkSum,lkSugs,lkBody}){
       ${profile}
       <div class="timestamp">Data from MLB Stats API · Live</div>
     </div>`;
+}
+
+function renderMethodPage(activeTab){
+  return `<div id="pg-method" class="page ${activeTab==="method"?"active":""}">
+    <div style="padding:16px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:4px">⚾</div><div style="color:var(--accent);font-weight:800;font-size:var(--t-md)">How This Dashboard Works</div><div style="color:var(--accent-soft);font-size:var(--t-xs);margin-top:4px">Under the hood of the MLB DFS Engine</div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">📡 Data Sources</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">MLB Stats API</span> — Batter/pitcher game logs, splits, career vs SP, tonight's schedule.</div><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">The Odds API</span> — Live spreads, totals, and player props across 13 markets.</div><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">OpenWeather</span> — Venue weather (temp, wind, conditions) for outdoor parks.</div><div><span style="color:var(--accent);font-weight:700">Google Sheets</span> — Central warehouse. Engine writes 14+ tabs; app reads live.</div></div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">⚙️ Calculations</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><span style="color:var(--accent);font-weight:700">Rolling Averages</span> L7/L14/L30/Season · <span style="color:var(--accent);font-weight:700">LHP/RHP Splits</span> · <span style="color:var(--accent);font-weight:700">Home/Away Splits</span> · <span style="color:var(--accent);font-weight:700">Career Batter vs SP</span> · <span style="color:var(--accent);font-weight:700">EV%</span> hit rate vs implied odds · <span style="color:var(--accent);font-weight:700">Line Movement</span> snapshot diffs</div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">Model Picks</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">A deterministic market-and-form model and Gemini review layer produce a tracked recommendation cohort. Every pick is anchored to a real player, market, and sportsbook line; provenance badges distinguish validated-model selections from AI-reviewed candidates.</div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">Market Edge & Slips</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">The market-edge signal compares historical hit rates to implied odds as one input. Slips combine that signal with model review and recent form.</div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">Dingers</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">HR probability board ranked by HR rate, recent power, and DK odds. Includes 3-leg dinger parlay combos.</div></div>
+      <div class="card" style="margin-bottom:10px"><div class="card-title">📖 Abbreviations</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.7">H — Hits · HR — Home Runs · RBI — Runs Batted In · R — Runs · SB — Stolen Bases<br>TB — Total Bases · BB — Walks · SO — Strikeouts · AB — At Bats · AVG — Batting Average<br>1B — Singles · 2B — Doubles · 3B — Triples · HBP — Hit By Pitch<br>OPS — On-Base Plus Slugging · OBP — On-Base Percentage · SLG — Slugging Percentage<br>H+R+RBI — Hits + Runs + RBIs combo<br>IP — Innings Pitched · ER — Earned Runs · ERA — Earned Run Average<br>WHIP — Walks + Hits per Inning Pitched · K/9 — Strikeouts per 9 innings<br>QS — Quality Start (6+ IP, 3 or fewer ER) · W — Win · PC — Pitch Count<br>P_SO — Pitcher Strikeouts · P_H — Hits Allowed · P_BB — Walks Allowed · P_ER — Earned Runs<br>DK_FP — DraftKings Fantasy Points · UD_FP — Underdog Fantasy Points<br>EV% — Expected Value (hit rate minus implied odds)<br>LHP/RHP — Left/Right-Handed Pitcher<br>vs SP — Career stats against tonight's Starting Pitcher<br>SMASH/STRONG/LEAN — AI confidence tiers<br>L7/L14/L30 — Last 7/14/30 game averages · Seas — Season average</div></div>
+      <div class="card" style="margin-bottom:10px;border:1px solid var(--border-1)"><div class="card-title">🙏 Credits</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><div>Built by <span style="color:var(--accent);font-weight:700">Stephen Krolikowski</span></div><div>AI: <span style="color:var(--accent);font-weight:700">Gemini 3.6 Flash</span> · App: <span style="color:var(--accent);font-weight:700">Claude</span> by Anthropic</div><div>Engine + dashboard fixes with <span style="color:var(--accent);font-weight:700">Codex</span> by OpenAI</div><div>Props: <span style="color:var(--accent);font-weight:700">The Odds API</span> · Data: <span style="color:var(--accent);font-weight:700">MLB Stats API</span> · Weather: <span style="color:var(--accent);font-weight:700">OpenWeather</span></div></div></div>
+      <div style="text-align:center;color:var(--ink-quiet);font-size:var(--t-xs);padding:8px 0 20px">For entertainment & research purposes only.</div>
+    </div>
+  </div>`;
 }
 
 function renderMobileNavigation(activeTab){
@@ -2764,39 +2810,6 @@ function render(){
     picksHTML=renderPropExplorerView();
   }
 
-  // === LOOKUP ===
-  const lk=st.lkPlayer;
-  const lkC=st.lkPlayerType==="pitcher"?[{k:"gamesPlayed",l:"G"},{k:"gamesStarted",l:"GS"},{k:"wins",l:"W"},{k:"losses",l:"L"},{k:"era",l:"ERA"},{k:"inningsPitched",l:"IP"},{k:"strikeOuts",l:"SO"},{k:"baseOnBalls",l:"BB"},{k:"whip",l:"WHIP"},{k:"avg",l:"BAA"}]:[{k:"gamesPlayed",l:"G"},{k:"atBats",l:"AB"},{k:"hits",l:"H"},{k:"homeRuns",l:"HR"},{k:"rbi",l:"RBI"},{k:"runs",l:"R"},{k:"stolenBases",l:"SB"},{k:"baseOnBalls",l:"BB"},{k:"strikeOuts",l:"SO"},{k:"avg",l:"AVG"},{k:"obp",l:"OBP"},{k:"slg",l:"SLG"},{k:"ops",l:"OPS"}];
-  const fv=(s,k)=>{if(!s)return"—";const v=s[k];return v===undefined||v===null?"—":v};
-  const mkT=(h,r)=>{if(!r||!r.length)return`<div class="empty">No data</div>`;return`<div class="lk-tbl-wrap"><table><thead><tr>${r[0].label?`<th></th>`:""}${h.map(x=>`<th>${x.l}</th>`).join("")}</tr></thead><tbody>${r.map(x=>`<tr>${x.label?`<td class="hl">${x.label}</td>`:""}${h.map(c=>`<td>${fv(x.stat||x,c.k)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`};
-
-  let lkSum="",lkBody="";
-  if(lk&&st.lkCareer){
-    const cs=st.lkCareer;
-    const bx=st.lkPlayerType==="pitcher"?[{v:cs.era||"—",l:"ERA"},{v:cs.wins||"—",l:"W"},{v:cs.strikeOuts||"—",l:"K"},{v:cs.whip||"—",l:"WHIP"}]:[{v:cs.avg||"—",l:"AVG"},{v:cs.homeRuns||"—",l:"HR"},{v:cs.hits||"—",l:"H"},{v:cs.ops||"—",l:"OPS"}];
-    lkSum=`<div class="stat-grid">${bx.map(b=>`<div class="stat-box"><div class="val">${b.v}</div><div class="lbl">${b.l}</div></div>`).join("")}</div>`;
-  }
-  if(st.lkSubTab==="career"){
-    if(st.lkYby){const rows=st.lkYby.map(y=>({label:`${y.season} ${y.team}`,stat:y.stat}));if(st.lkCareer)rows.push({label:"CAREER",stat:st.lkCareer});lkBody=mkT(lkC,rows)}
-    else if(st.lkLoading.career)lkBody=`<div class="loading-sm">Loading...</div>`;
-  }
-  if(st.lkSubTab==="vsTeam"){
-    const tO=st.lkTeamList.map(t=>`<option value="${t.id}" ${t.id===st.lkVsTeamId?"selected":""}>${t.abbr} — ${t.name}</option>`).join("");
-    let tbl=`<div class="empty">Select a team</div>`;
-    if(st.lkLoading.vsTeam)tbl=`<div class="loading-sm">Loading...</div>`;
-    else if(st.lkVsTeamStats){const rows=st.lkVsTeamStats.map(t=>({label:st.lkTeamList.find(x=>x.id===t.teamId)?.abbr||t.team,stat:t.stat}));tbl=rows.length?mkT(lkC,rows):`<div class="empty">No data</div>`}
-    lkBody=`<div class="lk-section"><select id="vsTeamSel"><option value="">All Teams</option>${tO}</select></div><div style="margin-top:8px">${tbl}</div>`;
-  }
-  if(st.lkSubTab==="vsPlayer"){
-    const sugs=st.lkVsPlayerResults.length?`<div class="suggestions" style="display:block;position:relative;margin:8px 16px">${st.lkVsPlayerResults.map(r=>`<div class="sug-item" onclick="pickVsP(${r.id},'${r.name.replace(/'/g,"\\'")}')"><span class="sug-name">${r.name}</span> <span class="sug-meta">${r.team} · ${r.pos}</span></div>`).join("")}</div>`:"";
-    let res=`<div class="empty">Search for a ${st.lkPlayerType==="pitcher"?"batter":"pitcher"}</div>`;
-    if(st.lkLoading.vsPlayer)res=`<div class="loading-sm">Loading...</div>`;
-    else if(st.lkVsPlayerStats){const s=st.lkVsPlayerStats;const bx=st.lkPlayerType==="pitcher"?[{v:s.era||"—",l:"ERA"},{v:s.inningsPitched||"—",l:"IP"},{v:s.strikeOuts||"—",l:"K"},{v:s.avg||"—",l:"BAA"}]:[{v:s.avg||"—",l:"AVG"},{v:s.homeRuns||"—",l:"HR"},{v:s.atBats||"—",l:"AB"},{v:s.ops||"—",l:"OPS"}];res=`<div style="padding:0 16px"><div class="card"><div class="card-title">${lk.name} vs ${st.lkVsPlayerName}</div><div class="stat-grid" style="margin:0">${bx.map(b=>`<div class="stat-box"><div class="val">${b.v}</div><div class="lbl">${b.l}</div></div>`).join("")}</div></div></div>${mkT(lkC,[{stat:s}])}`}
-    else if(st.lkVsPlayerId)res=`<div class="empty">No head-to-head data</div>`;
-    lkBody=`<div class="lk-section"><input type="text" id="vsPlayerInput" placeholder="Search ${st.lkPlayerType==="pitcher"?"batter":"pitcher"}..."/></div>${sugs}${res}`;
-  }
-  const lkSugs=st.lkResults.length?`<div class="suggestions" style="display:block">${st.lkResults.map((r,i)=>`<div class="sug-item" onclick="pickLkPlayer(${i})"><div class="sug-name">${r.name}</div><div class="sug-meta">${r.team} · ${r.pos} · #${r.number}</div></div>`).join("")}</div>`:"";
-
   const showCtrl=activeTab==="dashboard";
   app.innerHTML=`
   ${renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight})}
@@ -2810,20 +2823,9 @@ function render(){
   <div id="pg-leaders" class="page ${activeTab==="leaders"?"active":""}">${renderLeadersView()}</div>
   <div id="pg-entry" class="page ${activeTab==="entry"?"active":""}">${renderGameEntryView()}</div>
 
-  ${renderLookupPage({activeTab,lk,lkSum,lkSugs,lkBody})}
+  ${renderLookupPage(activeTab)}
 
-  <div id="pg-method" class="page ${activeTab==="method"?"active":""}">
-    <div style="padding:16px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:4px">⚾</div><div style="color:var(--accent);font-weight:800;font-size:var(--t-md)">How This Dashboard Works</div><div style="color:var(--accent-soft);font-size:var(--t-xs);margin-top:4px">Under the hood of the MLB DFS Engine</div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">📡 Data Sources</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">MLB Stats API</span> — Batter/pitcher game logs, splits, career vs SP, tonight's schedule.</div><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">The Odds API</span> — Live spreads, totals, and player props across 13 markets.</div><div style="margin-bottom:6px"><span style="color:var(--accent);font-weight:700">OpenWeather</span> — Venue weather (temp, wind, conditions) for outdoor parks.</div><div><span style="color:var(--accent);font-weight:700">Google Sheets</span> — Central warehouse. Engine writes 14+ tabs; app reads live.</div></div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">⚙️ Calculations</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><span style="color:var(--accent);font-weight:700">Rolling Averages</span> L7/L14/L30/Season · <span style="color:var(--accent);font-weight:700">LHP/RHP Splits</span> · <span style="color:var(--accent);font-weight:700">Home/Away Splits</span> · <span style="color:var(--accent);font-weight:700">Career Batter vs SP</span> · <span style="color:var(--accent);font-weight:700">EV%</span> hit rate vs implied odds · <span style="color:var(--accent);font-weight:700">Line Movement</span> snapshot diffs</div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">Model Picks</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">A deterministic market-and-form model and Gemini review layer produce a tracked recommendation cohort. Every pick is anchored to a real player, market, and sportsbook line; provenance badges distinguish validated-model selections from AI-reviewed candidates.</div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">Market Edge & Slips</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">The market-edge signal compares historical hit rates to implied odds as one input. Slips combine that signal with model review and recent form.</div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">Dingers</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6">HR probability board ranked by HR rate, recent power, and DK odds. Includes 3-leg dinger parlay combos.</div></div>
-      <div class="card" style="margin-bottom:10px"><div class="card-title">📖 Abbreviations</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.7">H — Hits · HR — Home Runs · RBI — Runs Batted In · R — Runs · SB — Stolen Bases<br>TB — Total Bases · BB — Walks · SO — Strikeouts · AB — At Bats · AVG — Batting Average<br>1B — Singles · 2B — Doubles · 3B — Triples · HBP — Hit By Pitch<br>OPS — On-Base Plus Slugging · OBP — On-Base Percentage · SLG — Slugging Percentage<br>H+R+RBI — Hits + Runs + RBIs combo<br>IP — Innings Pitched · ER — Earned Runs · ERA — Earned Run Average<br>WHIP — Walks + Hits per Inning Pitched · K/9 — Strikeouts per 9 innings<br>QS — Quality Start (6+ IP, 3 or fewer ER) · W — Win · PC — Pitch Count<br>P_SO — Pitcher Strikeouts · P_H — Hits Allowed · P_BB — Walks Allowed · P_ER — Earned Runs<br>DK_FP — DraftKings Fantasy Points · UD_FP — Underdog Fantasy Points<br>EV% — Expected Value (hit rate minus implied odds)<br>LHP/RHP — Left/Right-Handed Pitcher<br>vs SP — Career stats against tonight's Starting Pitcher<br>SMASH/STRONG/LEAN — AI confidence tiers<br>L7/L14/L30 — Last 7/14/30 game averages · Seas — Season average</div></div>
-      <div class="card" style="margin-bottom:10px;border:1px solid var(--border-1)"><div class="card-title">🙏 Credits</div><div style="font-size:var(--t-sm);color:var(--ink-1);line-height:1.6"><div>Built by <span style="color:var(--accent);font-weight:700">Stephen Krolikowski</span></div><div>AI: <span style="color:var(--accent);font-weight:700">Gemini 3.6 Flash</span> · App: <span style="color:var(--accent);font-weight:700">Claude</span> by Anthropic</div><div>Engine + dashboard fixes with <span style="color:var(--accent);font-weight:700">Codex</span> by OpenAI</div><div>Props: <span style="color:var(--accent);font-weight:700">The Odds API</span> · Data: <span style="color:var(--accent);font-weight:700">MLB Stats API</span> · Weather: <span style="color:var(--accent);font-weight:700">OpenWeather</span></div></div></div>
-      <div style="text-align:center;color:var(--ink-quiet);font-size:var(--t-xs);padding:8px 0 20px">For entertainment & research purposes only.</div>
-    </div>
-  </div>
+  ${renderMethodPage(activeTab)}
 
   ${renderMobileNavigation(activeTab)}`;
 
