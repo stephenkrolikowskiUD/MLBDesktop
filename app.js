@@ -2216,6 +2216,166 @@ function renderStreaksBoardView(convergenceHTML){
   return html;
 }
 
+function renderDraftBoardView(convergenceHTML){
+  let html="";
+      const board=getDraftBoard();
+      const slateGames=getDraftSlateGames();
+      const selectedGames=draftSlateSelection();
+      const available=board.filter(p=>!st.drafted.has(p.name));
+      const stacks=getDraftStacks().slice(0,5);
+      const stackTags=getDraftStackTagMap();
+      const draftedCount=st.drafted.size;
+      function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
+      function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
+      const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
+        ${renderDraftSlateSelector()}`;
+      if(!board.length){
+        const emptyMessage=slateGames.length&&!selectedGames.size
+          ?"No contest games selected. Choose the games included in this UD contest."
+          :"No draftable players loaded for the selected games.";
+        html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
+      }
+      else{
+        html=draftHeader+`<div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
+        html+=`<div class="cards-grid draft-board">`;
+        let lastTier="";
+        board.forEach((p,i)=>{
+          const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
+          const tierChanged=tier.label!==lastTier;lastTier=tier.label;
+          let tags=[];
+          if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--smash-soft);color:var(--smash)">SMASH</span>`);
+          if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
+          else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">👁️ PATIENT</span>`)}
+          if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
+          if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
+          const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
+          if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
+          if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
+          (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
+          const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
+          const locked=getLockInfo(p.name,p.isPitcher).started;
+          const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
+          html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
+          <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
+            <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
+            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+            <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
+          </div>`;
+        });
+        html+=`</div>`;
+        if(stacks.length){
+          html+=`<div style="padding:14px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:var(--ink-muted);font-size:var(--t-xs)">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
+          html+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${playerLink(s.players[0].name)} + ${playerLink(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"var(--warn-soft)":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
+          html+=`</div>`;
+        }
+      }
+  return html;
+}
+
+function renderBetsBoardView(convergenceHTML){
+  let html="";
+      const allBets=getMarketEdges();
+      const posEV=allBets.filter(b=>b.edge>=0.05);
+      const elite=posEV.filter(b=>b.edge>=0.15);
+      const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
+      if(!allBets.length){html=convergenceHTML+`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
+      else if(!posEV.length){html=convergenceHTML+`<div class="props-pass"><div class="props-pass-title">No actionable market edges tonight</div><div class="props-pass-copy">No eligible side clears both the +5% edge floor and the ${MARKET_EDGE_MIN_ODDS} price floor. Passing is better than promoting a heavily juiced near-certainty.</div></div>`}
+      else{
+        html=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--under)">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--ink-muted)">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
+        html+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
+        html+=`<div class="cards-grid">`;
+        html+=posEV.slice(0,40).map((b,i)=>{
+          const edgePct=(b.edge*100).toFixed(1);
+          const hrPct=(b.hitRate*100).toFixed(0);
+          const ipPct=(b.impliedProb*100).toFixed(0);
+          const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
+          const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
+          const badges=riskBadges(b.name,b.isP,{showLimited:false});
+          const locked=getLockInfo(b.name,b.isP).started;
+          return`<div class="bet-card ${cls}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
+            <div class="bet-left">
+              <div class="bet-name">${b.isP?icon('ball'):""}${playerLink(b.name,b.metric,b.dkLine)}${badges}${lockBadge(b.name,b.isP)}</div>
+              <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
+              <div class="bet-prop">
+                <span class="prop-metric" style="font-size:var(--t-xs)">${b.metric}</span>
+                <span class="${leanCls}" style="font-weight:700;font-size:var(--t-sm)">${b.lean} ${b.dkLine}</span>
+                <span style="color:var(--accent-soft);font-size:var(--t-xs)">${fmtOdds(b.odds)}</span>
+                <span class="ev-badge ev-pos ev-big ${b.returning||locked?"muted-risk":""}">+${edgePct}% EV</span>
+              </div>
+              ${renderBestBookLine(b.prop,b.lean)}
+              <div class="bet-bar ${b.returning||locked?"muted-risk":""}"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"var(--under)":b.edge>=0.08?"var(--over)":"var(--warn)"}"></div></div>
+              <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:var(--t-xs);color:var(--ink-muted)"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
+            </div>
+            <div class="bet-right">
+              <div class="bet-edge pos ${b.returning||locked?"muted-risk":""}">+${edgePct}%</div>
+              <div class="bet-sub">${locked?"started":b.returning?"reduced":"edge"}</div>
+            </div>
+          </div>`;
+        }).join("");
+        html+=`</div>`;
+      }
+  return html;
+}
+
+function renderSlipsBoardView(convergenceHTML){
+  let html="";
+      const result=getSmartSlips();
+      const {legs}=result;
+      if(!legs.length){html=convergenceHTML+`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
+      else{
+        const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
+        const payouts={"3":"6x","4":"10x","5":"20x"};
+        const topLeg=legs[0];
+        const aiCount=legs.filter(l=>l.hasAI).length;
+        const conflictCount=legs.filter(l=>l.hasAIConflict).length;
+        const streakCount=legs.filter(l=>l.hasStreak).length;
+  
+        html=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#fca5a5">${conflictCount}</div><div class="bs-lbl">AI CONFLICTS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
+        html+=`<div class="slip-controls"><span style="color:var(--ink-muted);font-size:var(--t-xs)">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
+        html+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team. AI disagreements show inline on the leg.</div>`;
+  
+        if(!slips.length){html+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
+        else{
+          html+=slips.map((slip,si)=>{
+            const isBest=si===0;
+            const isAgg=parseInt(st.slipLegs)>=5;
+            const avgEdgePct=(slip.avgEdge*100).toFixed(1);
+            const avgHRPct=(slip.avgHitRate*100).toFixed(0);
+            const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
+            const uniqueSignals=[...new Set(allSignals)].slice(0,4);
+  
+            return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
+              <div class="slip-header">
+                <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
+                <span class="slip-score">${slip.score.toFixed(1)} pts</span>
+              </div>
+              <div class="slip-legs">${slip.legs.map(l=>{
+                const leanCls=l.lean==="OVER"?"over":"under";
+                const locked=getLockInfo(l.name,l.isP).started;
+                return`<div class="slip-leg${locked?" locked-card":""}">
+                  <span class="slip-leg-team">${esc(l.team)}</span>
+                  <div style="flex:1;min-width:0">
+                    <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted color-mix(in srgb, var(--accent) 53%, transparent)" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?icon('ball'):""}${playerLink(l.name,l.metric,l.dkLine)}</span>${lockBadge(l.name,l.isP)}
+                    ${l.aiDisagreementText?`<div style="font-size:var(--t-xs);color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
+                  </div>
+                  <div class="slip-leg-prop">
+                    <span class="slip-leg-metric">${l.metric}</span>
+                    <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
+                    <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
+                  </div>
+                </div>`;
+              }).join("")}</div>
+              ${(uniqueSignals.length||slip.slipTags?.length)?`<div class="slip-tags">${[...new Set([...(slip.slipTags||[]),...uniqueSignals])].map(s=>`<span class="slip-tag" style="background:var(--surface-2);color:var(--accent-soft);border:1px solid var(--border-1)">${s}</span>`).join("")}</div>`:""}
+              ${renderCrossBookWarning(slip.legs)}<div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
+            </div>`;
+          }).join("");
+        }
+      }
+  return html;
+}
+
 function renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight}){
   const navItems=[
     ["dashboard","dash","Dash"],
@@ -2506,99 +2666,9 @@ function render(){
   if(st.picksView==="shortlist"){
     picksHTML=renderShortlistPicksView();
   }else if(st.picksView==="bets"){
-    const allBets=getMarketEdges();
-    const posEV=allBets.filter(b=>b.edge>=0.05);
-    const elite=posEV.filter(b=>b.edge>=0.15);
-    const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
-    if(!allBets.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
-    else if(!posEV.length){picksHTML=convergenceHTML+`<div class="props-pass"><div class="props-pass-title">No actionable market edges tonight</div><div class="props-pass-copy">No eligible side clears both the +5% edge floor and the ${MARKET_EDGE_MIN_ODDS} price floor. Passing is better than promoting a heavily juiced near-certainty.</div></div>`}
-    else{
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--under)">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--ink-muted)">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=posEV.slice(0,40).map((b,i)=>{
-        const edgePct=(b.edge*100).toFixed(1);
-        const hrPct=(b.hitRate*100).toFixed(0);
-        const ipPct=(b.impliedProb*100).toFixed(0);
-        const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
-        const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
-        const badges=riskBadges(b.name,b.isP,{showLimited:false});
-        const locked=getLockInfo(b.name,b.isP).started;
-        return`<div class="bet-card ${cls}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
-          <div class="bet-left">
-            <div class="bet-name">${b.isP?icon('ball'):""}${playerLink(b.name,b.metric,b.dkLine)}${badges}${lockBadge(b.name,b.isP)}</div>
-            <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
-            <div class="bet-prop">
-              <span class="prop-metric" style="font-size:var(--t-xs)">${b.metric}</span>
-              <span class="${leanCls}" style="font-weight:700;font-size:var(--t-sm)">${b.lean} ${b.dkLine}</span>
-              <span style="color:var(--accent-soft);font-size:var(--t-xs)">${fmtOdds(b.odds)}</span>
-              <span class="ev-badge ev-pos ev-big ${b.returning||locked?"muted-risk":""}">+${edgePct}% EV</span>
-            </div>
-            ${renderBestBookLine(b.prop,b.lean)}
-            <div class="bet-bar ${b.returning||locked?"muted-risk":""}"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"var(--under)":b.edge>=0.08?"var(--over)":"var(--warn)"}"></div></div>
-            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:var(--t-xs);color:var(--ink-muted)"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
-          </div>
-          <div class="bet-right">
-            <div class="bet-edge pos ${b.returning||locked?"muted-risk":""}">+${edgePct}%</div>
-            <div class="bet-sub">${locked?"started":b.returning?"reduced":"edge"}</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
+    picksHTML=renderBetsBoardView(convergenceHTML);
   }else if(st.picksView==="slips"){
-    const result=getSmartSlips();
-    const {legs}=result;
-    if(!legs.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
-    else{
-      const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
-      const payouts={"3":"6x","4":"10x","5":"20x"};
-      const topLeg=legs[0];
-      const aiCount=legs.filter(l=>l.hasAI).length;
-      const conflictCount=legs.filter(l=>l.hasAIConflict).length;
-      const streakCount=legs.filter(l=>l.hasStreak).length;
-
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#fca5a5">${conflictCount}</div><div class="bs-lbl">AI CONFLICTS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
-      picksHTML+=`<div class="slip-controls"><span style="color:var(--ink-muted);font-size:var(--t-xs)">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team. AI disagreements show inline on the leg.</div>`;
-
-      if(!slips.length){picksHTML+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
-      else{
-        picksHTML+=slips.map((slip,si)=>{
-          const isBest=si===0;
-          const isAgg=parseInt(st.slipLegs)>=5;
-          const avgEdgePct=(slip.avgEdge*100).toFixed(1);
-          const avgHRPct=(slip.avgHitRate*100).toFixed(0);
-          const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
-          const uniqueSignals=[...new Set(allSignals)].slice(0,4);
-
-          return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
-            <div class="slip-header">
-              <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
-              <span class="slip-score">${slip.score.toFixed(1)} pts</span>
-            </div>
-            <div class="slip-legs">${slip.legs.map(l=>{
-              const leanCls=l.lean==="OVER"?"over":"under";
-              const locked=getLockInfo(l.name,l.isP).started;
-              return`<div class="slip-leg${locked?" locked-card":""}">
-                <span class="slip-leg-team">${esc(l.team)}</span>
-                <div style="flex:1;min-width:0">
-                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted color-mix(in srgb, var(--accent) 53%, transparent)" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?icon('ball'):""}${playerLink(l.name,l.metric,l.dkLine)}</span>${lockBadge(l.name,l.isP)}
-                  ${l.aiDisagreementText?`<div style="font-size:var(--t-xs);color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
-                </div>
-                <div class="slip-leg-prop">
-                  <span class="slip-leg-metric">${l.metric}</span>
-                  <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
-                  <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
-                </div>
-              </div>`;
-            }).join("")}</div>
-            ${(uniqueSignals.length||slip.slipTags?.length)?`<div class="slip-tags">${[...new Set([...(slip.slipTags||[]),...uniqueSignals])].map(s=>`<span class="slip-tag" style="background:var(--surface-2);color:var(--accent-soft);border:1px solid var(--border-1)">${s}</span>`).join("")}</div>`:""}
-            ${renderCrossBookWarning(slip.legs)}<div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
-          </div>`;
-        }).join("");
-      }
-    }
+    picksHTML=renderSlipsBoardView(convergenceHTML);
   }else if(st.picksView==="picks"){
     picksHTML=renderModelPicksView(convergenceHTML);
   }else if(st.picksView==="dingers"){
@@ -2608,59 +2678,7 @@ function render(){
   }else if(st.picksView==="streaks"){
     picksHTML=renderStreaksBoardView(convergenceHTML);
   }else if(st.picksView==="draft"){
-    const board=getDraftBoard();
-    const slateGames=getDraftSlateGames();
-    const selectedGames=draftSlateSelection();
-    const available=board.filter(p=>!st.drafted.has(p.name));
-    const stacks=getDraftStacks().slice(0,5);
-    const stackTags=getDraftStackTagMap();
-    const draftedCount=st.drafted.size;
-    function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
-    function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
-    const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
-      <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
-      <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
-      ${renderDraftSlateSelector()}`;
-    if(!board.length){
-      const emptyMessage=slateGames.length&&!selectedGames.size
-        ?"No contest games selected. Choose the games included in this UD contest."
-        :"No draftable players loaded for the selected games.";
-      picksHTML=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
-    }
-    else{
-      picksHTML=draftHeader+`<div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
-      picksHTML+=`<div class="cards-grid draft-board">`;
-      let lastTier="";
-      board.forEach((p,i)=>{
-        const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
-        const tierChanged=tier.label!==lastTier;lastTier=tier.label;
-        let tags=[];
-        if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--smash-soft);color:var(--smash)">SMASH</span>`);
-        if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
-        else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">👁️ PATIENT</span>`)}
-        if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
-        if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
-        const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
-        if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
-        if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
-        (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
-        const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
-        const locked=getLockInfo(p.name,p.isPitcher).started;
-        const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
-        picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
-        <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
-          <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
-          <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
-          <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
-        </div>`;
-      });
-      picksHTML+=`</div>`;
-      if(stacks.length){
-        picksHTML+=`<div style="padding:14px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:var(--ink-muted);font-size:var(--t-xs)">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
-        picksHTML+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${playerLink(s.players[0].name)} + ${playerLink(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"var(--warn-soft)":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
-        picksHTML+=`</div>`;
-      }
-    }
+    picksHTML=renderDraftBoardView(convergenceHTML);
   }else{
     const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
     const allTeams=[...new Set([...st.tonight,...st.pTonight].map(p=>String(p.team_abbr||"").toUpperCase()).filter(Boolean))].sort((a,b)=>teamDisplayName(a).localeCompare(teamDisplayName(b)));
