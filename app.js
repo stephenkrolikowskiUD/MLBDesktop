@@ -2274,6 +2274,108 @@ function renderDraftBoardView(convergenceHTML){
   return html;
 }
 
+function renderBetsBoardView(convergenceHTML){
+  let html="";
+      const allBets=getMarketEdges();
+      const posEV=allBets.filter(b=>b.edge>=0.05);
+      const elite=posEV.filter(b=>b.edge>=0.15);
+      const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
+      if(!allBets.length){html=convergenceHTML+`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
+      else if(!posEV.length){html=convergenceHTML+`<div class="props-pass"><div class="props-pass-title">No actionable market edges tonight</div><div class="props-pass-copy">No eligible side clears both the +5% edge floor and the ${MARKET_EDGE_MIN_ODDS} price floor. Passing is better than promoting a heavily juiced near-certainty.</div></div>`}
+      else{
+        html=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--under)">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--ink-muted)">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
+        html+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
+        html+=`<div class="cards-grid">`;
+        html+=posEV.slice(0,40).map((b,i)=>{
+          const edgePct=(b.edge*100).toFixed(1);
+          const hrPct=(b.hitRate*100).toFixed(0);
+          const ipPct=(b.impliedProb*100).toFixed(0);
+          const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
+          const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
+          const badges=riskBadges(b.name,b.isP,{showLimited:false});
+          const locked=getLockInfo(b.name,b.isP).started;
+          return`<div class="bet-card ${cls}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
+            <div class="bet-left">
+              <div class="bet-name">${b.isP?icon('ball'):""}${playerLink(b.name,b.metric,b.dkLine)}${badges}${lockBadge(b.name,b.isP)}</div>
+              <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
+              <div class="bet-prop">
+                <span class="prop-metric" style="font-size:var(--t-xs)">${b.metric}</span>
+                <span class="${leanCls}" style="font-weight:700;font-size:var(--t-sm)">${b.lean} ${b.dkLine}</span>
+                <span style="color:var(--accent-soft);font-size:var(--t-xs)">${fmtOdds(b.odds)}</span>
+                <span class="ev-badge ev-pos ev-big ${b.returning||locked?"muted-risk":""}">+${edgePct}% EV</span>
+              </div>
+              ${renderBestBookLine(b.prop,b.lean)}
+              <div class="bet-bar ${b.returning||locked?"muted-risk":""}"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"var(--under)":b.edge>=0.08?"var(--over)":"var(--warn)"}"></div></div>
+              <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:var(--t-xs);color:var(--ink-muted)"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
+            </div>
+            <div class="bet-right">
+              <div class="bet-edge pos ${b.returning||locked?"muted-risk":""}">+${edgePct}%</div>
+              <div class="bet-sub">${locked?"started":b.returning?"reduced":"edge"}</div>
+            </div>
+          </div>`;
+        }).join("");
+        html+=`</div>`;
+      }
+  return html;
+}
+
+function renderSlipsBoardView(convergenceHTML){
+  let html="";
+      const result=getSmartSlips();
+      const {legs}=result;
+      if(!legs.length){html=convergenceHTML+`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
+      else{
+        const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
+        const payouts={"3":"6x","4":"10x","5":"20x"};
+        const topLeg=legs[0];
+        const aiCount=legs.filter(l=>l.hasAI).length;
+        const conflictCount=legs.filter(l=>l.hasAIConflict).length;
+        const streakCount=legs.filter(l=>l.hasStreak).length;
+  
+        html=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#fca5a5">${conflictCount}</div><div class="bs-lbl">AI CONFLICTS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
+        html+=`<div class="slip-controls"><span style="color:var(--ink-muted);font-size:var(--t-xs)">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
+        html+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team. AI disagreements show inline on the leg.</div>`;
+  
+        if(!slips.length){html+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
+        else{
+          html+=slips.map((slip,si)=>{
+            const isBest=si===0;
+            const isAgg=parseInt(st.slipLegs)>=5;
+            const avgEdgePct=(slip.avgEdge*100).toFixed(1);
+            const avgHRPct=(slip.avgHitRate*100).toFixed(0);
+            const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
+            const uniqueSignals=[...new Set(allSignals)].slice(0,4);
+  
+            return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
+              <div class="slip-header">
+                <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
+                <span class="slip-score">${slip.score.toFixed(1)} pts</span>
+              </div>
+              <div class="slip-legs">${slip.legs.map(l=>{
+                const leanCls=l.lean==="OVER"?"over":"under";
+                const locked=getLockInfo(l.name,l.isP).started;
+                return`<div class="slip-leg${locked?" locked-card":""}">
+                  <span class="slip-leg-team">${esc(l.team)}</span>
+                  <div style="flex:1;min-width:0">
+                    <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted color-mix(in srgb, var(--accent) 53%, transparent)" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?icon('ball'):""}${playerLink(l.name,l.metric,l.dkLine)}</span>${lockBadge(l.name,l.isP)}
+                    ${l.aiDisagreementText?`<div style="font-size:var(--t-xs);color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
+                  </div>
+                  <div class="slip-leg-prop">
+                    <span class="slip-leg-metric">${l.metric}</span>
+                    <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
+                    <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
+                  </div>
+                </div>`;
+              }).join("")}</div>
+              ${(uniqueSignals.length||slip.slipTags?.length)?`<div class="slip-tags">${[...new Set([...(slip.slipTags||[]),...uniqueSignals])].map(s=>`<span class="slip-tag" style="background:var(--surface-2);color:var(--accent-soft);border:1px solid var(--border-1)">${s}</span>`).join("")}</div>`:""}
+              ${renderCrossBookWarning(slip.legs)}<div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
+            </div>`;
+          }).join("");
+        }
+      }
+  return html;
+}
+
 function renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight}){
   const navItems=[
     ["dashboard","dash","Dash"],
@@ -2564,99 +2666,9 @@ function render(){
   if(st.picksView==="shortlist"){
     picksHTML=renderShortlistPicksView();
   }else if(st.picksView==="bets"){
-    const allBets=getMarketEdges();
-    const posEV=allBets.filter(b=>b.edge>=0.05);
-    const elite=posEV.filter(b=>b.edge>=0.15);
-    const strong=posEV.filter(b=>b.edge>=0.08&&b.edge<0.15);
-    if(!allBets.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No props available for +EV analysis. Run the engine with DK props first.</div>`}
-    else if(!posEV.length){picksHTML=convergenceHTML+`<div class="props-pass"><div class="props-pass-title">No actionable market edges tonight</div><div class="props-pass-copy">No eligible side clears both the +5% edge floor and the ${MARKET_EDGE_MIN_ODDS} price floor. Passing is better than promoting a heavily juiced near-certainty.</div></div>`}
-    else{
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${posEV.length}</div><div class="bs-lbl">+EV PROPS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--under)">${elite.length}</div><div class="bs-lbl">ELITE (15%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${strong.length}</div><div class="bs-lbl">STRONG (8%+)</div></div><div class="bs-card"><div class="bs-val" style="color:var(--ink-muted)">${allBets.length}</div><div class="bs-lbl">ANALYZED</div></div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Edge = Your hit rate − DK implied probability. Higher = more value. Min 3 games of data.</div>`;
-      picksHTML+=`<div class="cards-grid">`;
-      picksHTML+=posEV.slice(0,40).map((b,i)=>{
-        const edgePct=(b.edge*100).toFixed(1);
-        const hrPct=(b.hitRate*100).toFixed(0);
-        const ipPct=(b.impliedProb*100).toFixed(0);
-        const cls=b.edge>=0.15?"elite":b.edge>=0.08?"strong":"mid";
-        const leanCls=b.lean==="OVER"?"prop-over":"prop-under";
-        const badges=riskBadges(b.name,b.isP,{showLimited:false});
-        const locked=getLockInfo(b.name,b.isP).started;
-        return`<div class="bet-card ${cls}${locked?" locked-card":""}" style="cursor:pointer" onclick="streakToDash('${esc(b.name)}')">
-          <div class="bet-left">
-            <div class="bet-name">${b.isP?icon('ball'):""}${playerLink(b.name,b.metric,b.dkLine)}${badges}${lockBadge(b.name,b.isP)}</div>
-            <div class="bet-meta">${esc(b.team)} vs ${b.isP?esc(b.opp):esc(b.pitcher)+(b.hand?" ("+b.hand+"HP)":"")} · ${b.hits}/${b.total} games</div>
-            <div class="bet-prop">
-              <span class="prop-metric" style="font-size:var(--t-xs)">${b.metric}</span>
-              <span class="${leanCls}" style="font-weight:700;font-size:var(--t-sm)">${b.lean} ${b.dkLine}</span>
-              <span style="color:var(--accent-soft);font-size:var(--t-xs)">${fmtOdds(b.odds)}</span>
-              <span class="ev-badge ev-pos ev-big ${b.returning||locked?"muted-risk":""}">+${edgePct}% EV</span>
-            </div>
-            ${renderBestBookLine(b.prop,b.lean)}
-            <div class="bet-bar ${b.returning||locked?"muted-risk":""}"><div class="bet-bar-fill" style="width:${hrPct}%;background:${b.edge>=0.15?"var(--under)":b.edge>=0.08?"var(--over)":"var(--warn)"}"></div></div>
-            <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:var(--t-xs);color:var(--ink-muted)"><span>You: ${hrPct}%</span><span>DK: ${ipPct}%</span></div>
-          </div>
-          <div class="bet-right">
-            <div class="bet-edge pos ${b.returning||locked?"muted-risk":""}">+${edgePct}%</div>
-            <div class="bet-sub">${locked?"started":b.returning?"reduced":"edge"}</div>
-          </div>
-        </div>`;
-      }).join("");
-      picksHTML+=`</div>`;
-    }
+    picksHTML=renderBetsBoardView(convergenceHTML);
   }else if(st.picksView==="slips"){
-    const result=getSmartSlips();
-    const {legs}=result;
-    if(!legs.length){picksHTML=convergenceHTML+`<div class="empty" style="padding:40px">No +EV props available to build slips. Run the engine with DK props first.</div>`}
-    else{
-      const slips=st.slipLegs==="3"?result.slips3:st.slipLegs==="4"?result.slips4:result.slips5;
-      const payouts={"3":"6x","4":"10x","5":"20x"};
-      const topLeg=legs[0];
-      const aiCount=legs.filter(l=>l.hasAI).length;
-      const conflictCount=legs.filter(l=>l.hasAIConflict).length;
-      const streakCount=legs.filter(l=>l.hasStreak).length;
-
-      picksHTML=convergenceHTML+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${legs.length}</div><div class="bs-lbl">ELIGIBLE LEGS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent)">${aiCount}</div><div class="bs-lbl">AI-BACKED</div></div><div class="bs-card"><div class="bs-val" style="color:#ffaa00">${streakCount}</div><div class="bs-lbl">ON STREAKS</div></div><div class="bs-card"><div class="bs-val" style="color:#fca5a5">${conflictCount}</div><div class="bs-lbl">AI CONFLICTS</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${payouts[st.slipLegs]}</div><div class="bs-lbl">PAYOUT</div></div></div>`;
-      picksHTML+=`<div class="slip-controls"><span style="color:var(--ink-muted);font-size:var(--t-xs)">Legs:</span><div class="pf-btn ${st.slipLegs==="3"?"active":""}" onclick="setSlipLegs('3')">3-Leg (6x)</div><div class="pf-btn ${st.slipLegs==="4"?"active":""}" onclick="setSlipLegs('4')">4-Leg (10x)</div><div class="pf-btn ${st.slipLegs==="5"?"active":""}" onclick="setSlipLegs('5')">5-Leg (20x)</div></div>`;
-      picksHTML+=`<div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Conviction = EV edge + AI confidence + streak heat + hit rate. Unique players, max 2 per team. AI disagreements show inline on the leg.</div>`;
-
-      if(!slips.length){picksHTML+=`<div class="empty">Not enough eligible legs for ${st.slipLegs}-leg slips. Try fewer legs.</div>`}
-      else{
-        picksHTML+=slips.map((slip,si)=>{
-          const isBest=si===0;
-          const isAgg=parseInt(st.slipLegs)>=5;
-          const avgEdgePct=(slip.avgEdge*100).toFixed(1);
-          const avgHRPct=(slip.avgHitRate*100).toFixed(0);
-          const allSignals=slip.legs.reduce((a,l)=>a.concat(l.signals),[]);
-          const uniqueSignals=[...new Set(allSignals)].slice(0,4);
-
-          return`<div class="slip-card ${isBest?"best":""}${isAgg?" aggressive":""}">
-            <div class="slip-header">
-              <span class="slip-rank">${isBest?"⭐ BEST":"#"+(si+1)} · ${st.slipLegs}-LEG</span>
-              <span class="slip-score">${slip.score.toFixed(1)} pts</span>
-            </div>
-            <div class="slip-legs">${slip.legs.map(l=>{
-              const leanCls=l.lean==="OVER"?"over":"under";
-              const locked=getLockInfo(l.name,l.isP).started;
-              return`<div class="slip-leg${locked?" locked-card":""}">
-                <span class="slip-leg-team">${esc(l.team)}</span>
-                <div style="flex:1;min-width:0">
-                  <span class="slip-leg-name" style="cursor:pointer;text-decoration:underline dotted color-mix(in srgb, var(--accent) 53%, transparent)" onclick="event.stopPropagation();streakToDash('${esc(l.name)}','${l.metric}','${l.dkLine}')">${l.isP?icon('ball'):""}${playerLink(l.name,l.metric,l.dkLine)}</span>${lockBadge(l.name,l.isP)}
-                  ${l.aiDisagreementText?`<div style="font-size:var(--t-xs);color:${l.aiConflictLevel==="strong"?"#fca5a5":"#fde68a"};margin-top:2px">${esc(l.aiDisagreementText)}</div>`:""}
-                </div>
-                <div class="slip-leg-prop">
-                  <span class="slip-leg-metric">${l.metric}</span>
-                  <span class="slip-leg-lean ${leanCls}">${l.lean} ${l.dkLine}</span>
-                  <span class="slip-leg-edge">+${(l.edge*100).toFixed(0)}%</span>
-                </div>
-              </div>`;
-            }).join("")}</div>
-            ${(uniqueSignals.length||slip.slipTags?.length)?`<div class="slip-tags">${[...new Set([...(slip.slipTags||[]),...uniqueSignals])].map(s=>`<span class="slip-tag" style="background:var(--surface-2);color:var(--accent-soft);border:1px solid var(--border-1)">${s}</span>`).join("")}</div>`:""}
-            ${renderCrossBookWarning(slip.legs)}<div class="slip-meta"><span>Avg edge: +${avgEdgePct}%</span><span>Avg hit: ${avgHRPct}%</span><span>${slip.teams.length} teams</span></div>
-          </div>`;
-        }).join("");
-      }
-    }
+    picksHTML=renderSlipsBoardView(convergenceHTML);
   }else if(st.picksView==="picks"){
     picksHTML=renderModelPicksView(convergenceHTML);
   }else if(st.picksView==="dingers"){
