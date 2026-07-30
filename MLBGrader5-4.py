@@ -176,14 +176,20 @@ def normalize_person_name(name):
     return re.sub(r"\s+", " ", text).strip()
 
 def find_box_score(box_lookup, player, date):
-    box = box_lookup.get((player, date))
+    """Return (stats, matched_key) for this player/date, or (None, None).
+
+    The matched key is returned so the caller can check it against the ambiguity
+    map before trusting the stats.
+    """
+    key = (player, date)
+    box = box_lookup.get(key)
     if box is not None:
-        return box
+        return box, key
     player_norm = normalize_person_name(player)
     for (bn, bd), bv in box_lookup.items():
         if bd == date and normalize_person_name(bn) == player_norm:
-            return bv
-    return None
+            return bv, (bn, bd)
+    return None, None
 
 def grade_pick(actual, line_val, lean):
     if actual is None or line_val is None:
@@ -741,6 +747,28 @@ print("\nFetching box score data...")
 box_lookup = {}
 sheets_loaded = False
 
+# box_lookup is keyed on (player_name, game_date), which is NOT unique. Two things
+# break it: (a) MLB has multiple concurrently active players sharing a name (Luis
+# Garcia, Will Smith, Josh Bell), and (b) doubleheaders put two games on one date.
+# In both cases a plain dict assignment silently keeps whichever row was read last,
+# so a pick gets graded against a different game — or a different human — with no
+# warning. Picks carry only a name, so they cannot be disambiguated after the fact.
+# We therefore track identity per key and refuse to grade ambiguous ones: a visibly
+# ungraded pick is recoverable, a silently mis-graded one corrupts the record forever.
+box_identity = {}   # (name, date) -> {'ids': set(player_id), 'pks': set(game_pk)}
+box_ambiguous = {}  # (name, date) -> human-readable reason
+
+def register_box_identity(key, player_id, game_pk):
+    ident = box_identity.setdefault(key, {'ids': set(), 'pks': set()})
+    if player_id:
+        ident['ids'].add(player_id)
+    if game_pk:
+        ident['pks'].add(game_pk)
+    if len(ident['ids']) > 1:
+        box_ambiguous[key] = f"{len(ident['ids'])} different player_ids share this name on this date"
+    elif len(ident['pks']) > 1:
+        box_ambiguous[key] = f"{len(ident['pks'])} games on this date (doubleheader)"
+
 try:
     print("   📊 Loading from Batter_Game_Logs sheet...")
     ws_logs = sh.worksheet('Batter_Game_Logs')
@@ -755,6 +783,7 @@ try:
             if not name or not date:
                 continue
             key = (name, date)
+            register_box_identity(key, row.get('player_id'), row.get('game_pk'))
             box_lookup[key] = {
                 'H': safe_float(row.get('H'), 0),
                 'HR': safe_float(row.get('HR'), 0),
@@ -792,9 +821,16 @@ try:
             if not name or not date:
                 continue
             key = (name, date)
-            if key not in box_lookup:  # Don't overwrite batter data
+            register_box_identity(key, row.get('player_id'), row.get('game_pk'))
+            if key not in box_lookup:
                 box_lookup[key] = {}
-            # Add pitcher-specific stats (prefix with P_ to match prop naming)
+            # Pitcher stats are stored P_-prefixed to match prop naming: pitcher
+            # strikeout props normalize to 'P_SO', batter strikeout props to 'SO'
+            # (see normalize_prop_metric: BATTER_SO -> SO). Writing an unprefixed
+            # 'SO' here used to clobber the batter's strikeout count for any name
+            # present in both logs on the same date, so a batter "SO UNDER 1.5" was
+            # graded against strikeouts *thrown*. No pitcher prop reads unprefixed
+            # 'SO', so it is not written at all any more.
             pitcher_outs = innings_to_outs(row.get('IP'))
             box_lookup[key].update({
                 'P_SO': safe_float(row.get('SO'), 0),
@@ -804,11 +840,13 @@ try:
                 'IP': outs_to_ip_decimal(pitcher_outs),
                 'P_OUTS': pitcher_outs,
                 'W': safe_float(row.get('W'), 0),
-                'SO': safe_float(row.get('SO'), 0),  # Also store without prefix
                 'ER': safe_float(row.get('ER'), 0),
-                'DK_FP': safe_float(row.get('DK_FP'), 0),
-                'UD_FP': safe_float(row.get('UD_FP'), 0),
             })
+            # DK_FP / UD_FP are genuinely role-ambiguous (both roles score them under
+            # the same prop name), so only fill them if the batter pass did not —
+            # never overwrite a batter's fantasy points with a pitcher's.
+            box_lookup[key].setdefault('DK_FP', safe_float(row.get('DK_FP'), 0))
+            box_lookup[key].setdefault('UD_FP', safe_float(row.get('UD_FP'), 0))
             pitcher_count += 1
         print(f"   ✅ Loaded {pitcher_count} pitcher game entries")
 except Exception as e:
@@ -944,6 +982,7 @@ misses = 0
 pushes = 0
 dnp = 0
 not_found = 0
+ambiguous_skipped = 0
 
 # Map column names to indices for direct cell updates
 col_idx = {h: i for i, h in enumerate(headers)}
@@ -974,7 +1013,9 @@ for idx, pick in ungraded.iterrows():
     prop_type = 'SO' if prop_type == 'Batter_SO' else prop_type
     prop_type = 'P_OUTS' if prop_type == 'OUTS' else prop_type
     line = pick.get('line', '')
-    lean = (pick.get('lean', '') or '').upper()
+    # .strip() matters: grade_pick treats anything that is not UNDER/FADE as OVER,
+    # so a hand-edited cell containing "Under " would invert the result silently.
+    lean = (pick.get('lean', '') or '').strip().upper()
 
     if not player or not date:
         continue
@@ -982,7 +1023,7 @@ for idx, pick in ungraded.iterrows():
     line_val = safe_float(line)
 
     # Try exact name match first, then case-insensitive
-    box = find_box_score(box_lookup, player, date)
+    box, box_key = find_box_score(box_lookup, player, date)
 
     # Row in the sheet (1-indexed, +1 for header)
     sheet_row = int(idx) + 2
@@ -1003,6 +1044,15 @@ for idx, pick in ungraded.iterrows():
             updates.append({'range': f'{col_letter(actual_roi_col)}{sheet_row}', 'value': '0'})
         dnp += 1
         print(f"   ⬜ {player} ({date}) — DNP / No box score found")
+        continue
+
+    # Refuse to grade when this name+date maps to more than one player or game.
+    # Leaving HIT blank keeps the pick in the ungraded pool instead of writing a
+    # result we cannot stand behind.
+    if box_key in box_ambiguous:
+        ambiguous_skipped += 1
+        print(f"   ⚠️  {player} ({date}) — {box_ambiguous[box_key]}; leaving ungraded "
+              f"rather than risk grading the wrong game or player")
         continue
 
     # Look up the actual stat value
@@ -1094,6 +1144,8 @@ print(f"   ❌ Misses:    {misses}")
 print(f"   ➖ Pushes:    {pushes}")
 print(f"   ⬜ DNP:       {dnp}")
 print(f"   ❓ Not found: {not_found}")
+if ambiguous_skipped:
+    print(f"   ⚠️  Ambiguous:  {ambiguous_skipped} (duplicate name or doubleheader — left ungraded on purpose)")
 print(f"   📈 Hit Rate:  {hits}/{total_decided} ({hit_rate:.1f}%)")
 print(f"   📋 Dates:     {', '.join(dates_to_grade)}")
 print("=" * 60)
