@@ -2047,6 +2047,178 @@ function renderLeadersView(){
 }
 function renderStatsView(){const w=st.statsTimeWindow||'last_30d';const rows=typeof getMemo==='function'?getMemo('statsRows:'+w,()=>st.pickPerformance||[]):(st.pickPerformance||[]);let html=renderTimeWindowSelector(w);if(!rows.length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">Pick Performance unavailable — grading analytics will appear after the next grader run.</div>`;if(!statsRowsForWindow(rows,w).length)return html+`<div class="empty" style="padding:40px 20px;text-align:center">No Pick Performance rows for ${statsWindowLabel(w)}.</div>`;const updated=rows.map(r=>statField(r,'LAST_UPDATED')).filter(Boolean).sort().pop()||'';html+=renderDriftAlerts(rows);html+=renderOverallCard(rows,w);html+=renderEraCohortAudit(rows,w);html+=renderPriceDiscipline(rows);html+=renderTierBreakdown(rows,w);html+=renderLeanBreakdown(rows,w);html+=renderCLVSummary(rows,w);html+=renderPropTypeList(rows,w,'best');html+=renderPropTypeList(rows,w,'worst');html+=`<div class="timestamp">Data through ${esc(updated||'latest grader run')} · Updated daily after grader run</div>`;return html}
 
+function renderShortlistPicksView(){
+  return renderTonightShortlist();
+}
+
+function renderModelPicksView(convergenceHTML){
+  const latestDate=getLatestPickDate();
+  const latestRun=getLatestPickRun();
+  const allTodayPicks=latestDate
+    ?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun)
+    :st.picks;
+  const hasCalibrationStatus=allTodayPicks.some(p=>String(rowField(p,"RECOMMENDATION_STATUS")||"").trim());
+  const todayPicks=hasCalibrationStatus
+    ?allTodayPicks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).toUpperCase()==="PLAYABLE")
+    :allTodayPicks;
+  const researchCount=hasCalibrationStatus?allTodayPicks.length-todayPicks.length:0;
+  const modelIntro=`<section class="model-picks-intro"><div class="model-picks-title">Model Picks</div><div class="model-picks-sub">Ranked recommendations from the deterministic market model and Gemini review layer. Provenance, evidence, and source freshness stay visible so every call can be audited.</div>${renderModelRunHealth(allTodayPicks)}${renderModelFreshness()}</section>`;
+  let html=convergenceHTML+modelIntro+renderPickGuard(st.pickGuard);
+
+  if(!todayPicks.length){
+    const emptyMessage=hasCalibrationStatus
+      ?`No calibrated play qualifies today. ${researchCount} research pick${researchCount===1?"":"s"} remain tracked for model learning.`
+      :"No model picks today. Run the engine to generate.";
+    return html+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
+  }
+
+  const hits=todayPicks.filter(p=>{
+    const result=String(rowField(p,"HIT")).toUpperCase();
+    return result==="YES"||result==="TRUE";
+  }).length;
+  const misses=todayPicks.filter(p=>{
+    const result=String(rowField(p,"HIT")).toUpperCase();
+    return result==="NO"||result==="FALSE";
+  }).length;
+  if(hits+misses){
+    html+=`<div style="display:flex;justify-content:flex-end;padding:0 16px 9px"><span class="pick-source-badge ${hits>=misses?"validated":"research"}">Current record ${hits}-${misses}</span></div>`;
+  }
+
+  const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
+  const pickModels=rankedPicks.map(getPickDisplayModel);
+  const featured=pickModels[0];
+  const remaining=pickModels.slice(1);
+  const board=remaining.length
+    ?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L10</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`
+    :"";
+  return html+`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${board}</div>`;
+}
+
+function renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight}){
+  const navItems=[
+    ["dashboard","dash","Dash"],
+    ["picks","picks","Picks"],
+    ["leaders","leaders","Leaders"],
+    ["entry","entry","Game Builder"],
+    ["lookup","lookup","Lookup"],
+    ["stats","stats","Model Performance"],
+    ["method","info","Info"],
+  ];
+  const navigation=navItems.map(([tab,iconName,label])=>`
+    <button class="tab-btn ${activeTab===tab?"active":""}" onclick="switchTab('${tab}')">
+      ${icon(iconName)}<span>${label}</span>
+    </button>`).join("");
+  const controls=showCtrl?`
+    <div class="header-controls">
+      <div class="mode-toggle">
+        <div class="mode-btn" onclick="switchMode('batter')" style="${st.mode==='batter'?'background:var(--over);color:var(--surface-0);border-color:var(--over)':'background:var(--surface-2);color:var(--ink-muted)'}">${icon('bat')} Batters</div>
+        <div class="mode-btn" onclick="switchMode('pitcher')" style="${st.mode==='pitcher'?'background:var(--over);color:var(--surface-0);border-color:var(--over)':'background:var(--surface-2);color:var(--ink-muted)'}">${icon('ball')} Pitchers</div>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="dashPlayerSearch" list="playerList" placeholder="Search ${st.mode==='pitcher'?'pitcher':'batter'}..." value="${esc(player)}" autocomplete="off"
+          onfocus="this.select()"
+          onchange="if(this.value)pickDashPlayer(this.value)"
+        />
+        <datalist id="playerList">${curTonight.filter(p=>p.player_name).map(p=>`<option value="${esc(p.player_name)}">${esc(p.team_abbr||"")}</option>`).join("")}</datalist>
+      </div>
+      <div class="ctrl-row">
+        <select id="metricSel">${metricOpts}</select>
+        <input type="number" id="lineInput" value="${st.line}" placeholder="Line" step="0.5"/>
+      </div>
+    </div>`:"";
+  return`
+    <div class="header">
+      <div class="header-top"><div class="header-title">MLB DFS Dashboard</div><div style="display:flex;gap:8px"><button class="theme-btn" id="themeBtn">${st.theme==="light"?icon('moon')+" Dark":icon('sun')+" Light"}</button><button class="refresh-btn" id="refreshBtn">${icon('refresh')} Refresh</button></div></div>
+      <div class="top-nav">${navigation}</div>
+      ${controls}
+    </div>`;
+}
+
+function renderPicksPage(activeTab,picksHTML){
+  const views=[
+    ["shortlist","Tonight's Shortlist"],
+    ["slips","Slips"],
+    ["picks","Model Picks"],
+    ["draft","Draft"],
+    ["streaks","Streaks"],
+    ["dingers","Dingers"],
+    ["ks","Ks"],
+    ["props","Prop Explorer"],
+  ];
+  const tabs=views.map(([view,label])=>`<div class="sub-tab ${st.picksView===view?"active":""}" onclick="switchPicksView('${view}')">${label}</div>`).join("");
+  return`
+    <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
+      <div class="sub-tabs" style="padding-top:12px">${tabs}</div>
+      <div class="cards-wrap">${picksHTML}</div>
+      <div class="timestamp">Data from MLB Dashboard Engine · DraftKings via The Odds API</div>
+    </div>`;
+}
+
+function renderLookupPage({activeTab,lk,lkSum,lkSugs,lkBody}){
+  const profile=lk?`
+    <div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>
+    ${lkSum}
+    <div class="sub-tabs">
+      <div class="sub-tab ${st.lkSubTab==="career"?"active":""}" onclick="switchLkSub('career')">Career</div>
+      <div class="sub-tab ${st.lkSubTab==="vsTeam"?"active":""}" onclick="switchLkSub('vsTeam')">vs Team</div>
+      <div class="sub-tab ${st.lkSubTab==="vsPlayer"?"active":""}" onclick="switchLkSub('vsPlayer')">vs Player</div>
+    </div>
+    ${lkBody}`:`<div class="lookup-empty">Search by player name to begin.</div>`;
+  return`
+    <div id="pg-lookup" class="page ${activeTab==="lookup"?"active":""}">
+      <section class="lookup-search-shell"><div class="lookup-search-inner"><div class="lookup-search-kicker">MLB player database</div><div class="lookup-search-title">Player lookup</div><div class="search-wrap lookup-search-wrap"><input type="search" id="lkSearch" placeholder="Search any active MLB player" value="${esc(st.lkQuery)}" autocomplete="off"/>${lkSugs}</div></div></section>
+      ${st.lookupError?`<div class="lookup-warning" role="status">${esc(st.lookupError)}</div>`:""}
+      ${profile}
+      <div class="timestamp">Data from MLB Stats API · Live</div>
+    </div>`;
+}
+
+function renderMobileNavigation(activeTab){
+  const items=[
+    ["dashboard","dash","Dash"],
+    ["picks","picks","Picks"],
+    ["leaders","leaders","Leaders"],
+    ["entry","entry","Builder"],
+    ["lookup","lookup","Lookup"],
+    ["stats","stats","Performance"],
+    ["method","info","Info"],
+  ];
+  return`<div class="tab-bar">${items.map(([tab,iconName,label])=>`
+    <button class="tab-btn ${activeTab===tab?"active":""}" onclick="switchTab('${tab}')">${icon(iconName)}<span>${label}</span></button>`).join("")}</div>`;
+}
+
+function bindRenderedControls(){
+  const bindChange=(id,handler)=>{
+    const element=document.getElementById(id);
+    if(element)element.addEventListener("change",handler);
+  };
+  bindChange("metricSel",event=>{st.metric=event.target.value;render()});
+  bindChange("lineInput",event=>{st.line=event.target.value;render()});
+  bindChange("oppFilter",event=>{st.oppFilter=event.target.value;render()});
+  bindChange("vsTeamSel",event=>{st.lkVsTeamId=event.target.value?parseInt(event.target.value):null;fetchLkVsTeam(st.lkPlayer.id,st.lkVsTeamId)});
+  bindChange("propsTeamSelect",event=>setPropsTeam(event.target.value));
+  bindChange("propsSortSelect",event=>setPropsSort(event.target.value));
+  bindChange("propsMinHitSelect",event=>setPropsMinHit(event.target.value));
+  bindChange("propsMinEdgeSelect",event=>setPropsMinEdge(event.target.value));
+
+  document.getElementById("themeBtn")?.addEventListener("click",toggleTheme);
+  document.getElementById("refreshBtn")?.addEventListener("click",loadAllData);
+
+  const lookupSearch=document.getElementById("lkSearch");
+  if(lookupSearch)lookupSearch.addEventListener("input",event=>{
+    st.lkQuery=event.target.value;
+    clearTimeout(window._lkT);
+    window._lkT=setTimeout(()=>searchLkPlayers(event.target.value),300);
+  });
+  const versusPlayer=document.getElementById("vsPlayerInput");
+  if(versusPlayer)versusPlayer.addEventListener("input",event=>{
+    clearTimeout(window._vpT);
+    window._vpT=setTimeout(()=>searchVsP(event.target.value),300);
+  });
+  const propsSearch=document.getElementById("propsSearchInput");
+  if(propsSearch)propsSearch.addEventListener("input",event=>{st.propsSearch=event.target.value;render()});
+}
+
 function render(){
   var picksHTML="";
   const focus=saveFocus();
@@ -2210,7 +2382,7 @@ function render(){
   const convergenceHTML=renderConvergenceHTML();
   picksHTML="";
   if(st.picksView==="shortlist"){
-    picksHTML=renderTonightShortlist();
+    picksHTML=renderShortlistPicksView();
   }else if(st.picksView==="bets"){
     const allBets=getMarketEdges();
     const posEV=allBets.filter(b=>b.edge>=0.05);
@@ -2306,28 +2478,7 @@ function render(){
       }
     }
   }else if(st.picksView==="picks"){
-    // Only show most recent date's picks
-    const latestDate=getLatestPickDate();
-    const latestRun=getLatestPickRun();
-    const allTodayPicks=latestDate?st.picks.filter(p=>normalizeDate(rowField(p,"DATE"))===latestDate&&toNum(rowField(p,"RUN_NUMBER"))===latestRun):st.picks;
-    const hasCalibrationStatus=allTodayPicks.some(p=>String(rowField(p,"RECOMMENDATION_STATUS")||"").trim());
-    const todayPicks=hasCalibrationStatus?allTodayPicks.filter(p=>String(rowField(p,"RECOMMENDATION_STATUS")).toUpperCase()==="PLAYABLE"):allTodayPicks;
-    const researchCount=hasCalibrationStatus?allTodayPicks.length-todayPicks.length:0;
-    const pickGuard=st.pickGuard;
-    const modelIntro=`<section class="model-picks-intro"><div class="model-picks-title">Model Picks</div><div class="model-picks-sub">Ranked recommendations from the deterministic market model and Gemini review layer. Provenance, evidence, and source freshness stay visible so every call can be audited.</div>${renderModelRunHealth(allTodayPicks)}${renderModelFreshness()}</section>`;
-    if(!todayPicks.length){picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard)+`<div class="empty" style="padding:40px">${hasCalibrationStatus?`No calibrated play qualifies today. ${researchCount} research pick${researchCount===1?"":"s"} remain tracked for model learning.`:"No model picks today. Run the engine to generate."}</div>`}
-    else{
-      const hits=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="YES"||h==="TRUE"}).length;
-      const miss=todayPicks.filter(p=>{const h=String(rowField(p,"HIT")).toUpperCase();return h==="NO"||h==="FALSE"}).length;
-      const tracked=hits+miss;
-      picksHTML=convergenceHTML+modelIntro+renderPickGuard(pickGuard);
-      if(tracked){
-        picksHTML+=`<div style="display:flex;justify-content:flex-end;padding:0 16px 9px"><span class="pick-source-badge ${hits>=miss?"validated":"research"}">Current record ${hits}-${miss}</span></div>`;
-      }
-      const rankedPicks=[...todayPicks].sort((a,b)=>toNum(a.rank||999)-toNum(b.rank||999));
-      const pickModels=rankedPicks.map(getPickDisplayModel),featured=pickModels[0],remaining=pickModels.slice(1);
-      picksHTML+=`<div class="pick-editorial">${featured?renderFeaturedPick(featured):""}${remaining.length?`<div class="pick-board"><div class="pick-board-head"><span>#</span><span>Player / matchup</span><span>L10</span><span>Evidence</span><span style="text-align:right">Decision</span></div>${remaining.map((model,index)=>renderPickBoardRow(model,index)).join("")}</div>`:""}</div>`;
-    }
+    picksHTML=renderModelPicksView(convergenceHTML);
   }else if(st.picksView==="dingers"){
     const db=getDingerBoard();
     if(!db.length){
@@ -2575,36 +2726,7 @@ function render(){
 
   const showCtrl=activeTab==="dashboard";
   app.innerHTML=`
-  <div class="header">
-    <div class="header-top"><div class="header-title">MLB DFS Dashboard</div><div style="display:flex;gap:8px"><button class="theme-btn" id="themeBtn">${st.theme==="light"?icon('moon')+" Dark":icon('sun')+" Light"}</button><button class="refresh-btn" id="refreshBtn">${icon('refresh')} Refresh</button></div></div>
-    <div class="top-nav">
-      <button class="tab-btn ${activeTab==="dashboard"?"active":""}" onclick="switchTab('dashboard')">${icon('dash')}<span>Dash</span></button>
-      <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">${icon('picks')}<span>Picks</span></button>
-      <button class="tab-btn ${activeTab==="leaders"?"active":""}" onclick="switchTab('leaders')">${icon('leaders')}<span>Leaders</span></button>
-      <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Game Builder</span></button>
-      <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">${icon('lookup')}<span>Lookup</span></button>
-      <button class="tab-btn ${activeTab==="stats"?"active":""}" onclick="switchTab('stats')">${icon('stats')}<span>Model Performance</span></button>
-      <button class="tab-btn ${activeTab==="method"?"active":""}" onclick="switchTab('method')">${icon('info')}<span>Info</span></button>
-    </div>
-    ${showCtrl?`
-    <div class="header-controls">
-      <div class="mode-toggle">
-        <div class="mode-btn" onclick="switchMode('batter')" style="${st.mode==='batter'?'background:var(--over);color:var(--surface-0);border-color:var(--over)':'background:var(--surface-2);color:var(--ink-muted)'}">${icon('bat')} Batters</div>
-        <div class="mode-btn" onclick="switchMode('pitcher')" style="${st.mode==='pitcher'?'background:var(--over);color:var(--surface-0);border-color:var(--over)':'background:var(--surface-2);color:var(--ink-muted)'}">${icon('ball')} Pitchers</div>
-      </div>
-      <div class="search-wrap">
-        <input type="text" id="dashPlayerSearch" list="playerList" placeholder="Search ${st.mode==='pitcher'?'pitcher':'batter'}..." value="${esc(player)}" autocomplete="off"
-          onfocus="this.select()"
-          onchange="if(this.value)pickDashPlayer(this.value)"
-        />
-        <datalist id="playerList">${curTonight.filter(p=>p.player_name).map(p=>`<option value="${esc(p.player_name)}">${esc(p.team_abbr||"")}</option>`).join("")}</datalist>
-      </div>
-      <div class="ctrl-row">
-        <select id="metricSel">${metricOpts}</select>
-        <input type="number" id="lineInput" value="${line}" placeholder="Line" step="0.5"/>
-      </div>
-    </div>`:""}
-  </div>
+  ${renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight})}
   ${renderDataWarnings()}
 
   <div id="pg-dash" class="page ${activeTab==="dashboard"?"active":""}">
@@ -2635,31 +2757,13 @@ function render(){
     <div class="timestamp" style="color:var(--border-1);font-size:var(--t-xs);padding-top:0">Made by S. Krolikowski w/ Claude · 2026</div>
   </div>
 
-  <div id="pg-picks" class="page ${activeTab==="picks"?"active":""}">
-    <div class="sub-tabs" style="padding-top:12px">
-      <div class="sub-tab ${st.picksView==="shortlist"?"active":""}" onclick="switchPicksView('shortlist')">Tonight's Shortlist</div>
-      <div class="sub-tab ${st.picksView==="slips"?"active":""}" onclick="switchPicksView('slips')">Slips</div>
-      <div class="sub-tab ${st.picksView==="picks"?"active":""}" onclick="switchPicksView('picks')">Model Picks</div>
-      <div class="sub-tab ${st.picksView==="draft"?"active":""}" onclick="switchPicksView('draft')">Draft</div>
-      <div class="sub-tab ${st.picksView==="streaks"?"active":""}" onclick="switchPicksView('streaks')">Streaks</div>
-      <div class="sub-tab ${st.picksView==="dingers"?"active":""}" onclick="switchPicksView('dingers')">Dingers</div>
-      <div class="sub-tab ${st.picksView==="ks"?"active":""}" onclick="switchPicksView('ks')">Ks</div>
-      <div class="sub-tab ${st.picksView==="props"?"active":""}" onclick="switchPicksView('props')">Prop Explorer</div>
-    </div>
-    <div class="cards-wrap">${picksHTML}</div>
-    <div class="timestamp">Data from MLB Dashboard Engine · DraftKings via The Odds API</div>
-  </div>
+  ${renderPicksPage(activeTab,picksHTML)}
 
   <div id="pg-stats" class="page ${activeTab==="stats"?"active":""}">${renderStatsView()}</div>
   <div id="pg-leaders" class="page ${activeTab==="leaders"?"active":""}">${renderLeadersView()}</div>
   <div id="pg-entry" class="page ${activeTab==="entry"?"active":""}">${renderGameEntryView()}</div>
 
-  <div id="pg-lookup" class="page ${activeTab==="lookup"?"active":""}">
-    <section class="lookup-search-shell"><div class="lookup-search-inner"><div class="lookup-search-kicker">MLB player database</div><div class="lookup-search-title">Player lookup</div><div class="search-wrap lookup-search-wrap"><input type="search" id="lkSearch" placeholder="Search any active MLB player" value="${esc(st.lkQuery)}" autocomplete="off"/>${lkSugs}</div></div></section>
-    ${st.lookupError?`<div class="lookup-warning" role="status">${esc(st.lookupError)}</div>`:""}
-    ${lk?`<div class="profile"><div class="profile-img"><img src="${lk.img}" onerror="this.style.display='none'"/></div><div class="profile-info"><h2>${lk.name}</h2><p>${lk.team} · ${lk.pos} · #${lk.number} · B:${lk.bats} T:${lk.throws}</p></div></div>${lkSum}<div class="sub-tabs"><div class="sub-tab ${st.lkSubTab==="career"?"active":""}" onclick="switchLkSub('career')">Career</div><div class="sub-tab ${st.lkSubTab==="vsTeam"?"active":""}" onclick="switchLkSub('vsTeam')">vs Team</div><div class="sub-tab ${st.lkSubTab==="vsPlayer"?"active":""}" onclick="switchLkSub('vsPlayer')">vs Player</div></div>${lkBody}`:`<div class="lookup-empty">Search by player name to begin.</div>`}
-    <div class="timestamp">Data from MLB Stats API · Live</div>
-  </div>
+  ${renderLookupPage({activeTab,lk,lkSum,lkSugs,lkBody})}
 
   <div id="pg-method" class="page ${activeTab==="method"?"active":""}">
     <div style="padding:16px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:4px">⚾</div><div style="color:var(--accent);font-weight:800;font-size:var(--t-md)">How This Dashboard Works</div><div style="color:var(--accent-soft);font-size:var(--t-xs);margin-top:4px">Under the hood of the MLB DFS Engine</div></div>
@@ -2674,29 +2778,9 @@ function render(){
     </div>
   </div>
 
-  <div class="tab-bar">
-    <button class="tab-btn ${activeTab==="dashboard"?"active":""}" onclick="switchTab('dashboard')">${icon('dash')}<span>Dash</span></button>
-    <button class="tab-btn ${activeTab==="picks"?"active":""}" onclick="switchTab('picks')">${icon('picks')}<span>Picks</span></button>
-    <button class="tab-btn ${activeTab==="leaders"?"active":""}" onclick="switchTab('leaders')">${icon('leaders')}<span>Leaders</span></button>
-    <button class="tab-btn ${activeTab==="entry"?"active":""}" onclick="switchTab('entry')">${icon('entry')}<span>Builder</span></button>
-    <button class="tab-btn ${activeTab==="lookup"?"active":""}" onclick="switchTab('lookup')">${icon('lookup')}<span>Lookup</span></button>
-    <button class="tab-btn ${activeTab==="stats"?"active":""}" onclick="switchTab('stats')">${icon('stats')}<span>Performance</span></button>
-    <button class="tab-btn ${activeTab==="method"?"active":""}" onclick="switchTab('method')">${icon('info')}<span>Info</span></button>
-  </div>`;
+  ${renderMobileNavigation(activeTab)}`;
 
-  const ms=document.getElementById("metricSel");if(ms)ms.onchange=e=>{st.metric=e.target.value;render()};
-  const li=document.getElementById("lineInput");if(li)li.onchange=e=>{st.line=e.target.value;render()};
-  document.getElementById("themeBtn")?.addEventListener("click",toggleTheme);
-  document.getElementById("refreshBtn")?.addEventListener("click",loadAllData);
-  const of=document.getElementById("oppFilter");if(of)of.onchange=e=>{st.oppFilter=e.target.value;render()};
-  const lkS=document.getElementById("lkSearch");if(lkS)lkS.oninput=e=>{st.lkQuery=e.target.value;clearTimeout(window._lkT);window._lkT=setTimeout(()=>searchLkPlayers(e.target.value),300)};
-  const vts=document.getElementById("vsTeamSel");if(vts)vts.onchange=e=>{st.lkVsTeamId=e.target.value?parseInt(e.target.value):null;fetchLkVsTeam(st.lkPlayer.id,st.lkVsTeamId)};
-  const vpi=document.getElementById("vsPlayerInput");if(vpi)vpi.oninput=e=>{clearTimeout(window._vpT);window._vpT=setTimeout(()=>searchVsP(e.target.value),300)};
-  const psi=document.getElementById("propsSearchInput");if(psi)psi.oninput=e=>{st.propsSearch=e.target.value;render()};
-  const pts=document.getElementById("propsTeamSelect");if(pts)pts.onchange=e=>setPropsTeam(e.target.value);
-  const pss=document.getElementById("propsSortSelect");if(pss)pss.onchange=e=>setPropsSort(e.target.value);
-  const phs=document.getElementById("propsMinHitSelect");if(phs)phs.onchange=e=>setPropsMinHit(e.target.value);
-  const pes=document.getElementById("propsMinEdgeSelect");if(pes)pes.onchange=e=>setPropsMinEdge(e.target.value);
+  bindRenderedControls();
   applyTheme();
   restoreFocus(focus);
 }
