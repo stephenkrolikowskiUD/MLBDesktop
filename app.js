@@ -2376,6 +2376,51 @@ function renderSlipsBoardView(convergenceHTML){
   return html;
 }
 
+function renderPropExplorerView(){
+  let html="";
+      const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
+      const allTeams=[...new Set([...st.tonight,...st.pTonight].map(p=>String(p.team_abbr||"").toUpperCase()).filter(Boolean))].sort((a,b)=>teamDisplayName(a).localeCompare(teamDisplayName(b)));
+      const query=normalizePlayerName(st.propsSearch);
+      const minHit=parseFloat(st.propsMinHit)/100;
+      const minEdge=parseFloat(st.propsMinEdge)/100;
+      const rankedProps=getRankedPropsBoard();
+      let filtered=rankedProps.filter(row=>{
+        const p=row.prop;
+        if(st.propsMetric!=="ALL"&&p.METRIC!==st.propsMetric)return false;
+        if(st.propsTeam!=="ALL"&&row.team!==st.propsTeam)return false;
+        if(query&&!normalizePlayerName(`${p.PLAYER_NAME} ${row.team} ${row.teamName}`).includes(query))return false;
+        if(minHit>0&&(row.hitRate===null||row.hitRate<minHit))return false;
+        if(minEdge>-1&&(row.edge===null||row.edge<minEdge))return false;
+        return true;
+      });
+      const sortValue=(row,key)=>key==="HIT"?(row.hitRate??-Infinity):key==="EDGE"?(row.edge??-Infinity):key==="PLAYER"?0:(row.score??-Infinity);
+      filtered.sort((a,b)=>st.propsSort==="PLAYER"?(a.prop.PLAYER_NAME||"").localeCompare(b.prop.PLAYER_NAME||""):sortValue(b,st.propsSort)-sortValue(a,st.propsSort)||(b.hitRate??-Infinity)-(a.hitRate??-Infinity)||(a.prop.PLAYER_NAME||"").localeCompare(b.prop.PLAYER_NAME||""));
+      const sorted=filtered.slice(0,200);
+      const playerCount=new Set(filtered.map(row=>normalizePlayerName(row.prop.PLAYER_NAME))).size;
+      const teamBoardHTML=renderPropsTeamBoard(st.propsTeam,rankedProps);
+      html=`<div style="padding:14px 16px 0"><div class="analysis-eyebrow">Market research</div><div style="font-family:'Barlow Condensed',system-ui,sans-serif;font-size:var(--t-xl);font-weight:800;color:var(--ink-0)">Prop Explorer</div><div style="color:var(--ink-muted);font-size:var(--t-xs);margin-top:2px">Explore tonight's available markets. Default view shows only props with at least +5% modeled edge.</div></div><div class="props-toolbar">
+        <div class="props-control props-control-search"><label for="propsSearchInput">Player or team</label><input type="text" id="propsSearchInput" placeholder="Search Harper, TOR, Blue Jays..." value="${esc(st.propsSearch)}"/></div>
+        <div class="props-control"><label for="propsTeamSelect">Team</label><select id="propsTeamSelect"><option value="ALL">All teams</option>${allTeams.map(team=>`<option value="${esc(team)}" ${st.propsTeam===team?"selected":""}>${esc(teamDisplayName(team))} (${esc(team)})</option>`).join("")}</select></div>
+        <div class="props-control"><label for="propsSortSelect">Rank by</label><select id="propsSortSelect"><option value="EDGE" ${st.propsSort==="EDGE"?"selected":""}>Edge %</option><option value="HIT" ${st.propsSort==="HIT"?"selected":""}>Hit %</option><option value="SCORE" ${st.propsSort==="SCORE"?"selected":""}>Research score</option><option value="PLAYER" ${st.propsSort==="PLAYER"?"selected":""}>Player name</option></select></div>
+        <div class="props-control"><label for="propsMinHitSelect">Minimum Hit%</label><select id="propsMinHitSelect">${[[0,"Any"],[50,"50%+"],[60,"60%+"],[70,"70%+"]].map(([v,l])=>`<option value="${v}" ${String(st.propsMinHit)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
+        <div class="props-control"><label for="propsMinEdgeSelect">Minimum Edge%</label><select id="propsMinEdgeSelect">${[[-100,"Any"],[0,"Positive"],[5,"+5%"],[10,"+10%"],[15,"+15%"]].map(([v,l])=>`<option value="${v}" ${String(st.propsMinEdge)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
+      </div>
+      ${teamBoardHTML}
+      <div class="props-filter"><div class="pf-btn ${st.propsMetric==="ALL"?"active":""}" onclick="setPropsMetric('ALL')">All</div>${allM.map(m=>`<div class="pf-btn ${st.propsMetric===m?"active":""}" onclick="setPropsMetric('${m}')">${m}</div>`).join("")}</div>
+      <div style="padding:0 16px;color:var(--ink-muted);font-size:var(--t-xs);margin-bottom:4px">${filtered.length} props across ${playerCount} players${filtered.length>200?" · showing top 200":""} · ranked by ${st.propsSort==="SCORE"?"research score":st.propsSort==="HIT"?"Hit%":st.propsSort==="EDGE"?"Edge%, then Hit%":"player"}</div>
+      ${sorted.length?`<div class="props-tbl-wrap"><table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Prop</th><th>Best Side</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th><th>Research Score</th></tr></thead><tbody>${sorted.map((row,i)=>{
+        const p=row.prop;
+        const flags=getSampleFlags(p.PLAYER_NAME,row.isP);
+        const locked=getLockInfo(p.PLAYER_NAME,row.isP).started;
+        const hrPct=row.hitRate!==null?`${(row.hitRate*100).toFixed(0)}%`:"—";
+        const edgeStr=row.edge!==null?`<span class="ev-badge ${row.edge>0.08?"ev-pos":row.edge>0?"ev-neutral":"ev-neg"}">${row.edge>0?"+":""}${(row.edge*100).toFixed(0)}%</span>`:"—";
+        const matchupDisplay=Math.abs(row.components.matchup)<0.5?0:row.components.matchup;
+        const breakdown=`Hit ${row.components.hit.toFixed(1)} · Edge ${row.components.edge.toFixed(1)} · Form ${row.components.form.toFixed(0)} · Matchup ${matchupDisplay.toFixed(0)}`;
+        const weak=row.edge===null||row.edge<0.05;
+        return`<tr class="${flags.returning?"props-returning":""}${locked?" props-locked":""}${weak?" props-weak":""}" style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="color:var(--ink-muted);font-weight:700">${i+1}</td><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}${flags.returning?` <span class="risk-badge risk-returning">⚠️</span>`:flags.limited?` <span class="risk-badge risk-limited">⚠️</span>`:""}${locked?` <span class="locked-badge">🔒</span>`:""}</td><td title="${esc(row.teamName)}"><strong>${esc(row.team||"—")}</strong>${row.opp?` <span style="color:var(--ink-muted)">vs ${esc(row.opp)}</span>`:""}</td><td><span style="color:var(--accent);font-weight:600">${p.METRIC}</span><div style="color:var(--ink-muted);font-size:9px">line ${esc(p.DK_LINE)}</div></td><td>${row.side?`<span class="props-side ${row.side.toLowerCase()}">${row.side} ${fmtOdds(row.odds)}</span>`:"—"}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:700">${hrPct}</td><td>${edgeStr}</td><td title="${esc(breakdown)}"><span class="props-score">${row.score.toFixed(1)}</span><div class="props-score-detail">H ${row.components.hit.toFixed(1)} · E ${row.components.edge.toFixed(1)} · F ${row.components.form.toFixed(0)} · M ${matchupDisplay.toFixed(0)}</div></td></tr>${renderPropBestBookTableRow(p,10,{collapsed:true})}`}).join("")}</tbody></table></div>`:`<div class="props-pass"><div class="props-pass-title">No props clear these filters</div><div class="props-pass-copy">That is a valid result, not a broken board. Lower the minimum edge or change the team/market filter to explore the wider slate.</div></div>`}`;
+  return html;
+}
+
 function renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight}){
   const navItems=[
     ["dashboard","dash","Dash"],
@@ -2680,46 +2725,7 @@ function render(){
   }else if(st.picksView==="draft"){
     picksHTML=renderDraftBoardView(convergenceHTML);
   }else{
-    const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
-    const allTeams=[...new Set([...st.tonight,...st.pTonight].map(p=>String(p.team_abbr||"").toUpperCase()).filter(Boolean))].sort((a,b)=>teamDisplayName(a).localeCompare(teamDisplayName(b)));
-    const query=normalizePlayerName(st.propsSearch);
-    const minHit=parseFloat(st.propsMinHit)/100;
-    const minEdge=parseFloat(st.propsMinEdge)/100;
-    const rankedProps=getRankedPropsBoard();
-    let filtered=rankedProps.filter(row=>{
-      const p=row.prop;
-      if(st.propsMetric!=="ALL"&&p.METRIC!==st.propsMetric)return false;
-      if(st.propsTeam!=="ALL"&&row.team!==st.propsTeam)return false;
-      if(query&&!normalizePlayerName(`${p.PLAYER_NAME} ${row.team} ${row.teamName}`).includes(query))return false;
-      if(minHit>0&&(row.hitRate===null||row.hitRate<minHit))return false;
-      if(minEdge>-1&&(row.edge===null||row.edge<minEdge))return false;
-      return true;
-    });
-    const sortValue=(row,key)=>key==="HIT"?(row.hitRate??-Infinity):key==="EDGE"?(row.edge??-Infinity):key==="PLAYER"?0:(row.score??-Infinity);
-    filtered.sort((a,b)=>st.propsSort==="PLAYER"?(a.prop.PLAYER_NAME||"").localeCompare(b.prop.PLAYER_NAME||""):sortValue(b,st.propsSort)-sortValue(a,st.propsSort)||(b.hitRate??-Infinity)-(a.hitRate??-Infinity)||(a.prop.PLAYER_NAME||"").localeCompare(b.prop.PLAYER_NAME||""));
-    const sorted=filtered.slice(0,200);
-    const playerCount=new Set(filtered.map(row=>normalizePlayerName(row.prop.PLAYER_NAME))).size;
-    const teamBoardHTML=renderPropsTeamBoard(st.propsTeam,rankedProps);
-    picksHTML=`<div style="padding:14px 16px 0"><div class="analysis-eyebrow">Market research</div><div style="font-family:'Barlow Condensed',system-ui,sans-serif;font-size:var(--t-xl);font-weight:800;color:var(--ink-0)">Prop Explorer</div><div style="color:var(--ink-muted);font-size:var(--t-xs);margin-top:2px">Explore tonight's available markets. Default view shows only props with at least +5% modeled edge.</div></div><div class="props-toolbar">
-      <div class="props-control props-control-search"><label for="propsSearchInput">Player or team</label><input type="text" id="propsSearchInput" placeholder="Search Harper, TOR, Blue Jays..." value="${esc(st.propsSearch)}"/></div>
-      <div class="props-control"><label for="propsTeamSelect">Team</label><select id="propsTeamSelect"><option value="ALL">All teams</option>${allTeams.map(team=>`<option value="${esc(team)}" ${st.propsTeam===team?"selected":""}>${esc(teamDisplayName(team))} (${esc(team)})</option>`).join("")}</select></div>
-      <div class="props-control"><label for="propsSortSelect">Rank by</label><select id="propsSortSelect"><option value="EDGE" ${st.propsSort==="EDGE"?"selected":""}>Edge %</option><option value="HIT" ${st.propsSort==="HIT"?"selected":""}>Hit %</option><option value="SCORE" ${st.propsSort==="SCORE"?"selected":""}>Research score</option><option value="PLAYER" ${st.propsSort==="PLAYER"?"selected":""}>Player name</option></select></div>
-      <div class="props-control"><label for="propsMinHitSelect">Minimum Hit%</label><select id="propsMinHitSelect">${[[0,"Any"],[50,"50%+"],[60,"60%+"],[70,"70%+"]].map(([v,l])=>`<option value="${v}" ${String(st.propsMinHit)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
-      <div class="props-control"><label for="propsMinEdgeSelect">Minimum Edge%</label><select id="propsMinEdgeSelect">${[[-100,"Any"],[0,"Positive"],[5,"+5%"],[10,"+10%"],[15,"+15%"]].map(([v,l])=>`<option value="${v}" ${String(st.propsMinEdge)===String(v)?"selected":""}>${l}</option>`).join("")}</select></div>
-    </div>
-    ${teamBoardHTML}
-    <div class="props-filter"><div class="pf-btn ${st.propsMetric==="ALL"?"active":""}" onclick="setPropsMetric('ALL')">All</div>${allM.map(m=>`<div class="pf-btn ${st.propsMetric===m?"active":""}" onclick="setPropsMetric('${m}')">${m}</div>`).join("")}</div>
-    <div style="padding:0 16px;color:var(--ink-muted);font-size:var(--t-xs);margin-bottom:4px">${filtered.length} props across ${playerCount} players${filtered.length>200?" · showing top 200":""} · ranked by ${st.propsSort==="SCORE"?"research score":st.propsSort==="HIT"?"Hit%":st.propsSort==="EDGE"?"Edge%, then Hit%":"player"}</div>
-    ${sorted.length?`<div class="props-tbl-wrap"><table><thead><tr><th>#</th><th>Player</th><th>Team</th><th>Prop</th><th>Best Side</th><th>Over</th><th>Under</th><th>Hit%</th><th>Edge</th><th>Research Score</th></tr></thead><tbody>${sorted.map((row,i)=>{
-      const p=row.prop;
-      const flags=getSampleFlags(p.PLAYER_NAME,row.isP);
-      const locked=getLockInfo(p.PLAYER_NAME,row.isP).started;
-      const hrPct=row.hitRate!==null?`${(row.hitRate*100).toFixed(0)}%`:"—";
-      const edgeStr=row.edge!==null?`<span class="ev-badge ${row.edge>0.08?"ev-pos":row.edge>0?"ev-neutral":"ev-neg"}">${row.edge>0?"+":""}${(row.edge*100).toFixed(0)}%</span>`:"—";
-      const matchupDisplay=Math.abs(row.components.matchup)<0.5?0:row.components.matchup;
-      const breakdown=`Hit ${row.components.hit.toFixed(1)} · Edge ${row.components.edge.toFixed(1)} · Form ${row.components.form.toFixed(0)} · Matchup ${matchupDisplay.toFixed(0)}`;
-      const weak=row.edge===null||row.edge<0.05;
-      return`<tr class="${flags.returning?"props-returning":""}${locked?" props-locked":""}${weak?" props-weak":""}" style="cursor:pointer" onclick="streakToDash('${esc(p.PLAYER_NAME)}','${propToLogCol(p.METRIC)}','${p.DK_LINE}')"><td style="color:var(--ink-muted);font-weight:700">${i+1}</td><td style="text-align:left;font-weight:600">${playerLink(p.PLAYER_NAME,propToLogCol(p.METRIC),p.DK_LINE)}${flags.returning?` <span class="risk-badge risk-returning">⚠️</span>`:flags.limited?` <span class="risk-badge risk-limited">⚠️</span>`:""}${locked?` <span class="locked-badge">🔒</span>`:""}</td><td title="${esc(row.teamName)}"><strong>${esc(row.team||"—")}</strong>${row.opp?` <span style="color:var(--ink-muted)">vs ${esc(row.opp)}</span>`:""}</td><td><span style="color:var(--accent);font-weight:600">${p.METRIC}</span><div style="color:var(--ink-muted);font-size:9px">line ${esc(p.DK_LINE)}</div></td><td>${row.side?`<span class="props-side ${row.side.toLowerCase()}">${row.side} ${fmtOdds(row.odds)}</span>`:"—"}</td><td class="${parseInt(p.OVER_ODDS)<=-130?"odds-over":parseInt(p.OVER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.OVER_ODDS)}</td><td class="${parseInt(p.UNDER_ODDS)<=-130?"odds-over":parseInt(p.UNDER_ODDS)>=130?"odds-under":"odds-even"}">${fmtOdds(p.UNDER_ODDS)}</td><td style="font-weight:700">${hrPct}</td><td>${edgeStr}</td><td title="${esc(breakdown)}"><span class="props-score">${row.score.toFixed(1)}</span><div class="props-score-detail">H ${row.components.hit.toFixed(1)} · E ${row.components.edge.toFixed(1)} · F ${row.components.form.toFixed(0)} · M ${matchupDisplay.toFixed(0)}</div></td></tr>${renderPropBestBookTableRow(p,10,{collapsed:true})}`}).join("")}</tbody></table></div>`:`<div class="props-pass"><div class="props-pass-title">No props clear these filters</div><div class="props-pass-copy">That is a valid result, not a broken board. Lower the minimum edge or change the team/market filter to explore the wider slate.</div></div>`}`;
+    picksHTML=renderPropExplorerView();
   }
 
   // === LOOKUP ===
