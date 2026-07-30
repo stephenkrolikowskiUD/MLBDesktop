@@ -1688,8 +1688,32 @@ function getEntryGames(){return getMemo('gameEntry:games',()=>{
   return [...byId.values()].map(g=>({...g,label:g.baseLabel,timeText:entryDisplayTime(g.time),started:Number.isFinite(g.sortTime)&&g.sortTime<=now}))
     .sort((a,b)=>(a.started-b.started)||(a.started?(b.sortTime-a.sortTime):(a.sortTime-b.sortTime))||a.baseLabel.localeCompare(b.baseLabel));
 })}
-function gameStartTimeForTeams(team,opp){const id=entryPairId(team,opp);if(!id)return '';const game=getEntryGames().find(g=>g.id===id);return game?.timeText||''}
-function gameStartTimeForText(gameText){const parsed=entryGameFromText(gameText);if(!parsed)return '';const game=getEntryGames().find(g=>g.id===parsed.id);return game?.timeText||''}
+// Display-only start-time lookup. Unlike getEntryGames() (which filters to today
+// for the Game Builder), this reads every schedule row regardless of date so the
+// passive time labels on Shortlist/Picks/dashboard don't blank out when the
+// Schedule tab lags a day behind. Memoized on dataVersion, so it refreshes with data.
+function gameTimeLookup(){return getMemo('gameEntry:timeLookup',()=>{
+  const byId=new Map();
+  const consider=(id,timeVal)=>{
+    if(!id)return;
+    const meta=entryStartMeta(timeVal);
+    if(!Number.isFinite(meta.ms))return;
+    const existing=byId.get(id);
+    if(!existing||meta.quality>existing.quality||(meta.quality===existing.quality&&meta.ms<existing.ms)){
+      byId.set(id,{ms:meta.ms,quality:meta.quality,timeText:entryDisplayTime(timeVal)});
+    }
+  };
+  (st.schedule||[]).forEach(r=>{
+    const away=String(entryField(r,['away_team','AWAY_TEAM','away','AWAY','away_abbr','away_team_abbr'])||'').toUpperCase();
+    const home=String(entryField(r,['home_team','HOME_TEAM','home','HOME','home_abbr','home_team_abbr'])||'').toUpperCase();
+    if(away&&home)consider(entryPairId(away,home),entryStartValue(r));
+  });
+  entryLatestPicks().forEach(p=>{const g=entryGameFromText(rowField(p,"game","matchup"));if(g)consider(g.id,entryStartValue(p))});
+  return byId;
+})}
+function gameTimeTextById(id){if(!id)return '';const hit=gameTimeLookup().get(id);if(hit&&hit.timeText)return hit.timeText;const game=getEntryGames().find(g=>g.id===id);return game?.timeText||''}
+function gameStartTimeForTeams(team,opp){return gameTimeTextById(entryPairId(team,opp))}
+function gameStartTimeForText(gameText){const parsed=entryGameFromText(gameText);return parsed?gameTimeTextById(parsed.id):''}
 function setGameEntryGame(gameId){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};st.gameEntry.selectedGame=gameId;st.gameEntry.entry=null;st.dataVersion++;render()}
 function setGameEntryLegs(n){st.gameEntry=st.gameEntry||{selectedGame:null,legCount:GAME_ENTRY_DEFAULT_LEGS,entry:null};st.gameEntry.legCount=Math.max(GAME_ENTRY_MIN_LEGS,Math.min(GAME_ENTRY_MAX_LEGS,parseInt(n)||GAME_ENTRY_DEFAULT_LEGS));st.gameEntry.entry=null;st.dataVersion++;render()}
 function entryLatestPicks(){const rows=entryAllPicks().filter(p=>entryDateISO(rowField(p,"DATE"))===entryTodayISO());const maxRun=Math.max(0,...rows.map(p=>toNum(rowField(p,"RUN_NUMBER"))));return maxRun?rows.filter(p=>toNum(rowField(p,"RUN_NUMBER"))===maxRun):rows}
