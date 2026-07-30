@@ -2216,6 +2216,64 @@ function renderStreaksBoardView(convergenceHTML){
   return html;
 }
 
+function renderDraftBoardView(convergenceHTML){
+  let html="";
+      const board=getDraftBoard();
+      const slateGames=getDraftSlateGames();
+      const selectedGames=draftSlateSelection();
+      const available=board.filter(p=>!st.drafted.has(p.name));
+      const stacks=getDraftStacks().slice(0,5);
+      const stackTags=getDraftStackTagMap();
+      const draftedCount=st.drafted.size;
+      function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
+      function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
+      const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
+        ${renderDraftSlateSelector()}`;
+      if(!board.length){
+        const emptyMessage=slateGames.length&&!selectedGames.size
+          ?"No contest games selected. Choose the games included in this UD contest."
+          :"No draftable players loaded for the selected games.";
+        html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
+      }
+      else{
+        html=draftHeader+`<div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
+        html+=`<div class="cards-grid draft-board">`;
+        let lastTier="";
+        board.forEach((p,i)=>{
+          const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
+          const tierChanged=tier.label!==lastTier;lastTier=tier.label;
+          let tags=[];
+          if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--smash-soft);color:var(--smash)">SMASH</span>`);
+          if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
+          else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">👁️ PATIENT</span>`)}
+          if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
+          if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
+          const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
+          if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
+          if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
+          (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
+          const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
+          const locked=getLockInfo(p.name,p.isPitcher).started;
+          const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
+          html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
+          <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
+            <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
+            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+            <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
+          </div>`;
+        });
+        html+=`</div>`;
+        if(stacks.length){
+          html+=`<div style="padding:14px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:var(--ink-muted);font-size:var(--t-xs)">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
+          html+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${playerLink(s.players[0].name)} + ${playerLink(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"var(--warn-soft)":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
+          html+=`</div>`;
+        }
+      }
+  return html;
+}
+
 function renderAppHeader({activeTab,showCtrl,player,metricOpts,curTonight}){
   const navItems=[
     ["dashboard","dash","Dash"],
@@ -2608,59 +2666,7 @@ function render(){
   }else if(st.picksView==="streaks"){
     picksHTML=renderStreaksBoardView(convergenceHTML);
   }else if(st.picksView==="draft"){
-    const board=getDraftBoard();
-    const slateGames=getDraftSlateGames();
-    const selectedGames=draftSlateSelection();
-    const available=board.filter(p=>!st.drafted.has(p.name));
-    const stacks=getDraftStacks().slice(0,5);
-    const stackTags=getDraftStackTagMap();
-    const draftedCount=st.drafted.size;
-    function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
-    function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
-    const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
-      <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
-      <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
-      ${renderDraftSlateSelector()}`;
-    if(!board.length){
-      const emptyMessage=slateGames.length&&!selectedGames.size
-        ?"No contest games selected. Choose the games included in this UD contest."
-        :"No draftable players loaded for the selected games.";
-      picksHTML=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
-    }
-    else{
-      picksHTML=draftHeader+`<div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
-      picksHTML+=`<div class="cards-grid draft-board">`;
-      let lastTier="";
-      board.forEach((p,i)=>{
-        const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
-        const tierChanged=tier.label!==lastTier;lastTier=tier.label;
-        let tags=[];
-        if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--smash-soft);color:var(--smash)">SMASH</span>`);
-        if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
-        else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">👁️ PATIENT</span>`)}
-        if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
-        if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
-        const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
-        if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
-        if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
-        (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
-        const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
-        const locked=getLockInfo(p.name,p.isPitcher).started;
-        const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
-        picksHTML+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
-        <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
-          <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
-          <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
-          <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
-        </div>`;
-      });
-      picksHTML+=`</div>`;
-      if(stacks.length){
-        picksHTML+=`<div style="padding:14px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:var(--ink-muted);font-size:var(--t-xs)">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
-        picksHTML+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${playerLink(s.players[0].name)} + ${playerLink(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"var(--warn-soft)":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
-        picksHTML+=`</div>`;
-      }
-    }
+    picksHTML=renderDraftBoardView(convergenceHTML);
   }else{
     const allM=[...new Set(st.props.map(p=>p.METRIC).filter(Boolean))].sort();
     const allTeams=[...new Set([...st.tonight,...st.pTonight].map(p=>String(p.team_abbr||"").toUpperCase()).filter(Boolean))].sort((a,b)=>teamDisplayName(a).localeCompare(teamDisplayName(b)));
