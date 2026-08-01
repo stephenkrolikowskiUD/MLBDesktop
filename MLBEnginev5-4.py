@@ -1495,6 +1495,10 @@ print("\nFetching tonight's schedule and starting pitchers...")
 games_tonight = []
 pitcher_map = {}
 venue_coords_dynamic = {}
+# Distinguishes "the fetch failed" from "there are genuinely no games today".
+# Both leave games_tonight empty, but they need opposite write behavior — see the
+# Tonights_Schedule handling in the write phase.
+schedule_fetch_ok = False
 
 DOMED_VENUES = {
     'Tropicana Field', 'Globe Life Field', 'loanDepot park',
@@ -1552,8 +1556,18 @@ try:
         print(f"   {g['away_abbr']} ({g['away_pitcher_name']}) @ {g['home_abbr']} ({g['home_pitcher_name']}) — {g['venue_name']}")
     if venue_coords_dynamic:
         print(f"📍 Dynamic venue coordinates loaded for {len(venue_coords_dynamic)} venues")
+    schedule_fetch_ok = True
 except Exception as e:
     print(f"❌ Schedule fetch failed: {e}")
+    # schedule_fetch_ok stays False, so the write phase will NOT clear
+    # Tonights_Schedule — blanking it would hide tonight's slate entirely. It keeps
+    # the previous contents instead, which is the lesser evil but is invisible on the
+    # sheet, so say so loudly here and in the run log.
+    print("   ⚠️  Tonights_Schedule will KEEP its previous contents — that tab is now STALE.")
+    try:
+        runlog.warn("Schedule fetch failed; Tonights_Schedule left stale (previous day's rows retained).")
+    except Exception:
+        pass
 
 VENUE_COORDS_FALLBACK = {
     'Angel Stadium': (33.8003, -117.8827), 'Busch Stadium': (38.6226, -90.1928),
@@ -2026,6 +2040,12 @@ else:
     df_odds = pd.DataFrame()
 
 df_schedule = pd.DataFrame(games_tonight)
+# Explicit Eastern slate date. Without this the only date-bearing field is game_time,
+# a UTC instant — and for any game after 8pm ET its UTC date is already tomorrow, so
+# consumers can't cheaply tell which slate the tab describes. Stamping the date the run
+# actually targeted makes a stale tab self-identifying (compare game_date to today).
+# Assigned even when empty so a header-only write still carries the column.
+df_schedule['game_date'] = schedule_date
 df_schedule['LAST_UPDATED'] = timestamp_est
 
 pitcher_rows_out = []
@@ -4054,8 +4074,16 @@ SHEETS_TO_WRITE = {
 }
 
 print(f"\nWriting {len(SHEETS_TO_WRITE)} sheets to '{SHEET_NAME}'...\n")
+# safe_upload SKIPS an empty frame by default, which silently leaves the previous
+# day's rows in place. For Tonights_Schedule that is actively misleading: the
+# dashboard presents a played-out slate as tonight's. So when the fetch SUCCEEDED and
+# genuinely returned no games (off-season, postseason, or a true no-game day), write
+# the empty frame and let the tab honestly say "no games". When the fetch FAILED,
+# schedule_fetch_ok is False and we fall back to the skip, because blanking the tab on
+# a transient error would hide a real slate — that case is warned about at fetch time.
+ALLOW_EMPTY_SHEETS = {'Tonights_Schedule'} if schedule_fetch_ok else set()
 for sheet_name, df in SHEETS_TO_WRITE.items():
-    safe_upload(sh, sheet_name, df)
+    safe_upload(sh, sheet_name, df, allow_empty=(sheet_name in ALLOW_EMPTY_SHEETS))
     time.sleep(2)
 
 # Picks_Current is an overwrite-only snapshot for the dashboard. Unlike
