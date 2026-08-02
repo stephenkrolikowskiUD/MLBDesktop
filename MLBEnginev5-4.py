@@ -1967,7 +1967,7 @@ RULES:
 - CRITICAL: ONLY pick players from the PLAYER DATA list above, and every pick must match one of that player's listed REAL DK props exactly (same prop type and line). Do NOT invent lines or use season/recent averages as a line. NEVER return null for line.
 - Return EXACTLY {GEMINI_TARGET_PICKS + 6} ranked candidate picks. These are draft candidates for the engine to validate, not final bets — breadth matters more than certainty. If you're unsure whether a pick clears STRONG, mark it LEAN and include it rather than leaving it out. Do not stop early because you've run out of high-confidence picks.
 - Batters: only H or R props. Pitchers: only P_SO, P_ER, or P_BB props. Allowed prop types for this slate: {allowed_prompt_props_str}. Never pick UD_FP or combined props like H+R+RBI.
-- Confidence tiers: SMASH = top 3-4 highest conviction only. STRONG = next 4-5, requires ALL of (a) season hit rate >55% on this prop type for this player, (b) EV% >5%, (c) supportive matchup/split context. LEAN = everything else with 1-2 positive signals — use it liberally; it should be the most common tier.
+- Confidence tiers: SMASH = top 3-4 highest conviction, and must ALSO clear a higher bar than STRONG on ALL of (a) season hit rate >65% on this prop type for this player, (b) EV% >10%, (c) 2+ independent confirming signals (e.g. matchup edge AND recent form — not just one). A pick that would only qualify for STRONG under these numbers must be labeled STRONG, never SMASH, even if it is your top-ranked pick. STRONG = next 4-5, requires ALL of (a) season hit rate >55% on this prop type for this player, (b) EV% >5%, (c) supportive matchup/split context. LEAN = everything else with 1-2 positive signals — use it liberally; it should be the most common tier.
 - Players flagged RETURNING: season averages aren't reliable short-term predictors. Cap at STRONG — never SMASH.
 - Players flagged LINEUP RISK / weak lineup protection: lower confidence on H/R props unless the edge is overwhelming.
 - STAR players are the top 20 by season UD fantasy points in tonight's valid prop pool. Prefer at least 4 of your {GEMINI_TARGET_PICKS} final picks from STARs; non-stars fill remaining slots only with exceptional edges.
@@ -2703,7 +2703,7 @@ def main():
     SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
     SPORT_LABEL = "MLB"
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-    MODEL_VERSION = "mlb_hybrid_matchup_v2"
+    MODEL_VERSION = "mlb_hybrid_matchup_v3_smash_floor"  # 2026-08-01: SMASH now requires a quantitative floor stricter than STRONG's, not just a rank cap
     ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
     _last_odds_credits_remaining = None
     GEMINI_TARGET_PICKS = 14

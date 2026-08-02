@@ -34,6 +34,63 @@ untracked the `.pyc` (left on disk).
 
 Secrets themselves are **clean** — see §5.
 
+### ✅ `main()` guard added; the script no longer runs top-to-bottom on import
+4,105 lines executed as 407 top-level statements with no `main()`/`__main__`
+guard. Wrapped every non-def top-level statement into `main()`, called under
+`if __name__ == "__main__":`. Mechanical only — verified by AST-level structural
+equivalence (every moved statement byte-identical, same order) plus a scoping
+check that caught a real bug during construction: 33 of 69 module-level
+functions would have `NameError`'d on first call, because their inputs became
+`main()`-local instead of true globals. Fixed with explicit `global`
+declarations for all 347 affected names; independently re-verified after the fix.
+
+### ✅ `generate_gemini_picks()` (1,063 lines) decomposed into 11 named phases
+Same file, same function that generates the picks the cron ships unattended.
+Broken into `_phase_collect_tonight_context`, `_phase_run_gemini_consensus`,
+`_phase_apply_post_filter`, etc. — largest is now 221 lines, down from one
+undifferentiated block. Verified more heavily than a normal refactor given the
+blast radius: AST-equivalence for all 115 statements, two real bugs caught and
+fixed before shipping (a `nonlocal`-vs-`global` scoping error, and a
+placeholder-reset that would have clobbered `df_picks`/`df_picks_current`'s
+real init values back to `None`), and an actual mocked end-to-end call —
+importing the module, faking the Gemini response, and running every phase in
+sequence — confirming the `global`-threaded `df_picks_current` correctly
+propagates back to module scope. Not tested against a real game night; that's
+a real residual risk, not a resolved one.
+
+### ✅ SMASH tier rubric fixed — deliberate post-freeze exception (2026-08-01)
+Root-caused while updating the portfolio roadmap doc, a day after the freeze:
+the Round 1-3 "SMASH ≈ STRONG ≈ LEAN" problem (SMASH regressed from 69% at
+n=73 to 51% at n=596 all-time) traces to the Gemini prompt rubric itself, not
+noise. SMASH was defined as *"top 3-4 highest conviction only"* — no hit-rate
+floor, no EV floor — while STRONG required all three of (hit rate >55%, EV
+>5%, supportive context). Enforcement was a pure rank-cap (`max_smash = min(3,
+...)`) that demotes overflow SMASH picks to STRONG, but nothing stopped
+Gemini from labeling a STRONG-quality pick SMASH in the first place.
+
+This is a genuine behavior change to a frozen system, so it was treated as a
+deliberate, scoped exception rather than reopening the freeze generally:
+- SMASH's prompt text now requires hit rate >65%, EV >10%, and 2+ independent
+  confirming signals — strictly higher than STRONG's bar, not just a rank cap.
+- `MODEL_VERSION` bumped to `mlb_hybrid_matchup_v3_smash_floor` so the grader's
+  existing (previously under-used) `model_era` dimension can cleanly separate
+  pre-fix and post-fix performance once new picks are graded.
+- No numbers exist yet to prove the fix worked — that requires real games
+  under the new rubric. This sets up the measurement; it doesn't complete it.
+- Verified: `py_compile` clean, edit confirmed inside the correct phase
+  function post-decomposition, mocked end-to-end call still runs clean (the
+  mock's canned Gemini response can't exercise the new prompt wording itself —
+  only a real model call can, which is the point of waiting for real data).
+
+**Left open, deliberately not fixed:** the CLV subsystem is inert
+(`refresh_clv_frame()` is defined and never called; `CLV_OPEN_LINE` is set
+equal to the pick price inline, so every bucket is "flat" by construction —
+85% of all-time picks). Diagnosed in the same pass as SMASH but not patched,
+since it wasn't part of the scoped exception above. Either wire up the real
+write path or remove the columns — an inert metric that looks populated is
+worse than an absent one. Tracked for a future decision, not carried forward
+as an oversight.
+
 ### ✅ Season history can no longer be destroyed by a transient Sheets error
 `load_existing_log_sheet` returned an **identical empty DataFrame** for "read
 failed" and "sheet is empty":
