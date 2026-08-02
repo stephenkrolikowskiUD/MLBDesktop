@@ -19,77 +19,7 @@ from google.auth import default
 from google.oauth2.service_account import Credentials
 from google import genai
 from google.genai import types
-try:
-    from run_logger import RunLogger
-except Exception:
-    class RunLogger:
-        def __init__(self, *args, **kwargs):
-            self.picks_generated = 0
-        def finalize_and_write(self):
-            pass
-        def warn(self, msg):
-            print(f"⚠️ RunLogger unavailable: {msg}")
-        def record_write(self, sheet_name, rows):
-            pass
 import warnings
-warnings.filterwarnings('ignore')
-
-try:
-    from pybaseball import statcast as pybaseball_statcast
-except Exception:
-    pybaseball_statcast = None
-
-# --- 1. AUTHENTICATION & SETUP ---
-print("Authenticating with Google...")
-
-SHEET_NAME = 'MLB_Dashboard_Data'
-SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
-MLB_API = "https://statsapi.mlb.com/api/v1"
-SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
-SPORT_LABEL = "MLB"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-MODEL_VERSION = "mlb_hybrid_matchup_v2"
-ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
-_last_odds_credits_remaining = None
-GEMINI_TARGET_PICKS = 14
-MIN_DAILY_PICKS = 9
-PICK_OUTPUT_COLUMNS = [
-    'DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team',
-    'opponent', 'opp_pitcher', 'prop_type', 'line', 'lean', 'confidence',
-    'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note',
-    'DATA_SOURCE', 'source', 'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS',
-    'CALIBRATION_SCORE', 'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK',
-    'PICK_ODDS', 'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
-    'H_PLAYER_SCORE', 'H_OPP_ADJ', 'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ',
-    'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
-    'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
-    'CONSENSUS_COUNT', 'CONSENSUS_RUNS',
-    'CONSENSUS_TAG', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA',
-    'CLV_LAST_UPDATE', 'RESULT', 'ACTUAL_STAT', 'HIT', 'REALIZED_PROFIT',
-    'ACTUAL_ROI_PER_PICK', 'LAST_UPDATED',
-]
-
-# --- Odds API quota guard ---
-QUOTA_FLOOR_GLOBAL = 2000
-DEFAULT_QUOTA_FLOOR_THIS_SPORT = {
-    "MLB": 1000,
-    "NBA": 800,
-    "NHL": 600,
-    "WNBA": 500,
-    "WC": 600,
-}[SPORT_LABEL]
-QUOTA_FLOOR_THIS_SPORT = int(os.getenv(f"{SPORT_LABEL}_ODDS_CREDIT_FLOOR", DEFAULT_QUOTA_FLOOR_THIS_SPORT))
-CACHE_DIR = os.path.expanduser("~/.dfs_engines_cache")
-os.makedirs(CACHE_DIR, exist_ok=True)
-CACHE_TTL_SECONDS = {
-    "MLB": 900,
-    "NBA": 900,
-    "NHL": 900,
-    "WNBA": 1800,
-    "WC": 1800,
-}[SPORT_LABEL]
-
-
 def record_odds_quota(resp) -> int | None:
     """Capture x-requests-remaining for stdout and Run_Log without enforcing a floor."""
     global _last_odds_credits_remaining
@@ -162,104 +92,6 @@ def cached_odds_fetch(cache_key: str, fetch_fn):
     else:
         print(f"⚠️  {cache_key}: empty result — NOT caching, so a re-run can retry")
     return data
-
-SHEET_SCHEMAS = {
-    'Tonights_Batters': {
-        'required': [
-            'player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name',
-            'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight',
-            'L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
-            'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'LAST_UPDATED',
-        ],
-        'recommended': ['Seas_OPS', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2'],
-    },
-    'Tonights_Pitchers': {
-        'required': ['team_abbr', 'opp_pitcher_id', 'opp_pitcher_name', 'opp_pitcher_hand', 'LAST_UPDATED'],
-        'recommended': [],
-    },
-    'Daily_Picks': {
-        'required': [
-            'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
-            'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
-        ],
-        'recommended': [
-            'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
-            'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
-            'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
-            'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
-            'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
-            'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
-            'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
-        ],
-    },
-    'Picks_Current': {
-        'required': [
-            'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
-            'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
-        ],
-        'recommended': [
-            'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
-            'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
-            'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS',
-            'IMPLIED_PROBABILITY',
-            'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
-            'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
-            'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
-            'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
-        ],
-    },
-    'DK_Player_Props': {
-        'required': ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'LAST_UPDATED'],
-        'recommended': ['BOOK', 'REFERENCE_BOOK', 'BEST_OVER_BOOK', 'BEST_OVER_ODDS', 'BEST_OVER_DELTA_PP',
-                        'BEST_UNDER_BOOK', 'BEST_UNDER_ODDS', 'BEST_UNDER_DELTA_PP',
-                        'ALT_LINE_AVAILABLE', 'ALT_LINE_BOOKS'],
-    },
-    'All_Books_Props': {
-        'required': ['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS',
-                     'OVER_IMPLIED', 'UNDER_IMPLIED', 'LAST_UPDATED'],
-        'recommended': [],
-    },
-    'Batter_Game_Logs': {
-        'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
-                     'AB', 'H', 'HR', 'RBI', 'R', 'BB', 'SO', 'TB', 'UD_FP', 'DK_FP'],
-        'recommended': ['Seas_OPS', 'L7_OPS', 'L14_OPS', 'L30_OPS'],
-    },
-    'Pitcher_Game_Logs': {
-        'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
-                     'IP', 'SO', 'ER', 'BB', 'H', 'UD_FP', 'DK_FP'],
-        'recommended': ['QS'],
-    },
-    'Statcast_Daily': {
-        'required': ['game_date', 'player_id', 'player_name', 'role', 'LAST_UPDATED'],
-        'recommended': ['avg_ev', 'hard_hit_pct', 'barrel_pct', 'xBA', 'xSLG', 'xwOBA', 'whiff_pct', 'chase_pct', 'csw_pct'],
-    },
-    'Batter_Statcast': {
-        'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
-        'recommended': ['SC_L14_xBA', 'SC_L14_xwOBA', 'SC_L14_hard_hit_pct', 'SC_L14_barrel_pct'],
-    },
-    'Pitcher_Statcast': {
-        'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
-        'recommended': ['SC_L14_whiff_pct', 'SC_L14_csw_pct', 'SC_L14_xwOBA', 'SC_L14_barrel_pct'],
-    },
-    'Team_Rankings': {
-        'required': [
-            'SEASON', 'TEAM_ID', 'TEAM', 'TEAM_ABBR', 'GAMES_PLAYED',
-            'OFF_PA', 'OFF_SO', 'OFF_K_PCT', 'OFF_HR', 'OFF_HR_PER_GAME',
-            'PIT_HR_ALLOWED', 'PIT_HR9', 'PIT_RUNS_ALLOWED_PER_GAME',
-            'OFF_K_PCT_MOST_RANK', 'PIT_HR_ALLOWED_MOST_RANK', 'LAST_UPDATED',
-        ],
-        'recommended': [
-            'OFF_OPS', 'OFF_RUNS_PER_GAME', 'OFF_HR_MOST_RANK',
-            'PIT_ERA', 'PIT_WHIP', 'PIT_K9', 'PIT_BB9',
-            'PIT_RUNS_ALLOWED_MOST_RANK', 'PIT_BB9_MOST_RANK',
-        ],
-    },
-}
-
-now_est = datetime.now(pytz.timezone('US/Eastern'))
-today_str = now_est.strftime('%Y-%m-%d')
-timestamp_est = now_est.strftime('%Y-%m-%d %I:%M:%S %p EST')
-eastern = pytz.timezone('US/Eastern')
 
 def derive_mlb_season_context(now=None):
     now = now or datetime.now(eastern)
@@ -716,20 +548,6 @@ def build_statcast_name_maps(batters, pitchers, batter_logs=None, pitcher_logs=N
                 pitcher_teams.setdefault(int(pid), row.get('team_abbr', ''))
     return batter_names, batter_teams, pitcher_names, pitcher_teams
 
-STATCAST_DAILY_COLS = [
-    'game_date', 'player_id', 'player_name', 'role', 'team_abbr',
-    'batted_balls', 'pa_events', 'pitches',
-    'avg_ev', 'max_ev', 'avg_la', 'hard_hit_pct', 'barrel_pct', 'sweet_spot_pct',
-    'xBA', 'xSLG', 'xwOBA',
-    'whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed',
-    'LAST_UPDATED',
-]
-STATCAST_NUMERIC_COLS = [
-    'player_id', 'batted_balls', 'pa_events', 'pitches', 'avg_ev', 'max_ev', 'avg_la',
-    'hard_hit_pct', 'barrel_pct', 'sweet_spot_pct', 'xBA', 'xSLG', 'xwOBA',
-    'whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed',
-]
-
 def summarize_statcast_role(raw_df, role, name_map, team_map):
     if raw_df is None or raw_df.empty:
         return pd.DataFrame(columns=STATCAST_DAILY_COLS)
@@ -947,51 +765,6 @@ def get_streaks(min_streak=3, max_rows=40):
     rows.sort(key=lambda item: item['streak'], reverse=True)
     return rows[:max_rows]
 
-SEASON, OPENING_DAY, schedule_date, IN_SEASON = derive_mlb_season_context(now_est)
-gc = get_gspread_client()
-
-if IN_SEASON:
-    print(f"🟢 Regular season mode — {SEASON}")
-else:
-    print(f"🟡 Pre-season detected — using {SEASON} data for testing")
-
-print(f"📅 Schedule date: {schedule_date}")
-print(f"📆 Season: {SEASON}")
-
-try:
-    sh = gc.open_by_key(SHEET_ID)
-    print(f"✅ Connected to Google Sheet: {SHEET_ID}")
-    runlog = RunLogger(gc, SHEET_ID, sport='MLB', kind='engine')
-    atexit.register(runlog.finalize_and_write)
-except Exception as e:
-    print(f"❌ Error: {e}")
-    raise
-
-ODDS_API_KEY = load_secret('ODDS_API_KEY', '🔑 Paste your Odds API Key: ')
-OPENWEATHER_API_KEY = load_secret('OPENWEATHER_API_KEY', '🌤️ Paste your OpenWeather API Key: ')
-GEMINI_API_KEY = load_secret('GEMINI_API_KEY', allow_missing=True)
-if GEMINI_API_KEY:
-    print("🔐 Gemini API key ready!")
-else:
-    print("⚠️ No Gemini API key found — AI picks will be skipped.")
-
-# --- 2. FETCH ALL MLB TEAMS ---
-print("\nFetching MLB teams...")
-teams_resp = requests.get(f"{MLB_API}/teams?sportId=1&season={SEASON}", timeout=10).json()
-team_list = []
-for team in teams_resp.get('teams', []):
-    team_list.append({
-        'team_id': team['id'],
-        'team_name': team['name'],
-        'team_abbr': team.get('abbreviation', ''),
-        'venue_name': team.get('venue', {}).get('name', ''),
-        'venue_id': team.get('venue', {}).get('id', '')
-    })
-df_teams = pd.DataFrame(team_list)
-team_id_to_abbr = dict(zip(df_teams['team_id'], df_teams['team_abbr']))
-print(f"✅ Loaded {len(df_teams)} MLB teams")
-
-
 def fetch_team_rankings(season):
     """Fetch exact league-wide team hitting and pitching rates from MLB Stats API."""
     print("\nFetching MLB team rankings...")
@@ -1119,12 +892,6 @@ def fetch_team_rankings(season):
     return df
 
 
-df_team_rankings = fetch_team_rankings(SEASON)
-
-# --- 3. FETCH BATTER GAME LOGS (PARALLEL) ---
-print(f"\nFetching batter game logs for {SEASON} season...")
-print("⚡ Using parallel fetching...")
-
 def get_qualified_batters(season):
     # MLB defaults this endpoint to its official qualified-player pool. Request
     # everyone, then apply our own PA threshold so active/returning players do
@@ -1184,22 +951,6 @@ def get_player_game_log(player_id, season):
     except Exception:
         return []
 
-BATTER_LOG_BASE_COLS = ['player_id', 'game_pk', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
-                        'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
-BATTER_LOG_NUMERIC_COLS = ['player_id', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
-existing_batter_logs = load_existing_log_sheet('Batter_Game_Logs', BATTER_LOG_BASE_COLS, BATTER_LOG_NUMERIC_COLS)
-latest_batter_date_by_pid = {}
-if len(existing_batter_logs) > 0:
-    latest_batter_date_by_pid = existing_batter_logs.dropna(subset=['player_id']).groupby('player_id')['game_date'].max().to_dict()
-    latest_seed_date = max(latest_batter_date_by_pid.values()) if latest_batter_date_by_pid else ''
-    if latest_seed_date:
-        print(f"♻️ Seeded Batter_Game_Logs through {latest_seed_date} ({len(existing_batter_logs)} existing rows)")
-else:
-    print("🆕 No existing Batter_Game_Logs seed found — full batter fetch")
-
-qualified_batters = get_qualified_batters(SEASON)
-print(f"✅ Found {len(qualified_batters)} qualified batters")
-
 def fetch_one_batter_log(batter):
     logs = get_player_game_log(batter['player_id'], SEASON)
     cutoff = latest_batter_date_by_pid.get(batter['player_id'])
@@ -1210,134 +961,6 @@ def fetch_one_batter_log(batter):
         log['player_name'] = batter['player_name']
         log['game_date'] = normalize_game_date(log['game_date'])
     return logs
-
-all_game_logs = []
-start_time = time.time()
-with ThreadPoolExecutor(max_workers=15) as executor:
-    futures = {executor.submit(fetch_one_batter_log, b): b for b in qualified_batters}
-    done_count = 0
-    for future in as_completed(futures):
-        result = future.result()
-        all_game_logs.extend(result)
-        done_count += 1
-        if done_count % 50 == 0:
-            print(f"   Fetched {done_count}/{len(qualified_batters)} players...")
-
-elapsed = time.time() - start_time
-new_batter_logs = pd.DataFrame(all_game_logs, columns=BATTER_LOG_BASE_COLS)
-# Replace any cached player/date represented in the refresh batch. A game-log
-# row may have been captured before the final out; appending alone would leave
-# both the partial and final lines in history.
-refreshed_batter_rows = 0
-if len(existing_batter_logs) > 0 and len(new_batter_logs) > 0:
-    new_batter_logs['game_date'] = new_batter_logs['game_date'].map(normalize_game_date)
-    refresh_keys = {
-        (int(float(pid)), game_date)
-        for pid, game_date in zip(new_batter_logs['player_id'], new_batter_logs['game_date'])
-        if pd.notna(pid) and game_date
-    }
-    existing_batter_logs['game_date'] = existing_batter_logs['game_date'].map(normalize_game_date)
-    keep_existing = [
-        (int(float(pid)), game_date) not in refresh_keys
-        if pd.notna(pid) else True
-        for pid, game_date in zip(existing_batter_logs['player_id'], existing_batter_logs['game_date'])
-    ]
-    refreshed_batter_rows = len(existing_batter_logs) - sum(keep_existing)
-    existing_batter_logs = existing_batter_logs.loc[keep_existing].copy()
-combined_batter_logs = pd.concat([existing_batter_logs, new_batter_logs], ignore_index=True)
-if len(combined_batter_logs) > 0:
-    combined_batter_logs['game_date'] = combined_batter_logs['game_date'].map(normalize_game_date)
-    dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
-    has_game_pk = combined_batter_logs['game_pk'].notna() & combined_batter_logs['game_pk'].astype(str).str.strip().ne('')
-    logs_with_pk = combined_batter_logs.loc[has_game_pk].drop_duplicates(subset=['player_id', 'game_pk'], keep='last')
-    logs_without_pk = combined_batter_logs.loc[~has_game_pk].drop_duplicates(subset=dedupe_cols, keep='last')
-    combined_batter_logs = pd.concat([logs_without_pk, logs_with_pk], ignore_index=True)
-    combined_batter_logs['game_date'] = pd.to_datetime(combined_batter_logs['game_date'], errors='coerce')
-    df_logs = combined_batter_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
-else:
-    df_logs = combined_batter_logs
-print(f"✅ Fetched {len(new_batter_logs)} recent/new batter logs; refreshed {refreshed_batter_rows} cached rows; {len(df_logs)} combined logs across {df_logs['player_name'].nunique() if len(df_logs) > 0 else 0} players in {elapsed:.1f}s")
-
-# --- 4. CALCULATE METRICS & ROLLING AVERAGES ---
-print("\nCalculating metrics and rolling averages...")
-
-df_logs['1B'] = df_logs['H'] - df_logs['HR'] - df_logs['2B'] - df_logs['3B']
-df_logs['DK_FP'] = (
-    df_logs['1B'] * 3 + df_logs['2B'] * 5 + df_logs['3B'] * 8 +
-    df_logs['HR'] * 10 + df_logs['R'] * 2 + df_logs['RBI'] * 2 +
-    df_logs['BB'] * 2 + df_logs['SB'] * 5 + df_logs['SO'] * -0.5
-).round(2)
-
-# v1.3.0: Underdog Fantasy scoring: 1B=3, 2B=6, 3B=8, HR=10, BB=3, HBP=3, RBI=2, R=2, SB=4
-df_logs['UD_FP'] = (
-    df_logs['1B'] * 3 + df_logs['2B'] * 6 + df_logs['3B'] * 8 +
-    df_logs['HR'] * 10 + df_logs['BB'] * 3 + df_logs['HBP'] * 3 +
-    df_logs['RBI'] * 2 + df_logs['R'] * 2 + df_logs['SB'] * 4
-).round(2)
-
-# v1.3.0: Added 1B, 3B, HBP, UD_FP to rolling averages
-metrics = ['H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', '1B', 'HBP', 'AB', 'DK_FP', 'UD_FP']
-windows = {'L7': 7, 'L14': 14, 'L30': 30}
-
-df_logs = df_logs.set_index('game_date').sort_index()
-for m in metrics:
-    grp = df_logs.groupby('player_id')[m]
-    df_logs[f'Seas_{m}'] = grp.transform(lambda x: x.expanding().mean()).round(3)
-    for label, w in windows.items():
-        df_logs[f'{label}_{m}'] = grp.transform(lambda x: x.rolling(w, min_periods=1).mean()).round(3)
-
-for label, w in windows.items():
-    grp_h = df_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    grp_ab = df_logs.groupby('player_id')['AB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    df_logs[f'{label}_AVG'] = np.where(grp_ab > 0, (grp_h / grp_ab).round(3), 0)
-
-seas_h = df_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
-seas_ab = df_logs.groupby('player_id')['AB'].transform(lambda x: x.expanding().sum())
-df_logs['Seas_AVG'] = np.where(seas_ab > 0, (seas_h / seas_ab).round(3), 0)
-
-# OPS rollings — supports IBB_RISK / lineup protection in §8
-for label, w in windows.items():
-    roll_h   = df_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    roll_bb  = df_logs.groupby('player_id')['BB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    roll_hbp = df_logs.groupby('player_id')['HBP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    roll_sf  = df_logs.groupby('player_id')['SF'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    roll_ab  = df_logs.groupby('player_id')['AB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    roll_tb  = df_logs.groupby('player_id')['TB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-    pa = roll_ab + roll_bb + roll_hbp + roll_sf
-    df_logs[f'{label}_OBP'] = np.where(pa > 0, ((roll_h + roll_bb + roll_hbp) / pa).round(3), 0)
-    df_logs[f'{label}_SLG'] = np.where(roll_ab > 0, (roll_tb / roll_ab).round(3), 0)
-    df_logs[f'{label}_OPS'] = (df_logs[f'{label}_OBP'] + df_logs[f'{label}_SLG']).round(3)
-
-seas_h_ops   = df_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
-seas_bb_ops  = df_logs.groupby('player_id')['BB'].transform(lambda x: x.expanding().sum())
-seas_hbp_ops = df_logs.groupby('player_id')['HBP'].transform(lambda x: x.expanding().sum())
-seas_sf_ops  = df_logs.groupby('player_id')['SF'].transform(lambda x: x.expanding().sum())
-seas_ab_ops  = df_logs.groupby('player_id')['AB'].transform(lambda x: x.expanding().sum())
-seas_tb_ops  = df_logs.groupby('player_id')['TB'].transform(lambda x: x.expanding().sum())
-seas_pa_ops = seas_ab_ops + seas_bb_ops + seas_hbp_ops + seas_sf_ops
-df_logs['Seas_OBP'] = np.where(seas_pa_ops > 0, ((seas_h_ops + seas_bb_ops + seas_hbp_ops) / seas_pa_ops).round(3), 0)
-df_logs['Seas_SLG'] = np.where(seas_ab_ops > 0, (seas_tb_ops / seas_ab_ops).round(3), 0)
-df_logs['Seas_OPS'] = (df_logs['Seas_OBP'] + df_logs['Seas_SLG']).round(3)
-
-df_logs = df_logs.reset_index()
-df_sample_flags = build_batter_sample_flags(df_logs, today_str)
-if not df_sample_flags.empty:
-    df_logs = df_logs.merge(df_sample_flags, on=['player_id', 'player_name'], how='left')
-    df_logs['LIMITED_SAMPLE'] = df_logs['LIMITED_SAMPLE'].fillna(False)
-    df_logs['RETURNING'] = df_logs['RETURNING'].fillna(False)
-    print(f"✅ Sample flags built — {int(df_sample_flags['LIMITED_SAMPLE'].sum())} LIMITED_SAMPLE, {int(df_sample_flags['RETURNING'].sum())} RETURNING")
-else:
-    df_logs['L5_GAMES_PLAYED'] = 0
-    df_logs['GAMES_LAST_7D'] = 0
-    df_logs['LIMITED_SAMPLE'] = False
-    df_logs['RETURNING'] = False
-df_logs['game_date'] = df_logs['game_date'].dt.strftime('%Y-%m-%d')
-df_logs['LAST_UPDATED'] = timestamp_est
-print(f"✅ Metrics calculated — {len(df_logs.columns)} columns total")
-print(f"   📊 New columns: UD_FP, Seas_UD_FP, L7_UD_FP, L14_UD_FP, L30_UD_FP + 1B/3B/HBP rolling avgs")
-
-# --- 5. LHP/RHP SPLITS (PARALLEL) ---
-print("\nCalculating LHP/RHP splits...")
 
 def get_player_splits(player_id, season):
     url = f"{MLB_API}/people/{player_id}/stats?stats=statSplits&group=hitting&season={season}&sportId=1&sitCodes=vl,vr"
@@ -1373,224 +996,6 @@ def fetch_one_batter_splits(batter):
             row[f'{hand}_{k}'] = v
     return row
 
-splits_rows = []
-start_time = time.time()
-with ThreadPoolExecutor(max_workers=15) as executor:
-    futures = {executor.submit(fetch_one_batter_splits, b): b for b in qualified_batters}
-    done_count = 0
-    for future in as_completed(futures):
-        splits_rows.append(future.result())
-        done_count += 1
-        if done_count % 50 == 0:
-            print(f"   Fetched splits {done_count}/{len(qualified_batters)}...")
-
-elapsed = time.time() - start_time
-df_splits = pd.DataFrame(splits_rows)
-df_splits['LAST_UPDATED'] = timestamp_est
-print(f"✅ LHP/RHP splits for {len(df_splits)} players in {elapsed:.1f}s")
-
-# --- 6. HOME/AWAY SPLITS ---
-print("\nCalculating Home/Away splits...")
-
-split_metrics = ['H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', 'DK_FP', 'UD_FP', 'AB']
-df_logs_temp = df_logs.copy()
-
-ha_mean = df_logs_temp.groupby(['player_id', 'home_away'])[split_metrics].mean().round(3)
-ha_count = df_logs_temp.groupby(['player_id', 'home_away'])['AB'].count().rename('GAMES')
-df_home_away = ha_mean.join(ha_count).reset_index()
-
-ha_pivot = df_home_away.pivot(index='player_id', columns='home_away', values=split_metrics)
-ha_pivot.columns = [f'{stat}_{loc}' for stat, loc in ha_pivot.columns]
-ha_count_pivot = df_home_away.pivot(index='player_id', columns='home_away', values='GAMES')
-ha_count_pivot.columns = [f'{c}_GAMES' for c in ha_count_pivot.columns]
-ha_pivot = ha_pivot.join(ha_count_pivot)
-
-for m in split_metrics:
-    for loc in ['Home', 'Away']:
-        col = f'{m}_{loc}'
-        if col not in ha_pivot.columns:
-            ha_pivot[col] = np.nan
-for loc in ['Home', 'Away']:
-    gcol = f'{loc}_GAMES'
-    if gcol not in ha_pivot.columns:
-        ha_pivot[gcol] = np.nan
-
-for m in split_metrics:
-    hc, ac = f'{m}_Home', f'{m}_Away'
-    if hc in ha_pivot.columns and ac in ha_pivot.columns:
-        ha_pivot[f'{m}_SPLIT_DIFF'] = (ha_pivot[hc] - ha_pivot[ac]).where(
-            ha_pivot[hc].notna() & ha_pivot[ac].notna(), other=np.nan).round(3)
-
-player_names = df_logs_temp.groupby('player_id')['player_name'].first()
-ha_pivot = ha_pivot.reset_index().merge(player_names, on='player_id', how='left')
-ha_pivot = ha_pivot.reindex(sorted(ha_pivot.columns), axis=1)
-cols = ['player_id', 'player_name'] + [c for c in ha_pivot.columns if c not in ['player_id', 'player_name']]
-ha_pivot = ha_pivot[cols]
-ha_pivot['LAST_UPDATED'] = timestamp_est
-print(f"✅ Home/Away splits for {ha_pivot['player_name'].nunique()} players")
-
-# --- 6.5 STATCAST QUALITY OF CONTACT / PITCH SHAPE SIGNALS ---
-print("\nFetching and aggregating Statcast signals...")
-
-df_statcast_daily = load_existing_log_sheet('Statcast_Daily', STATCAST_DAILY_COLS, STATCAST_NUMERIC_COLS)
-df_batter_statcast = pd.DataFrame()
-df_pitcher_statcast = pd.DataFrame()
-
-statcast_enabled = os.environ.get('STATCAST_ENABLED', '1').strip().lower() not in {'0', 'false', 'no'}
-statcast_lookback_days = int(os.environ.get('STATCAST_LOOKBACK_DAYS', '21') or 21)
-statcast_cache_days = int(os.environ.get('STATCAST_CACHE_DAYS', '45') or 45)
-statcast_end_ts = pd.to_datetime(schedule_date, errors='coerce')
-if pd.isna(statcast_end_ts):
-    statcast_end_ts = pd.to_datetime(today_str, errors='coerce')
-statcast_fetch_start = statcast_end_ts - pd.Timedelta(days=statcast_lookback_days - 1)
-
-if len(df_statcast_daily) > 0:
-    df_statcast_daily['game_date'] = df_statcast_daily['game_date'].map(normalize_game_date)
-    latest_statcast_date = pd.to_datetime(df_statcast_daily['game_date'], errors='coerce').max()
-    if pd.notna(latest_statcast_date):
-        statcast_fetch_start = max(statcast_fetch_start, latest_statcast_date + pd.Timedelta(days=1))
-        print(f"♻️ Seeded Statcast_Daily through {latest_statcast_date.strftime('%Y-%m-%d')} ({len(df_statcast_daily)} rows)")
-else:
-    print("🆕 No existing Statcast_Daily seed found — recent Statcast fetch")
-
-if statcast_enabled and pd.notna(statcast_end_ts) and statcast_fetch_start <= statcast_end_ts:
-    batter_names, batter_teams, pitcher_names, pitcher_teams = build_statcast_name_maps(
-        qualified_batters, [], df_logs, None)
-    new_statcast_daily = fetch_statcast_daily_summaries(
-        statcast_fetch_start.strftime('%Y-%m-%d'),
-        statcast_end_ts.strftime('%Y-%m-%d'),
-        batter_names, batter_teams, pitcher_names, pitcher_teams)
-    df_statcast_daily = pd.concat([df_statcast_daily, new_statcast_daily], ignore_index=True)
-elif not statcast_enabled:
-    print("   ⏭️ Statcast disabled by STATCAST_ENABLED=0")
-else:
-    print("   ✅ Statcast cache already current for requested date")
-
-if len(df_statcast_daily) > 0:
-    df_statcast_daily['game_date'] = df_statcast_daily['game_date'].map(normalize_game_date)
-    df_statcast_daily['player_id'] = pd.to_numeric(df_statcast_daily['player_id'], errors='coerce')
-    df_statcast_daily = df_statcast_daily.dropna(subset=['player_id', 'game_date', 'role']).copy()
-    df_statcast_daily['player_id'] = df_statcast_daily['player_id'].astype(int)
-    for col in STATCAST_NUMERIC_COLS:
-        if col in df_statcast_daily.columns:
-            df_statcast_daily[col] = pd.to_numeric(df_statcast_daily[col], errors='coerce')
-    df_statcast_daily = df_statcast_daily.drop_duplicates(
-        subset=['game_date', 'player_id', 'role'], keep='last')
-    cache_cutoff = statcast_end_ts - pd.Timedelta(days=statcast_cache_days - 1)
-    df_statcast_daily_dt = pd.to_datetime(df_statcast_daily['game_date'], errors='coerce')
-    df_statcast_daily = df_statcast_daily[df_statcast_daily_dt >= cache_cutoff].copy()
-    df_statcast_daily['LAST_UPDATED'] = timestamp_est
-    df_batter_statcast = rollup_statcast_players(df_statcast_daily, 'BATTER', schedule_date)
-    df_pitcher_statcast = rollup_statcast_players(df_statcast_daily, 'PITCHER', schedule_date)
-    print(f"✅ Statcast rollups — {len(df_batter_statcast)} batters, {len(df_pitcher_statcast)} pitchers")
-else:
-    df_statcast_daily = pd.DataFrame(columns=STATCAST_DAILY_COLS)
-    df_batter_statcast = pd.DataFrame()
-    df_pitcher_statcast = pd.DataFrame()
-    print("⚠️ No Statcast data available; continuing without Statcast signals")
-
-# --- 7. TONIGHT'S SCHEDULE & STARTING PITCHERS ---
-print("\nFetching tonight's schedule and starting pitchers...")
-
-games_tonight = []
-pitcher_map = {}
-venue_coords_dynamic = {}
-# Distinguishes "the fetch failed" from "there are genuinely no games today".
-# Both leave games_tonight empty, but they need opposite write behavior — see the
-# Tonights_Schedule handling in the write phase.
-schedule_fetch_ok = False
-
-DOMED_VENUES = {
-    'Tropicana Field', 'Globe Life Field', 'loanDepot park',
-    'Minute Maid Park', 'Daikin Park',
-    'Rogers Centre', 'T-Mobile Park',
-    'Chase Field', 'American Family Field'
-}
-
-try:
-    sched_url = f"{MLB_API}/schedule?sportId=1&date={schedule_date}&hydrate=probablePitcher,team,venue&gameType=R"
-    sched_resp = requests.get(sched_url, timeout=10).json()
-
-    for date in sched_resp.get('dates', []):
-        for game in date.get('games', []):
-            home = game['teams']['home']
-            away = game['teams']['away']
-            venue = game.get('venue', {})
-            home_abbr = home['team'].get('abbreviation', '')
-            away_abbr = away['team'].get('abbreviation', '')
-            home_pitcher = home.get('probablePitcher', {})
-            away_pitcher = away.get('probablePitcher', {})
-
-            venue_name = venue.get('name', '')
-            venue_lat = venue.get('location', {}).get('defaultCoordinates', {}).get('latitude')
-            venue_lon = venue.get('location', {}).get('defaultCoordinates', {}).get('longitude')
-
-            if venue_lat and venue_lon:
-                venue_coords_dynamic[venue_name] = (venue_lat, venue_lon)
-
-            games_tonight.append({
-                'game_pk': game['gamePk'], 'home_abbr': home_abbr, 'away_abbr': away_abbr,
-                'home_team_id': home['team']['id'], 'away_team_id': away['team']['id'],
-                'venue_name': venue_name, 'venue_id': venue.get('id', ''),
-                'venue_lat': venue_lat, 'venue_lon': venue_lon,
-                # game_time is the raw MLB StatsAPI UTC instant (…T23:05:00Z). For any
-                # game after 8pm ET its UTC *date* is already tomorrow, so consumers
-                # must convert before comparing. game_date is the Eastern slate date
-                # this run actually requested, so a stale tab is self-identifying
-                # instead of requiring the date to be inferred from a UTC timestamp.
-                'game_date': schedule_date,
-                'game_time': game.get('gameDate', ''),
-                'home_pitcher_id': home_pitcher.get('id'),
-                'home_pitcher_name': home_pitcher.get('fullName', 'TBD'),
-                'away_pitcher_id': away_pitcher.get('id'),
-                'away_pitcher_name': away_pitcher.get('fullName', 'TBD'),
-            })
-
-            if home_pitcher.get('id'):
-                pitcher_map[away_abbr] = {'opp_pitcher_id': home_pitcher['id'], 'opp_pitcher_name': home_pitcher.get('fullName', 'TBD')}
-            if away_pitcher.get('id'):
-                pitcher_map[home_abbr] = {'opp_pitcher_id': away_pitcher['id'], 'opp_pitcher_name': away_pitcher.get('fullName', 'TBD')}
-
-    print(f"⚾ Found {len(games_tonight)} games on {schedule_date}")
-    for g in games_tonight:
-        print(f"   {g['away_abbr']} ({g['away_pitcher_name']}) @ {g['home_abbr']} ({g['home_pitcher_name']}) — {g['venue_name']}")
-    if venue_coords_dynamic:
-        print(f"📍 Dynamic venue coordinates loaded for {len(venue_coords_dynamic)} venues")
-    schedule_fetch_ok = True
-except Exception as e:
-    print(f"❌ Schedule fetch failed: {e}")
-    # schedule_fetch_ok stays False, so the write phase will NOT clear
-    # Tonights_Schedule — blanking it would hide tonight's slate entirely. It keeps
-    # the previous contents instead, which is the lesser evil but is invisible on the
-    # sheet, so say so loudly here and in the run log.
-    print("   ⚠️  Tonights_Schedule will KEEP its previous contents — that tab is now STALE.")
-    try:
-        runlog.warn("Schedule fetch failed; Tonights_Schedule left stale (previous day's rows retained).")
-    except Exception:
-        pass
-
-VENUE_COORDS_FALLBACK = {
-    'Angel Stadium': (33.8003, -117.8827), 'Busch Stadium': (38.6226, -90.1928),
-    'Chase Field': (33.4455, -112.0667), 'Citi Field': (40.7571, -73.8458),
-    'Citizens Bank Park': (39.9061, -75.1665), 'Comerica Park': (42.3390, -83.0485),
-    'Coors Field': (39.7559, -104.9942), 'Dodger Stadium': (34.0739, -118.2400),
-    'UNIQLO FIELD AT DODGER STADIUM': (34.0739, -118.2400),
-    'Fenway Park': (42.3467, -71.0972), 'Globe Life Field': (32.7473, -97.0845),
-    'Great American Ball Park': (39.0974, -84.5082),
-    'Guaranteed Rate Field': (41.8299, -87.6338), 'Rate Field': (41.8299, -87.6338),
-    'Kauffman Stadium': (39.0517, -94.4803), 'loanDepot park': (25.7781, -80.2196),
-    'Minute Maid Park': (29.7573, -95.3555), 'Daikin Park': (29.7573, -95.3555),
-    'Nationals Park': (38.8730, -77.0074),
-    'Oakland Coliseum': (37.7516, -122.2005), 'Sutter Health Park': (38.5802, -121.5101), 'Oracle Park': (37.7786, -122.3893),
-    'Oriole Park at Camden Yards': (39.2838, -76.6216), 'Petco Park': (32.7076, -117.1570),
-    'PNC Park': (40.4469, -80.0058), 'Progressive Field': (41.4962, -81.6852),
-    'Rogers Centre': (43.6414, -79.3894), 'T-Mobile Park': (47.5914, -122.3325),
-    'Target Field': (44.9818, -93.2775), 'Tropicana Field': (27.7682, -82.6534),
-    'Truist Park': (33.8908, -84.4678), 'Wrigley Field': (41.9484, -87.6553),
-    'Yankee Stadium': (40.8296, -73.9262), 'American Family Field': (43.0280, -87.9712),
-    'George M. Steinbrenner Field': (27.9789, -82.5034), 'Salt River Fields': (33.5453, -111.8847),
-}
-
 def get_venue_coords(venue_name):
     if venue_name in venue_coords_dynamic:
         return venue_coords_dynamic[venue_name]
@@ -1608,202 +1013,6 @@ def get_pitcher_hand(pitcher_id):
         return resp.get('people', [{}])[0].get('pitchHand', {}).get('code', 'R')
     except Exception:
         return 'R'
-
-for team_abbr, info in pitcher_map.items():
-    if info.get('opp_pitcher_id'):
-        info['opp_pitcher_hand'] = get_pitcher_hand(info['opp_pitcher_id'])
-        time.sleep(0.1)
-
-print(f"✅ Pitcher handedness fetched for {len(pitcher_map)} teams")
-for team, info in pitcher_map.items():
-    print(f"   {team} faces {info['opp_pitcher_name']} ({info.get('opp_pitcher_hand','?')}HP)")
-
-# --- 7.5 TWO-WAY PLAYER DETECTION (data-driven, future-proof) ---
-# A two-way player is anyone who is BOTH a probable SP tonight AND a qualified batter.
-# Ohtani is the known case, but this generalizes to any future two-way player.
-tonight_sp_names = set()
-for g in games_tonight:
-    if g.get('home_pitcher_name') and g['home_pitcher_name'] != 'TBD':
-        tonight_sp_names.add(g['home_pitcher_name'])
-    if g.get('away_pitcher_name') and g['away_pitcher_name'] != 'TBD':
-        tonight_sp_names.add(g['away_pitcher_name'])
-
-qualified_batter_names = {b['player_name'] for b in qualified_batters}
-two_way_tonight = tonight_sp_names & qualified_batter_names
-
-if two_way_tonight:
-    print(f"⚠️  TWO-WAY PLAYER ALERT: {', '.join(sorted(two_way_tonight))} pitching AND on qualified batter list")
-    print(f"   → Batter props will carry LINEUP RISK flag (confirm lineup before betting)")
-else:
-    print(f"ℹ️  No two-way players pitching tonight")
-
-# --- 8. BUILD TONIGHT'S BATTER SHEET (ROSTER-SAFE + EARLY-SEASON EXPANSION) ---
-print("\nBuilding tonight's batter sheet...")
-
-active_team_abbrs = set()
-active_team_ids = {}
-for g in games_tonight:
-    active_team_abbrs.add(g['home_abbr'])
-    active_team_abbrs.add(g['away_abbr'])
-    active_team_ids[g['home_abbr']] = g['home_team_id']
-    active_team_ids[g['away_abbr']] = g['away_team_id']
-
-batter_current_team = {b['player_id']: b['team_abbr'] for b in qualified_batters}
-
-most_recent = df_logs.sort_values('game_date').groupby('player_id').last().reset_index()
-most_recent['team_abbr'] = most_recent['player_id'].map(batter_current_team)
-most_recent['player_name'] = most_recent['player_id'].map(
-    {b['player_id']: b['player_name'] for b in qualified_batters})
-most_recent = most_recent[most_recent['team_abbr'].isin(active_team_abbrs)].copy()
-
-print("   🔄 Early-season expansion: fetching full rosters for tonight's teams...")
-expansion_batters = []
-existing_ids = set(most_recent['player_id'].unique())
-
-for team_abbr, team_id in active_team_ids.items():
-    try:
-        roster_url = f"{MLB_API}/teams/{team_id}/roster?rosterType=active&season={SEASON}"
-        roster_resp = requests.get(roster_url, timeout=10).json()
-        for entry in roster_resp.get('roster', []):
-            pid = entry.get('person', {}).get('id')
-            pname = entry.get('person', {}).get('fullName', '')
-            pos_type = entry.get('position', {}).get('type', '')
-            if pid and pid not in existing_ids and pos_type != 'Pitcher':
-                expansion_batters.append({'player_id': pid, 'player_name': pname, 'team_abbr': team_abbr})
-                existing_ids.add(pid)
-    except Exception as e:
-        print(f"   ⚠️ Roster fetch failed for {team_abbr}: {e}")
-
-if expansion_batters:
-    df_expansion = pd.DataFrame(expansion_batters)
-    for col in most_recent.columns:
-        if col not in df_expansion.columns:
-            df_expansion[col] = np.nan
-    most_recent = pd.concat([most_recent, df_expansion[most_recent.columns]], ignore_index=True)
-    print(f"   ✅ Added {len(expansion_batters)} batters from roster expansion (no game logs yet)")
-else:
-    print(f"   ℹ️ No additional batters needed")
-
-most_recent['opp_pitcher_name'] = most_recent['team_abbr'].map(
-    {k: v['opp_pitcher_name'] for k, v in pitcher_map.items()})
-most_recent['opp_pitcher_hand'] = most_recent['team_abbr'].map(
-    {k: v.get('opp_pitcher_hand', 'R') for k, v in pitcher_map.items()})
-most_recent['opp_abbr_tonight'] = most_recent['team_abbr'].map(
-    {g['home_abbr']: g['away_abbr'] for g in games_tonight} |
-    {g['away_abbr']: g['home_abbr'] for g in games_tonight})
-most_recent['venue_tonight'] = most_recent['team_abbr'].map(
-    {g['home_abbr']: g['venue_name'] for g in games_tonight} |
-    {g['away_abbr']: g['venue_name'] for g in games_tonight})
-most_recent['home_away_tonight'] = most_recent['team_abbr'].map(
-    {g['home_abbr']: 'Home' for g in games_tonight} |
-    {g['away_abbr']: 'Away' for g in games_tonight})
-
-if 'Seas_OPS' in most_recent.columns:
-    elite_ops_series = pd.to_numeric(most_recent['Seas_OPS'], errors='coerce')
-else:
-    elite_ops_series = pd.Series(dtype=float)
-elite_ops_cutoff = max(0.850, float(elite_ops_series.dropna().quantile(0.85))) if not elite_ops_series.dropna().empty else 0.850
-most_recent['IBB_RISK'] = False
-most_recent['LINEUP_PROTECTION_NOTE'] = ""
-most_recent['TEAM_SUPPORT_OPS1'] = np.nan
-most_recent['TEAM_SUPPORT_OPS2'] = np.nan
-
-for idx, row in most_recent.iterrows():
-    ops = pd.to_numeric(pd.Series([row.get('Seas_OPS')]), errors='coerce').iloc[0]
-    if pd.isna(ops) or ops < elite_ops_cutoff:
-        continue
-    teammates = most_recent[(most_recent['team_abbr'] == row.get('team_abbr')) & (most_recent['player_id'] != row.get('player_id'))]
-    if 'Seas_OPS' in teammates.columns:
-        teammate_ops = pd.to_numeric(teammates['Seas_OPS'], errors='coerce')
-    else:
-        teammate_ops = pd.Series(dtype=float)
-    support_ops = sorted(teammate_ops.dropna().tolist(), reverse=True)
-    top1 = support_ops[0] if len(support_ops) > 0 else np.nan
-    top2 = support_ops[1] if len(support_ops) > 1 else np.nan
-    most_recent.at[idx, 'TEAM_SUPPORT_OPS1'] = top1
-    most_recent.at[idx, 'TEAM_SUPPORT_OPS2'] = top2
-    weak_support = (pd.isna(top1) or top1 < 0.760) and (pd.isna(top2) or top2 < 0.720)
-    if weak_support:
-        top1_txt = f"{top1:.3f}" if pd.notna(top1) else "n/a"
-        top2_txt = f"{top2:.3f}" if pd.notna(top2) else "n/a"
-        most_recent.at[idx, 'IBB_RISK'] = True
-        most_recent.at[idx, 'LINEUP_PROTECTION_NOTE'] = f"LINEUP RISK: weak lineup protection (support OPS {top1_txt}/{top2_txt})"
-
-df_splits_merge = df_splits.copy()
-for col in df_splits_merge.columns:
-    if col not in ['player_id', 'player_name', 'team_abbr', 'LAST_UPDATED']:
-        df_splits_merge.rename(columns={col: f'SPLIT_{col}'}, inplace=True)
-
-most_recent = most_recent.merge(
-    df_splits_merge[['player_id'] + [c for c in df_splits_merge.columns if 'SPLIT_' in c]],
-    on='player_id', how='left')
-ha_merge_cols = ['player_id', 'Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB_Away',
-                 'HR_Home', 'HR_Away', 'RBI_Home', 'RBI_Away', 'UD_FP_Home', 'UD_FP_Away']
-ha_merge_cols = [c for c in ha_merge_cols if c in ha_pivot.columns]
-if ha_merge_cols:
-    most_recent = most_recent.merge(ha_pivot[ha_merge_cols], on='player_id', how='left')
-
-if df_batter_statcast is not None and len(df_batter_statcast) > 0:
-    statcast_merge_cols = ['player_id'] + [c for c in df_batter_statcast.columns if c.startswith('SC_')]
-    most_recent = most_recent.merge(df_batter_statcast[statcast_merge_cols], on='player_id', how='left')
-    h_score = (
-        50
-        + (numeric_col(most_recent, 'SC_L14_xBA') - 0.250).fillna(0) * 120
-        + (numeric_col(most_recent, 'SC_L14_hard_hit_pct') - 35).fillna(0) * 0.45
-        + (numeric_col(most_recent, 'L7_H') - numeric_col(most_recent, 'Seas_H')).fillna(0) * 5
-    )
-    power_score = (
-        50
-        + (numeric_col(most_recent, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
-        + (numeric_col(most_recent, 'SC_L14_avg_ev') - 89).fillna(0) * 1.7
-        + (numeric_col(most_recent, 'SC_L14_xSLG') - 0.420).fillna(0) * 70
-    )
-    most_recent['H_PLAYER_SCORE'] = clip_score(h_score)
-    most_recent['H_OPP_ADJ'] = 0.0
-    most_recent['H_EDGE_SCORE'] = most_recent['H_PLAYER_SCORE']
-    most_recent['POWER_PLAYER_SCORE'] = clip_score(power_score)
-    most_recent['POWER_OPP_ADJ'] = 0.0
-    most_recent['POWER_EDGE_SCORE'] = most_recent['POWER_PLAYER_SCORE']
-else:
-    most_recent['H_PLAYER_SCORE'] = np.nan
-    most_recent['H_OPP_ADJ'] = np.nan
-    most_recent['H_EDGE_SCORE'] = np.nan
-    most_recent['POWER_PLAYER_SCORE'] = np.nan
-    most_recent['POWER_OPP_ADJ'] = np.nan
-    most_recent['POWER_EDGE_SCORE'] = np.nan
-
-split_stats = ['AVG', 'OPS', 'H', 'HR', 'TB', 'RBI', 'SO', 'BB']
-for stat in split_stats:
-    most_recent[f'vs_OPP_{stat}'] = np.where(
-        most_recent['opp_pitcher_hand'] == 'L',
-        most_recent.get(f'SPLIT_vs_LHP_{stat}', np.nan),
-        most_recent.get(f'SPLIT_vs_RHP_{stat}', np.nan))
-
-rolling_cols = [c for c in most_recent.columns if any(c.startswith(p) for p in ['L7_', 'L14_', 'L30_', 'Seas_'])]
-statcast_cols = [c for c in most_recent.columns if c.startswith('SC_')] + [
-    'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
-    'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
-]
-ha_prompt_cols = ['Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB_Away',
-                  'HR_Home', 'HR_Away', 'RBI_Home', 'RBI_Away', 'UD_FP_Home', 'UD_FP_Away']
-final_cols = (
-    ['player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name', 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight'] +
-    [f'vs_OPP_{s}' for s in split_stats] + ha_prompt_cols + rolling_cols + statcast_cols +
-    ['L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
-     'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
-final_cols = [c for c in final_cols if c in most_recent.columns]
-df_tonight = most_recent[final_cols].copy()
-df_tonight = df_tonight.sort_values('player_name').reset_index(drop=True)
-
-game_log_count = df_tonight['L7_H'].notna().sum() if 'L7_H' in df_tonight.columns else 0
-roster_only_count = len(df_tonight) - game_log_count
-print(f"✅ Tonight's batter sheet built — {len(df_tonight)} active batters")
-print(f"   ({game_log_count} with game logs, {roster_only_count} roster-only)")
-print(f"   Columns: {len(df_tonight.columns)}")
-
-# --- 8.5 BATTER vs STARTING PITCHER (CAREER) ---
-print("\nFetching career batter vs SP stats...")
-vs_sp_rows = []
 
 def fetch_batter_vs_pitcher(batter_name, batter_id, pitcher_id, pitcher_name):
     url = f"{MLB_API}/people/{batter_id}/stats?stats=vsPlayer&group=hitting&opposingPlayerId={pitcher_id}"
@@ -1828,36 +1037,6 @@ def fetch_batter_vs_pitcher(batter_name, batter_id, pitcher_id, pitcher_name):
         return None
 
 # Build batter→pitcher pairs from tonight's matchups
-batter_pitcher_pairs = []
-for b in qualified_batters:
-    team = b['team_abbr']
-    if team in pitcher_map and pitcher_map[team].get('opp_pitcher_id'):
-        if team in active_team_abbrs:
-            batter_pitcher_pairs.append((b['player_name'], b['player_id'],
-                pitcher_map[team]['opp_pitcher_id'], pitcher_map[team]['opp_pitcher_name']))
-
-print(f"   Fetching {len(batter_pitcher_pairs)} batter vs SP matchups...")
-start_time = time.time()
-with ThreadPoolExecutor(max_workers=15) as executor:
-    futures = {executor.submit(fetch_batter_vs_pitcher, *pair): pair for pair in batter_pitcher_pairs}
-    done_count = 0
-    for future in as_completed(futures):
-        result = future.result()
-        if result:
-            vs_sp_rows.append(result)
-        done_count += 1
-        if done_count % 50 == 0:
-            print(f"   Fetched {done_count}/{len(batter_pitcher_pairs)}...")
-
-elapsed = time.time() - start_time
-df_vs_sp = pd.DataFrame(vs_sp_rows)
-if len(df_vs_sp) > 0:
-    df_vs_sp['LAST_UPDATED'] = timestamp_est
-print(f"✅ Career vs SP data for {len(df_vs_sp)} matchups in {elapsed:.1f}s")
-
-# --- 9. WEATHER ---
-print("\nFetching weather for tonight's venues...")
-
 def get_weather(lat, lon, api_key):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=imperial"
@@ -1875,59 +1054,6 @@ def get_weather(lat, lon, api_key):
 def wind_direction_label(degrees):
     dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
     return dirs[round(degrees / 22.5) % 16]
-
-weather_rows = []
-seen_venues = set()
-for game in games_tonight:
-    venue = game['venue_name']
-    if venue in seen_venues:
-        continue
-    seen_venues.add(venue)
-    is_dome = venue.lower() in {v.lower() for v in DOMED_VENUES}
-    coords = get_venue_coords(venue)
-    if coords and OPENWEATHER_API_KEY:
-        wx = get_weather(coords[0], coords[1], OPENWEATHER_API_KEY)
-        if wx:
-            weather_rows.append({
-                'venue_name': venue, 'home_abbr': game['home_abbr'], 'away_abbr': game['away_abbr'],
-                'is_dome': is_dome, 'temp_f': wx['temp_f'], 'feels_like_f': wx['feels_like_f'],
-                'humidity': wx['humidity'], 'wind_mph': wx['wind_mph'],
-                'wind_dir': wind_direction_label(wx['wind_dir']), 'wind_deg': wx['wind_dir'],
-                'condition': wx['condition'], 'description': wx['description'], 'clouds_pct': wx['clouds_pct'],
-                'weather_note': 'Dome/Roof — weather may not apply' if is_dome else '',
-            })
-            status = "🏟️ DOME" if is_dome else f"🌡️ {wx['temp_f']}°F"
-            print(f"   {venue}: {status}, {wx['wind_mph']}mph {wind_direction_label(wx['wind_dir'])}, {wx['description']}")
-    else:
-        weather_rows.append({'venue_name': venue, 'home_abbr': game['home_abbr'], 'away_abbr': game['away_abbr'],
-            'is_dome': is_dome, 'weather_note': 'Dome/Roof' if is_dome else 'No coordinates available'})
-        print(f"   {venue}: {'🏟️ DOME' if is_dome else '⚠️ No coordinates'}")
-    time.sleep(0.25)
-
-df_weather = pd.DataFrame(weather_rows)
-df_weather['LAST_UPDATED'] = timestamp_est
-print(f"✅ Weather data for {len(df_weather)} venues")
-
-# --- 10. BETTING ODDS ---
-ODDS_SPORT = 'baseball_mlb'
-ODDS_REGIONS = 'us'
-ODDS_MARKETS = 'h2h,spreads,totals'
-
-TEAM_NAME_TO_ABBR = {
-    'Arizona Diamondbacks': 'AZ', 'Atlanta Braves': 'ATL', 'Baltimore Orioles': 'BAL',
-    'Boston Red Sox': 'BOS', 'Chicago Cubs': 'CHC', 'Chicago White Sox': 'CWS',
-    'Cincinnati Reds': 'CIN', 'Cleveland Guardians': 'CLE', 'Colorado Rockies': 'COL',
-    'Detroit Tigers': 'DET', 'Houston Astros': 'HOU', 'Kansas City Royals': 'KC',
-    'Los Angeles Angels': 'LAA', 'Los Angeles Dodgers': 'LAD', 'Miami Marlins': 'MIA',
-    'Milwaukee Brewers': 'MIL', 'Minnesota Twins': 'MIN', 'New York Mets': 'NYM',
-    'New York Yankees': 'NYY', 'Oakland Athletics': 'OAK', 'Philadelphia Phillies': 'PHI',
-    'Pittsburgh Pirates': 'PIT', 'San Diego Padres': 'SD', 'San Francisco Giants': 'SF',
-    'Seattle Mariners': 'SEA', 'St. Louis Cardinals': 'STL', 'Tampa Bay Rays': 'TB',
-    'Texas Rangers': 'TEX', 'Toronto Blue Jays': 'TOR', 'Washington Nationals': 'WSH',
-}
-
-skip_odds_api_props = False
-
 
 def odds_event_eastern_date(commence_time):
     try:
@@ -2005,106 +1131,6 @@ def extract_odds(events, preferred_book='draftkings', fallback_book='fanduel'):
                     elif o['name'] == 'Under': row['under_odds'] = o['price']
         rows.append(row)
     return rows
-
-if (now_est >= OPENING_DAY or now_est.month >= 4) and ODDS_API_KEY:
-    print("\nFetching betting odds...")
-    today_event_count = fetch_today_event_count(ODDS_API_KEY, ODDS_SPORT, schedule_date)
-    if today_event_count == 0:
-        print("⛔ No MLB events today — aborting Odds API odds/props fetch to preserve credits.")
-        skip_odds_api_props = True
-        df_odds = pd.DataFrame()
-    else:
-        raw_odds = fetch_odds(ODDS_API_KEY)
-        odds_rows = extract_odds(raw_odds)
-        df_odds = pd.DataFrame(odds_rows)
-    if len(df_odds) > 0:
-        df_odds['total'] = pd.to_numeric(df_odds.get('total', pd.Series()), errors='coerce')
-        df_odds['home_spread'] = pd.to_numeric(df_odds.get('home_spread', pd.Series()), errors='coerce')
-        df_odds['home_implied_total'] = ((df_odds['total'] - df_odds['home_spread']) / 2).round(2)
-        df_odds['away_implied_total'] = ((df_odds['total'] + df_odds['home_spread']) / 2).round(2)
-        df_odds['home_abbr'] = df_odds['home_team'].map(TEAM_NAME_TO_ABBR)
-        df_odds['away_abbr'] = df_odds['away_team'].map(TEAM_NAME_TO_ABBR)
-        if active_team_abbrs:
-            before_games = len(df_odds)
-            df_odds = df_odds[
-                df_odds['home_abbr'].isin(active_team_abbrs) &
-                df_odds['away_abbr'].isin(active_team_abbrs)
-            ].copy()
-            print(f"🎯 Odds aligned to tonight's slate: {before_games} -> {len(df_odds)} games")
-        df_odds['LAST_UPDATED'] = timestamp_est
-        print(f"✅ Odds fetched for {len(df_odds)} games")
-    else:
-        df_odds = pd.DataFrame()
-else:
-    print("\n⏭️ Odds skipped")
-    df_odds = pd.DataFrame()
-
-df_schedule = pd.DataFrame(games_tonight)
-# Explicit Eastern slate date. Without this the only date-bearing field is game_time,
-# a UTC instant — and for any game after 8pm ET its UTC date is already tomorrow, so
-# consumers can't cheaply tell which slate the tab describes. Stamping the date the run
-# actually targeted makes a stale tab self-identifying (compare game_date to today).
-# Assigned even when empty so a header-only write still carries the column.
-df_schedule['game_date'] = schedule_date
-df_schedule['LAST_UPDATED'] = timestamp_est
-
-pitcher_rows_out = []
-for team_abbr, info in pitcher_map.items():
-    pitcher_rows_out.append({'team_abbr': team_abbr, 'opp_pitcher_id': info.get('opp_pitcher_id', ''),
-        'opp_pitcher_name': info.get('opp_pitcher_name', 'TBD'), 'opp_pitcher_hand': info.get('opp_pitcher_hand', '')})
-df_pitchers = pd.DataFrame(pitcher_rows_out)
-df_pitchers['LAST_UPDATED'] = timestamp_est
-
-# --- MULTI-BOOK PLAYER PROPS ---
-print("\nFetching Live Multi-Book Player Props...")
-SPORT = 'baseball_mlb'
-BOOKMAKER = 'draftkings'
-PROP_BOOKMAKER = 'draftkings'
-FALLBACK_BOOKMAKER = 'fanduel'
-THIN_MARKET_THRESHOLD = 5
-# Caesars was dropped on 2026-05-27 — returned 0/0 best-book wins in production verification.
-# May be worth re-adding after 6/1 reset to re-test (could have been a one-day API issue).
-SUPPORTED_BOOKMAKERS = ['draftkings', 'fanduel', 'betmgm', 'espnbet']
-ACTIVE_PROP_BOOKMAKERS = SUPPORTED_BOOKMAKERS if ENABLE_FANDUEL_FALLBACK else [
-    b for b in SUPPORTED_BOOKMAKERS if b != FALLBACK_BOOKMAKER
-]
-REFERENCE_BOOKMAKER = 'draftkings'
-BEST_BOOK_TIE_BREAK = 'alpha'
-
-MARKET_BATCHES = [
-    'batter_hits,batter_total_bases,batter_home_runs,batter_rbis,batter_runs_scored',
-    'batter_stolen_bases,batter_strikeouts,batter_walks,batter_singles,batter_doubles',
-    'pitcher_strikeouts,pitcher_hits_allowed,pitcher_walks,pitcher_earned_runs,pitcher_outs',
-]
-
-market_mapping = {
-    'batter_hits': 'H', 'batter_total_bases': 'TB', 'batter_home_runs': 'HR',
-    'batter_rbis': 'RBI', 'batter_runs_scored': 'R', 'batter_stolen_bases': 'SB',
-    'batter_strikeouts': 'Batter_SO', 'batter_walks': 'BB',
-    'batter_singles': '1B', 'batter_doubles': '2B',
-    'pitcher_strikeouts': 'P_SO', 'pitcher_hits_allowed': 'P_H',
-    'pitcher_walks': 'P_BB', 'pitcher_earned_runs': 'P_ER', 'pitcher_outs': 'P_OUTS'
-}
-
-BINARY_PROP_MARKETS = {
-    'batter_home_runs': 0.5,
-    'batter_stolen_bases': 0.5,
-    'batter_singles': 0.5,
-    'batter_doubles': 0.5,
-}
-name_fixes = {}
-
-DK_PLAYER_PROPS_COLUMNS = [
-    'PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'BOOK',
-    'REFERENCE_BOOK', 'BEST_OVER_BOOK', 'BEST_OVER_ODDS', 'BEST_OVER_DELTA_PP',
-    'BEST_UNDER_BOOK', 'BEST_UNDER_ODDS', 'BEST_UNDER_DELTA_PP',
-    'ALT_LINE_AVAILABLE', 'ALT_LINE_BOOKS', 'LAST_UPDATED'
-]
-ALL_BOOKS_PROPS_COLUMNS = [
-    'PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS',
-    'OVER_IMPLIED', 'UNDER_IMPLIED', 'LAST_UPDATED'
-]
-
 
 def american_to_implied(odds):
     try:
@@ -2315,112 +1341,6 @@ def print_best_book_summary(df_props, df_all_books):
     print("=" * 60)
 
 
-df_props = pd.DataFrame(columns=DK_PLAYER_PROPS_COLUMNS)
-df_all_books = pd.DataFrame(columns=ALL_BOOKS_PROPS_COLUMNS)
-try:
-    if skip_odds_api_props:
-        print("⏭️  Skipping MLB props pull because the 0-credit events pre-check found no games today.")
-        ev_resp = None
-    else:
-        ev_resp = requests.get(f'https://api.the-odds-api.com/v4/sports/{SPORT}/events', params={'apiKey': ODDS_API_KEY}, timeout=15)
-        check_quota_or_abort(ev_resp, "MLB events")
-    if ev_resp is None:
-        pass
-    elif ev_resp.status_code != 200:
-        print(f"❌ Failed to fetch events: {ev_resp.status_code} — {ev_resp.text[:200]}")
-    else:
-        ev_data = ev_resp.json()
-        tonight_team_names = {t['team_name'].lower() for t in team_list if t['team_abbr'] in active_team_abbrs}
-        tonight_ids = [
-            e['id'] for e in ev_data
-            if e.get('home_team', '').lower() in tonight_team_names
-            or e.get('away_team', '').lower() in tonight_team_names
-        ]
-        if not tonight_ids:
-            print(f"⏭️  No {SPORT_LABEL} games scheduled — skipping props pull.")
-        print(f"🏟️ Found {len(tonight_ids)} events — fetching props from {len(ACTIVE_PROP_BOOKMAKERS)} books...")
-
-        all_book_rows = []
-        api_errors = 0
-        last_resp = None
-        for eid in tonight_ids:
-            for batch in MARKET_BATCHES:
-                markets_param = batch if isinstance(batch, str) else ','.join(batch)
-                pr = requests.get(
-                    f'https://api.the-odds-api.com/v4/sports/{SPORT}/events/{eid}/odds',
-                    params={
-                        'apiKey': ODDS_API_KEY,
-                        'regions': 'us',
-                        'markets': markets_param,
-                        'bookmakers': ','.join(ACTIVE_PROP_BOOKMAKERS),
-                        'oddsFormat': 'american'
-                    },
-                    timeout=15
-                )
-                check_quota_or_abort(pr, f"MLB event props {eid}")
-                last_resp = pr
-                if pr.status_code != 200:
-                    if api_errors < 3:
-                        print(f"   ⚠️ Props API {pr.status_code} for event {eid}: {pr.text[:100]}")
-                    api_errors += 1
-                    if api_errors > 5:
-                        print("   ⚠️ More than 5 props API errors — continuing with partial data")
-                    continue
-                data = pr.json()
-                for bk in data.get('bookmakers', []):
-                    book_key = bk.get('key', '')
-                    if book_key not in ACTIVE_PROP_BOOKMAKERS:
-                        continue
-                    for mkt in bk.get('markets', []):
-                        mn = market_mapping.get(mkt.get('key'))
-                        if not mn:
-                            continue
-                        all_book_rows.extend(parse_multi_book_market(mkt, mn, book_key, BINARY_PROP_MARKETS))
-            time.sleep(0.5)
-
-        df_all_books = finalize_all_books_frame(all_book_rows, timestamp_est, name_fixes)
-        if last_resp is not None and hasattr(last_resp, 'headers'):
-            print(f"   📊 API quota remaining: {last_resp.headers.get('x-requests-remaining', '?')}")
-        if api_errors:
-            print(f"   ⚠️ Total props API errors: {api_errors}")
-        for book in ACTIVE_PROP_BOOKMAKERS:
-            book_ct = 0 if df_all_books.empty else int((df_all_books['BOOK'] == book).sum())
-            if book_ct == 0:
-                print(f"   {book}: 0 props")
-        df_props, tie_notes = compute_best_book_columns(df_all_books, timestamp_est)
-        for note in tie_notes[:10]:
-            print(f"   ℹ️ Best-book tie: {note}")
-        if len(tie_notes) > 10:
-            print(f"   ℹ️ Best-book ties suppressed: {len(tie_notes) - 10} more")
-        if not df_props.empty:
-            metric_counts = df_props['METRIC'].value_counts().to_dict()
-            thin_metrics = sorted([metric for metric in set(market_mapping.values()) if metric_counts.get(metric, 0) < THIN_MARKET_THRESHOLD])
-            if thin_metrics:
-                print(f"   ⚠️ Thin/missing markets after multi-book fetch: {', '.join(thin_metrics)}")
-            print(f"✅ Fetched {len(df_props)} reference props across {df_props['METRIC'].nunique()} markets")
-            print(f"✅ All_Books_Props rows: {len(df_all_books)} across {df_all_books['BOOK'].nunique()} books")
-        else:
-            print("⚠️ No player props returned.")
-        print_best_book_summary(df_props, df_all_books)
-except Exception as e:
-    print(f"❌ Failed to fetch player props: {e}")
-
-# --- 10.6 GEMINI AI PICKS ---
-print("\n" + "=" * 60)
-existing_daily_picks = load_existing_daily_picks(sh, schedule_date)
-seen_pick_keys = set()
-if len(existing_daily_picks) > 0:
-    for _, row in existing_daily_picks.iterrows():
-        key = (
-            normalize_player_name(str(row.get('player', ''))),
-            str(row.get('prop_type', '')).strip().upper(),
-            str(row.get('lean', '')).strip().upper(),
-        )
-        seen_pick_keys.add(key)
-existing_run_numbers = pd.to_numeric(existing_daily_picks.get('RUN_NUMBER', pd.Series(dtype=float)), errors='coerce').dropna().astype(int)
-today_run_number = int(existing_run_numbers.max()) + 1 if not existing_run_numbers.empty else 1
-df_picks_current = pd.DataFrame(columns=PICK_OUTPUT_COLUMNS)
-
 def generate_gemini_picks():
     global df_picks_current
     print("\n" + "=" * 60)
@@ -2435,6 +1355,31 @@ def generate_gemini_picks():
     if len(games_tonight) == 0:
         print("⚠️ No games tonight — skipping AI picks.")
         return df_picks
+
+
+    # Placeholder bindings so the nested phase functions below can use `nonlocal`.
+    # Real values are assigned when each phase runs; Python only requires a
+    # binding to exist somewhere in this scope for `nonlocal` to be valid.
+    _ = allowed_batter_prompt_metrics = allowed_pitcher_prompt_metrics = allowed_prompt_props = allowed_prompt_props_str = batter_log_player_norm = batter_pool = batter_prop_names = None
+    batter_prop_pool = batter_prop_types = best_book = best_odds = challenger = challenger_added = client = combined_prop_pool = None
+    conf_series = consensus_hits = consensus_pick_lists = consensus_temps = dedup_keep = desired_line = df_batter_props = df_pitcher_props = None
+    dropped_reasons = duplicate_drop_msgs = duplicate_reserve = edge = edge_bits = edge_col = existing_ctx = fallback_added = None
+    fallback_candidates = fallback_pick = fallback_player_map = fallback_used = filtered = fresh_pick_keys = g = games_context = None
+    games_str = gemini_pool = gemini_survivor_count = gen_config = guaranteed_stars = hard_out = hit_count = hr = None
+    hr_count = i = idx = ip = key = lean_series = line_matches = line_num = None
+    line_val = lineup_risk_note = ln = loc = matched_idx = matched_prop = max_smash = metric = None
+    metric_cap_key = metric_col = msg = names_str = needed = odds_bits = odds_str = opp_avg = None
+    opp_hr = opp_ops = opponent_bits = over_odds = over_odds_str = p = per_type_cap = pick = None
+    pick_key = pick_odds = picks_before_filter = picks_data = pitcher_ct = pitcher_log_player_norm = pitcher_pick_count = pitcher_pool = None
+    pitcher_prop_names = pitcher_prop_pool = pk = player_ctx = player_lines = player_logs = player_meta = player_norm = None
+    player_props = player_streak_map = priced_lean = projected_survivors = prompt = prompt_metric = prop = prop_dist = None
+    prop_lines = prop_rows_by_key = prop_type_counts = props_df = raw = raw_prop = recovery_config = recovery_picks = None
+    recovery_prompt = recovery_raw = reference_book = reference_odds = rest_pool = restored = restored_row = returning_ct = None
+    returning_mask = returning_player_map = row = run_idx = run_picks = run_prop_count = s = sc_bits = None
+    seen_matchups = shortfall_msg = side = sig = sig_label = signal_lines = smash_ct = smash_idx = None
+    split_bits = star_ct = star_top20_norms = starter_bits = stat = status_col = status_cols = streak_bits = None
+    streak_ctx = streak_lines = streaks = temp = top_batters = top_pitchers = two_way_notice = under_odds = None
+    under_odds_str = val = valid_player_map = valid_prop_keys = validated_challengers = vals = wx = None
 
     def implied_prob_american(odds):
         try:
@@ -2493,150 +1438,159 @@ def generate_gemini_picks():
         return str(wx.get('description', 'No major weather edge.'))[:40]
 
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        games_context = []
-        seen_matchups = set()
-        for g in games_tonight:
-            key = tuple(sorted([g['home_abbr'], g['away_abbr']]))
-            if key in seen_matchups:
-                continue
-            seen_matchups.add(key)
-            wx = next((w for w in weather_rows if w.get('venue_name') == g['venue_name']), {})
-            games_context.append({
-                'matchup': f"{g['away_abbr']} @ {g['home_abbr']}",
-                'venue': g['venue_name'],
-                'home_pitcher': g['home_pitcher_name'],
-                'away_pitcher': g['away_pitcher_name'],
-                'home_pitcher_hand': pitcher_map.get(g['away_abbr'], {}).get('opp_pitcher_hand', '?'),
-                'away_pitcher_hand': pitcher_map.get(g['home_abbr'], {}).get('opp_pitcher_hand', '?'),
-                'temp_f': wx.get('temp_f', 'N/A'),
-                'wind_mph': wx.get('wind_mph', 'N/A'),
-                'wind_dir': wx.get('wind_dir', 'N/A'),
-                'is_dome': wx.get('is_dome', False),
-                'condition': wx.get('description', 'N/A'),
-            })
+        def _phase_collect_tonight_context():
+            nonlocal _, allowed_batter_prompt_metrics, allowed_pitcher_prompt_metrics, batter_pool, batter_prop_names, batter_prop_pool, client, combined_prop_pool
+            nonlocal df_batter_props, df_pitcher_props, fallback_used, g, games_context, gemini_pool, guaranteed_stars, hard_out
+            nonlocal key, pitcher_pool, pitcher_prop_names, pitcher_prop_pool, prop_rows_by_key, props_df, rest_pool, row
+            nonlocal seen_matchups, star_top20_norms, status_col, status_cols, top_batters, top_pitchers, valid_prop_keys, wx
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            games_context = []
+            seen_matchups = set()
+            for g in games_tonight:
+                key = tuple(sorted([g['home_abbr'], g['away_abbr']]))
+                if key in seen_matchups:
+                    continue
+                seen_matchups.add(key)
+                wx = next((w for w in weather_rows if w.get('venue_name') == g['venue_name']), {})
+                games_context.append({
+                    'matchup': f"{g['away_abbr']} @ {g['home_abbr']}",
+                    'venue': g['venue_name'],
+                    'home_pitcher': g['home_pitcher_name'],
+                    'away_pitcher': g['away_pitcher_name'],
+                    'home_pitcher_hand': pitcher_map.get(g['away_abbr'], {}).get('opp_pitcher_hand', '?'),
+                    'away_pitcher_hand': pitcher_map.get(g['home_abbr'], {}).get('opp_pitcher_hand', '?'),
+                    'temp_f': wx.get('temp_f', 'N/A'),
+                    'wind_mph': wx.get('wind_mph', 'N/A'),
+                    'wind_dir': wx.get('wind_dir', 'N/A'),
+                    'is_dome': wx.get('is_dome', False),
+                    'condition': wx.get('description', 'N/A'),
+                })
 
-        status_cols = [c for c in ['status', 'STATUS', 'injury_status', 'INJURY_STATUS', 'roster_status', 'ROSTER_STATUS'] if c in df_tonight.columns]
-        hard_out = {"OUT", "O", "DOUBTFUL", "D", "INACTIVE", "SUSPENDED"}
-        top_batters = df_tonight.copy()
-        top_batters['_player_norm'] = top_batters['player_name'].map(normalize_player_name)
-        print(f"   Total tonight batters: {len(top_batters)}")
-        print(f"   Batters before dedupe: {len(top_batters)}")
-        top_batters = top_batters[top_batters['_player_norm'] != ""].drop_duplicates(subset=['_player_norm']).copy()
-        print(f"   Batters after dedupe: {len(top_batters)}")
-        print(f"   Batters before availability filter: {len(top_batters)}")
-        if status_cols:
-            status_col = status_cols[0]
-            top_batters['_status_clean'] = top_batters[status_col].astype(str).str.strip().str.upper()
-            top_batters = top_batters[~top_batters['_status_clean'].isin(hard_out)].copy()
-        else:
-            print("   Availability filter skipped — no batter status column found")
-        print(f"   Batters after availability filter: {len(top_batters)}")
+            status_cols = [c for c in ['status', 'STATUS', 'injury_status', 'INJURY_STATUS', 'roster_status', 'ROSTER_STATUS'] if c in df_tonight.columns]
+            hard_out = {"OUT", "O", "DOUBTFUL", "D", "INACTIVE", "SUSPENDED"}
+            top_batters = df_tonight.copy()
+            top_batters['_player_norm'] = top_batters['player_name'].map(normalize_player_name)
+            print(f"   Total tonight batters: {len(top_batters)}")
+            print(f"   Batters before dedupe: {len(top_batters)}")
+            top_batters = top_batters[top_batters['_player_norm'] != ""].drop_duplicates(subset=['_player_norm']).copy()
+            print(f"   Batters after dedupe: {len(top_batters)}")
+            print(f"   Batters before availability filter: {len(top_batters)}")
+            if status_cols:
+                status_col = status_cols[0]
+                top_batters['_status_clean'] = top_batters[status_col].astype(str).str.strip().str.upper()
+                top_batters = top_batters[~top_batters['_status_clean'].isin(hard_out)].copy()
+            else:
+                print("   Availability filter skipped — no batter status column found")
+            print(f"   Batters after availability filter: {len(top_batters)}")
 
-        top_pitchers = df_pitcher_tonight.copy()
-        if not top_pitchers.empty:
-            top_pitchers['_player_norm'] = top_pitchers['player_name'].map(normalize_player_name)
-            top_pitchers = top_pitchers[top_pitchers['_player_norm'] != ""].drop_duplicates(subset=['_player_norm']).copy()
-        print(f"   Total tonight pitchers: {len(top_pitchers)}")
+            top_pitchers = df_pitcher_tonight.copy()
+            if not top_pitchers.empty:
+                top_pitchers['_player_norm'] = top_pitchers['player_name'].map(normalize_player_name)
+                top_pitchers = top_pitchers[top_pitchers['_player_norm'] != ""].drop_duplicates(subset=['_player_norm']).copy()
+            print(f"   Total tonight pitchers: {len(top_pitchers)}")
 
-        df_batter_props = pd.DataFrame()
-        df_pitcher_props = pd.DataFrame()
-        prop_rows_by_key = {}
-        valid_prop_keys = set()
+            df_batter_props = pd.DataFrame()
+            df_pitcher_props = pd.DataFrame()
+            prop_rows_by_key = {}
+            valid_prop_keys = set()
 
-        props_df = df_props.copy() if isinstance(df_props, pd.DataFrame) else pd.DataFrame()
-        if not props_df.empty:
-            props_df['PLAYER_NORM'] = props_df['PLAYER_NAME'].map(normalize_player_name)
-            props_df['PROMPT_METRIC'] = props_df['METRIC'].map(normalize_prop_metric)
-            allowed_batter_prompt_metrics = {'H', 'R'}
-            allowed_pitcher_prompt_metrics = {'P_SO', 'P_ER', 'P_BB'}
-            df_batter_props = props_df[
-                props_df['PLAYER_NAME'].notna() &
-                props_df['METRIC'].notna() &
-                ~props_df['METRIC'].astype(str).str.startswith('P_') &
-                props_df['PROMPT_METRIC'].isin(allowed_batter_prompt_metrics)
-            ].copy()
-            df_pitcher_props = props_df[
-                props_df['PLAYER_NAME'].notna() &
-                props_df['METRIC'].notna() &
-                props_df['METRIC'].astype(str).str.startswith('P_') &
-                props_df['PROMPT_METRIC'].isin(allowed_pitcher_prompt_metrics)
-            ].copy()
-            for _, row in pd.concat([df_batter_props, df_pitcher_props], ignore_index=True).iterrows():
-                key = (row['PLAYER_NORM'], row['PROMPT_METRIC'])
-                if key[0] and key[1]:
-                    valid_prop_keys.add(key)
-                    prop_rows_by_key.setdefault(key, []).append(row)
+            props_df = df_props.copy() if isinstance(df_props, pd.DataFrame) else pd.DataFrame()
+            if not props_df.empty:
+                props_df['PLAYER_NORM'] = props_df['PLAYER_NAME'].map(normalize_player_name)
+                props_df['PROMPT_METRIC'] = props_df['METRIC'].map(normalize_prop_metric)
+                allowed_batter_prompt_metrics = {'H', 'R'}
+                allowed_pitcher_prompt_metrics = {'P_SO', 'P_ER', 'P_BB'}
+                df_batter_props = props_df[
+                    props_df['PLAYER_NAME'].notna() &
+                    props_df['METRIC'].notna() &
+                    ~props_df['METRIC'].astype(str).str.startswith('P_') &
+                    props_df['PROMPT_METRIC'].isin(allowed_batter_prompt_metrics)
+                ].copy()
+                df_pitcher_props = props_df[
+                    props_df['PLAYER_NAME'].notna() &
+                    props_df['METRIC'].notna() &
+                    props_df['METRIC'].astype(str).str.startswith('P_') &
+                    props_df['PROMPT_METRIC'].isin(allowed_pitcher_prompt_metrics)
+                ].copy()
+                for _, row in pd.concat([df_batter_props, df_pitcher_props], ignore_index=True).iterrows():
+                    key = (row['PLAYER_NORM'], row['PROMPT_METRIC'])
+                    if key[0] and key[1]:
+                        valid_prop_keys.add(key)
+                        prop_rows_by_key.setdefault(key, []).append(row)
 
-        batter_prop_names = set(df_batter_props['PLAYER_NORM'].dropna()) if not df_batter_props.empty else set()
-        pitcher_prop_names = set(df_pitcher_props['PLAYER_NORM'].dropna()) if not df_pitcher_props.empty else set()
-        batter_prop_pool = top_batters[top_batters['_player_norm'].isin(batter_prop_names)].copy() if not top_batters.empty else top_batters
-        pitcher_prop_pool = top_pitchers[top_pitchers['_player_norm'].isin(pitcher_prop_names)].copy() if not top_pitchers.empty else top_pitchers
-        print(f"   Batters after props-only filtering: {len(batter_prop_pool)}")
-        print(f"   Pitchers after props-only filtering: {len(pitcher_prop_pool)}")
+            batter_prop_names = set(df_batter_props['PLAYER_NORM'].dropna()) if not df_batter_props.empty else set()
+            pitcher_prop_names = set(df_pitcher_props['PLAYER_NORM'].dropna()) if not df_pitcher_props.empty else set()
+            batter_prop_pool = top_batters[top_batters['_player_norm'].isin(batter_prop_names)].copy() if not top_batters.empty else top_batters
+            pitcher_prop_pool = top_pitchers[top_pitchers['_player_norm'].isin(pitcher_prop_names)].copy() if not top_pitchers.empty else top_pitchers
+            print(f"   Batters after props-only filtering: {len(batter_prop_pool)}")
+            print(f"   Pitchers after props-only filtering: {len(pitcher_prop_pool)}")
 
-        fallback_used = []
-        batter_pool = batter_prop_pool.copy()
-        if batter_pool.empty and not top_batters.empty:
-            batter_pool = top_batters.copy()
-            fallback_used.append("batters_stats_fallback")
-        pitcher_pool = pitcher_prop_pool.copy()
-        if pitcher_pool.empty and not top_pitchers.empty:
-            pitcher_pool = top_pitchers.copy()
-            fallback_used.append("pitchers_stats_fallback")
+            fallback_used = []
+            batter_pool = batter_prop_pool.copy()
+            if batter_pool.empty and not top_batters.empty:
+                batter_pool = top_batters.copy()
+                fallback_used.append("batters_stats_fallback")
+            pitcher_pool = pitcher_prop_pool.copy()
+            if pitcher_pool.empty and not top_pitchers.empty:
+                pitcher_pool = top_pitchers.copy()
+                fallback_used.append("pitchers_stats_fallback")
 
-        batter_pool['ROLE'] = 'BATTER'
-        pitcher_pool['ROLE'] = 'PITCHER'
-        combined_prop_pool = pd.concat([batter_pool, pitcher_pool], ignore_index=True, sort=False)
-        if 'Seas_UD_FP' in combined_prop_pool.columns:
-            combined_prop_pool = combined_prop_pool.sort_values('Seas_UD_FP', ascending=False).copy()
-        guaranteed_stars = combined_prop_pool.head(15).copy()
-        star_top20_norms = set(combined_prop_pool.head(20)['_player_norm'].dropna().tolist())
-        rest_pool = combined_prop_pool[~combined_prop_pool['_player_norm'].isin(guaranteed_stars['_player_norm'])].copy()
-        gemini_pool = pd.concat([guaranteed_stars, rest_pool], ignore_index=True, sort=False).drop_duplicates(subset=['_player_norm']).head(80).copy()
-        gemini_pool['STAR'] = gemini_pool['_player_norm'].isin(star_top20_norms)
-        print(f"   Final players sent to Gemini: {len(gemini_pool)} ({len(batter_pool)} batters, {len(pitcher_pool)} pitchers)")
-        print(f"   Fallback used: {', '.join(fallback_used) if fallback_used else 'props + valid stats'}")
+            batter_pool['ROLE'] = 'BATTER'
+            pitcher_pool['ROLE'] = 'PITCHER'
+            combined_prop_pool = pd.concat([batter_pool, pitcher_pool], ignore_index=True, sort=False)
+            if 'Seas_UD_FP' in combined_prop_pool.columns:
+                combined_prop_pool = combined_prop_pool.sort_values('Seas_UD_FP', ascending=False).copy()
+            guaranteed_stars = combined_prop_pool.head(15).copy()
+            star_top20_norms = set(combined_prop_pool.head(20)['_player_norm'].dropna().tolist())
+            rest_pool = combined_prop_pool[~combined_prop_pool['_player_norm'].isin(guaranteed_stars['_player_norm'])].copy()
+            gemini_pool = pd.concat([guaranteed_stars, rest_pool], ignore_index=True, sort=False).drop_duplicates(subset=['_player_norm']).head(80).copy()
+            gemini_pool['STAR'] = gemini_pool['_player_norm'].isin(star_top20_norms)
+            print(f"   Final players sent to Gemini: {len(gemini_pool)} ({len(batter_pool)} batters, {len(pitcher_pool)} pitchers)")
+            print(f"   Fallback used: {', '.join(fallback_used) if fallback_used else 'props + valid stats'}")
+        _phase_collect_tonight_context()
 
-        returning_player_map = {
-            row.get('_player_norm'): bool(row.get('RETURNING', False))
-            for _, row in batter_pool.iterrows()
-            if row.get('_player_norm')
-        }
-        valid_player_map = {
-            row['_player_norm']: {
-                'player_name': row.get('player_name', ''),
-                'role': row.get('ROLE', 'BATTER'),
-                'team': row.get('team_abbr', ''),
-                'opp': row.get('opp_abbr_tonight', ''),
-                'opp_pitcher': row.get('opp_pitcher_name', row.get('opp_starter', 'TBD')),
-                'venue': row.get('venue_tonight', ''),
-                'lineup_risk_note': row.get('LINEUP_PROTECTION_NOTE', ''),
-                'H_PLAYER_SCORE': row.get('H_PLAYER_SCORE', np.nan),
-                'H_OPP_ADJ': row.get('H_OPP_ADJ', np.nan),
-                'H_EDGE_SCORE': row.get('H_EDGE_SCORE', np.nan),
-                'POWER_PLAYER_SCORE': row.get('POWER_PLAYER_SCORE', np.nan),
-                'POWER_OPP_ADJ': row.get('POWER_OPP_ADJ', np.nan),
-                'POWER_EDGE_SCORE': row.get('POWER_EDGE_SCORE', np.nan),
-                'P_SO_PLAYER_SCORE': row.get('P_SO_PLAYER_SCORE', np.nan),
-                'P_SO_OPP_ADJ': row.get('P_SO_OPP_ADJ', np.nan),
-                'P_SO_EDGE_SCORE': row.get('P_SO_EDGE_SCORE', np.nan),
-                'P_ER_PLAYER_RISK_SCORE': row.get('P_ER_PLAYER_RISK_SCORE', np.nan),
-                'P_ER_OPP_ADJ': row.get('P_ER_OPP_ADJ', np.nan),
-                'P_ER_RISK_SCORE': row.get('P_ER_RISK_SCORE', np.nan),
+        def _phase_build_player_maps():
+            nonlocal fallback_player_map, returning_player_map, valid_player_map
+            returning_player_map = {
+                row.get('_player_norm'): bool(row.get('RETURNING', False))
+                for _, row in batter_pool.iterrows()
+                if row.get('_player_norm')
             }
-            for _, row in gemini_pool.iterrows()
-            if row.get('_player_norm')
-        }
+            valid_player_map = {
+                row['_player_norm']: {
+                    'player_name': row.get('player_name', ''),
+                    'role': row.get('ROLE', 'BATTER'),
+                    'team': row.get('team_abbr', ''),
+                    'opp': row.get('opp_abbr_tonight', ''),
+                    'opp_pitcher': row.get('opp_pitcher_name', row.get('opp_starter', 'TBD')),
+                    'venue': row.get('venue_tonight', ''),
+                    'lineup_risk_note': row.get('LINEUP_PROTECTION_NOTE', ''),
+                    'H_PLAYER_SCORE': row.get('H_PLAYER_SCORE', np.nan),
+                    'H_OPP_ADJ': row.get('H_OPP_ADJ', np.nan),
+                    'H_EDGE_SCORE': row.get('H_EDGE_SCORE', np.nan),
+                    'POWER_PLAYER_SCORE': row.get('POWER_PLAYER_SCORE', np.nan),
+                    'POWER_OPP_ADJ': row.get('POWER_OPP_ADJ', np.nan),
+                    'POWER_EDGE_SCORE': row.get('POWER_EDGE_SCORE', np.nan),
+                    'P_SO_PLAYER_SCORE': row.get('P_SO_PLAYER_SCORE', np.nan),
+                    'P_SO_OPP_ADJ': row.get('P_SO_OPP_ADJ', np.nan),
+                    'P_SO_EDGE_SCORE': row.get('P_SO_EDGE_SCORE', np.nan),
+                    'P_ER_PLAYER_RISK_SCORE': row.get('P_ER_PLAYER_RISK_SCORE', np.nan),
+                    'P_ER_OPP_ADJ': row.get('P_ER_OPP_ADJ', np.nan),
+                    'P_ER_RISK_SCORE': row.get('P_ER_RISK_SCORE', np.nan),
+                }
+                for _, row in gemini_pool.iterrows()
+                if row.get('_player_norm')
+            }
 
-        # Keep a deterministic, real-market safety net outside the Gemini pool.
-        # Gemini is useful for judgment, but a short or malformed response must
-        # never be allowed to reduce a full slate to only a few picks.
-        fallback_player_map = {
-            row['_player_norm']: row
-            for _, row in combined_prop_pool.iterrows()
-            if row.get('_player_norm')
-        }
+            # Keep a deterministic, real-market safety net outside the Gemini pool.
+            # Gemini is useful for judgment, but a short or malformed response must
+            # never be allowed to reduce a full slate to only a few picks.
+            fallback_player_map = {
+                row['_player_norm']: row
+                for _, row in combined_prop_pool.iterrows()
+                if row.get('_player_norm')
+            }
+        _phase_build_player_maps()
 
         def build_validated_fallback_candidates():
             """Rank real sportsbook props for backfill when Gemini under-delivers."""
@@ -2758,240 +1712,250 @@ def generate_gemini_picks():
             candidates.sort(key=lambda row: row['_fallback_score'], reverse=True)
             return candidates
 
-        streak_ctx = ""
-        player_streak_map = {}
-        try:
-            streaks = get_streaks()
-            streak_lines = [f"{s['player']} — {s['stat']} streak: {s['streak']} games" for s in streaks if s['streak'] >= 3]
-            streak_ctx = "\n".join(streak_lines) if streak_lines else "No active streaks tonight."
-            for s in streaks:
-                if s.get('streak', 0) >= 3:
-                    player_streak_map.setdefault(normalize_player_name(s['player']), []).append(f"{s['stat']} x{s['streak']}")
-        except Exception:
-            streak_ctx = "Streak data unavailable."
+        def _phase_build_prompt_context():
+            nonlocal _, batter_log_player_norm, edge, edge_bits, hr, ip, line_val, ln
+            nonlocal loc, metric, metric_col, odds_bits, odds_str, opp_avg, opp_hr, opp_ops
+            nonlocal opponent_bits, over_odds, over_odds_str, p, pitcher_log_player_norm, player_lines, player_logs, player_norm
+            nonlocal player_props, player_streak_map, prop, prop_lines, s, sc_bits, sig, sig_label
+            nonlocal signal_lines, split_bits, starter_bits, stat, streak_bits, streak_ctx, streak_lines, streaks
+            nonlocal under_odds, under_odds_str, val, vals
+            streak_ctx = ""
+            player_streak_map = {}
+            try:
+                streaks = get_streaks()
+                streak_lines = [f"{s['player']} — {s['stat']} streak: {s['streak']} games" for s in streaks if s['streak'] >= 3]
+                streak_ctx = "\n".join(streak_lines) if streak_lines else "No active streaks tonight."
+                for s in streaks:
+                    if s.get('streak', 0) >= 3:
+                        player_streak_map.setdefault(normalize_player_name(s['player']), []).append(f"{s['stat']} x{s['streak']}")
+            except Exception:
+                streak_ctx = "Streak data unavailable."
 
-        batter_log_player_norm = df_logs['player_name'].map(normalize_player_name) if not df_logs.empty else pd.Series(dtype=str)
-        pitcher_log_player_norm = df_pitcher_logs['player_name'].map(normalize_player_name) if not df_pitcher_logs.empty else pd.Series(dtype=str)
-        player_lines = []
-        for _, p in gemini_pool.iterrows():
-            player_norm = p.get('_player_norm') or normalize_player_name(p.get('player_name'))
-            if p.get('ROLE') == 'PITCHER':
-                ln = f"{p.get('player_name','?')} [PITCHER] ({p.get('team_abbr','?')} vs {p.get('opp_abbr_tonight','?')})"
-                if truthy_flag(p.get('STAR', False)):
-                    ln += " | STAR"
-                ln += f" | Venue={p.get('venue_tonight','?')} | Seas: SO={p.get('Seas_SO','')} ER={p.get('Seas_ER','')} IP={p.get('Seas_IP','')} UD={p.get('Seas_UD_FP','')}"
-                ln += f" | L3: SO={p.get('L3_SO','')} ER={p.get('L3_ER','')} IP={p.get('L3_IP','')} UD={p.get('L3_UD_FP','')}"
-                ln += f" | L7: SO={p.get('L7_SO','')} ER={p.get('L7_ER','')} IP={p.get('L7_IP','')} UD={p.get('L7_UD_FP','')}"
-                sc_bits = []
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_whiff_pct')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"Whiff={fmt_pct(p.get('SC_L14_whiff_pct'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_csw_pct')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"CSW={fmt_pct(p.get('SC_L14_csw_pct'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xwOBA')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"xwOBA={fmt_dec(p.get('SC_L14_xwOBA'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_hard_hit_pct')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"HH={fmt_pct(p.get('SC_L14_hard_hit_pct'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_barrel_pct')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
-                if sc_bits:
-                    ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
-                opponent_bits = []
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_K_PCT')]), errors='coerce').iloc[0]):
-                    opponent_bits.append(
-                        f"K%={fmt_num(p.get('OPP_OFF_K_PCT'), 1)}"
-                        f"(rank {safe_int(p.get('OPP_OFF_K_PCT_MOST_RANK'))})"
-                    )
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_OPS')]), errors='coerce').iloc[0]):
-                    opponent_bits.append(f"OPS={fmt_dec(p.get('OPP_OFF_OPS'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_RUNS_PER_GAME')]), errors='coerce').iloc[0]):
-                    opponent_bits.append(f"R/G={fmt_num(p.get('OPP_OFF_RUNS_PER_GAME'), 2)}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_HR_PER_GAME')]), errors='coerce').iloc[0]):
-                    opponent_bits.append(f"HR/G={fmt_num(p.get('OPP_OFF_HR_PER_GAME'), 2)}")
-                if opponent_bits:
-                    ln += f" | Opp offense: {' '.join(opponent_bits)}"
-                edge_bits = []
-                if pd.notna(pd.to_numeric(pd.Series([p.get('P_SO_EDGE_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(
-                        f"K={fmt_num(p.get('P_SO_PLAYER_SCORE'), 1)}"
-                        f"{fmt_signed_num(p.get('P_SO_OPP_ADJ'), 1)}"
-                        f"->{fmt_num(p.get('P_SO_EDGE_SCORE'), 1)}"
-                    )
-                if pd.notna(pd.to_numeric(pd.Series([p.get('P_ER_RISK_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(
-                        f"ERRisk={fmt_num(p.get('P_ER_PLAYER_RISK_SCORE'), 1)}"
-                        f"{fmt_signed_num(p.get('P_ER_OPP_ADJ'), 1)}"
-                        f"->{fmt_num(p.get('P_ER_RISK_SCORE'), 1)}"
-                    )
-                if edge_bits:
-                    ln += f" | Model edge: {' '.join(edge_bits)}"
-                if not df_pitcher_props.empty:
-                    player_props = df_pitcher_props[df_pitcher_props['PLAYER_NORM'] == player_norm]
-                    if not player_props.empty:
-                        prop_lines = []
-                        signal_lines = []
-                        player_logs = df_pitcher_logs[pitcher_log_player_norm == player_norm].copy()
-                        for _, prop in player_props.sort_values(['PROMPT_METRIC', 'DK_LINE']).iterrows():
-                            over_odds = prop.get('OVER_ODDS')
-                            under_odds = prop.get('UNDER_ODDS')
-                            odds_bits = []
-                            over_odds_str = fmt_american_odds(over_odds)
-                            under_odds_str = fmt_american_odds(under_odds)
-                            if over_odds_str:
-                                odds_bits.append(f"O {over_odds_str}")
-                            if under_odds_str:
-                                odds_bits.append(f"U {under_odds_str}")
-                            odds_str = f" ({', '.join(odds_bits)})" if odds_bits else ""
-                            prop_lines.append(f"{prop.get('PROMPT_METRIC')} {prop.get('DK_LINE')}{odds_str}")
-                            metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
-                            metric_col = 'IP_OUTS' if metric == 'P_OUTS' else metric.replace('P_', '')
-                            line_val = pd.to_numeric(prop.get('DK_LINE'), errors='coerce')
-                            if metric_col in player_logs.columns and pd.notna(line_val) and len(player_logs) >= 3:
-                                vals = pd.to_numeric(player_logs[metric_col], errors='coerce').dropna()
-                                if len(vals) >= 3:
-                                    if metric in {'P_H', 'P_BB', 'P_ER'}:
-                                        hr = (vals < line_val).mean()
-                                        sig_label = "U"
-                                    else:
+            batter_log_player_norm = df_logs['player_name'].map(normalize_player_name) if not df_logs.empty else pd.Series(dtype=str)
+            pitcher_log_player_norm = df_pitcher_logs['player_name'].map(normalize_player_name) if not df_pitcher_logs.empty else pd.Series(dtype=str)
+            player_lines = []
+            for _, p in gemini_pool.iterrows():
+                player_norm = p.get('_player_norm') or normalize_player_name(p.get('player_name'))
+                if p.get('ROLE') == 'PITCHER':
+                    ln = f"{p.get('player_name','?')} [PITCHER] ({p.get('team_abbr','?')} vs {p.get('opp_abbr_tonight','?')})"
+                    if truthy_flag(p.get('STAR', False)):
+                        ln += " | STAR"
+                    ln += f" | Venue={p.get('venue_tonight','?')} | Seas: SO={p.get('Seas_SO','')} ER={p.get('Seas_ER','')} IP={p.get('Seas_IP','')} UD={p.get('Seas_UD_FP','')}"
+                    ln += f" | L3: SO={p.get('L3_SO','')} ER={p.get('L3_ER','')} IP={p.get('L3_IP','')} UD={p.get('L3_UD_FP','')}"
+                    ln += f" | L7: SO={p.get('L7_SO','')} ER={p.get('L7_ER','')} IP={p.get('L7_IP','')} UD={p.get('L7_UD_FP','')}"
+                    sc_bits = []
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_whiff_pct')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"Whiff={fmt_pct(p.get('SC_L14_whiff_pct'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_csw_pct')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"CSW={fmt_pct(p.get('SC_L14_csw_pct'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xwOBA')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"xwOBA={fmt_dec(p.get('SC_L14_xwOBA'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_hard_hit_pct')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"HH={fmt_pct(p.get('SC_L14_hard_hit_pct'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_barrel_pct')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
+                    if sc_bits:
+                        ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
+                    opponent_bits = []
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_K_PCT')]), errors='coerce').iloc[0]):
+                        opponent_bits.append(
+                            f"K%={fmt_num(p.get('OPP_OFF_K_PCT'), 1)}"
+                            f"(rank {safe_int(p.get('OPP_OFF_K_PCT_MOST_RANK'))})"
+                        )
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_OPS')]), errors='coerce').iloc[0]):
+                        opponent_bits.append(f"OPS={fmt_dec(p.get('OPP_OFF_OPS'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_RUNS_PER_GAME')]), errors='coerce').iloc[0]):
+                        opponent_bits.append(f"R/G={fmt_num(p.get('OPP_OFF_RUNS_PER_GAME'), 2)}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_OFF_HR_PER_GAME')]), errors='coerce').iloc[0]):
+                        opponent_bits.append(f"HR/G={fmt_num(p.get('OPP_OFF_HR_PER_GAME'), 2)}")
+                    if opponent_bits:
+                        ln += f" | Opp offense: {' '.join(opponent_bits)}"
+                    edge_bits = []
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('P_SO_EDGE_SCORE')]), errors='coerce').iloc[0]):
+                        edge_bits.append(
+                            f"K={fmt_num(p.get('P_SO_PLAYER_SCORE'), 1)}"
+                            f"{fmt_signed_num(p.get('P_SO_OPP_ADJ'), 1)}"
+                            f"->{fmt_num(p.get('P_SO_EDGE_SCORE'), 1)}"
+                        )
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('P_ER_RISK_SCORE')]), errors='coerce').iloc[0]):
+                        edge_bits.append(
+                            f"ERRisk={fmt_num(p.get('P_ER_PLAYER_RISK_SCORE'), 1)}"
+                            f"{fmt_signed_num(p.get('P_ER_OPP_ADJ'), 1)}"
+                            f"->{fmt_num(p.get('P_ER_RISK_SCORE'), 1)}"
+                        )
+                    if edge_bits:
+                        ln += f" | Model edge: {' '.join(edge_bits)}"
+                    if not df_pitcher_props.empty:
+                        player_props = df_pitcher_props[df_pitcher_props['PLAYER_NORM'] == player_norm]
+                        if not player_props.empty:
+                            prop_lines = []
+                            signal_lines = []
+                            player_logs = df_pitcher_logs[pitcher_log_player_norm == player_norm].copy()
+                            for _, prop in player_props.sort_values(['PROMPT_METRIC', 'DK_LINE']).iterrows():
+                                over_odds = prop.get('OVER_ODDS')
+                                under_odds = prop.get('UNDER_ODDS')
+                                odds_bits = []
+                                over_odds_str = fmt_american_odds(over_odds)
+                                under_odds_str = fmt_american_odds(under_odds)
+                                if over_odds_str:
+                                    odds_bits.append(f"O {over_odds_str}")
+                                if under_odds_str:
+                                    odds_bits.append(f"U {under_odds_str}")
+                                odds_str = f" ({', '.join(odds_bits)})" if odds_bits else ""
+                                prop_lines.append(f"{prop.get('PROMPT_METRIC')} {prop.get('DK_LINE')}{odds_str}")
+                                metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
+                                metric_col = 'IP_OUTS' if metric == 'P_OUTS' else metric.replace('P_', '')
+                                line_val = pd.to_numeric(prop.get('DK_LINE'), errors='coerce')
+                                if metric_col in player_logs.columns and pd.notna(line_val) and len(player_logs) >= 3:
+                                    vals = pd.to_numeric(player_logs[metric_col], errors='coerce').dropna()
+                                    if len(vals) >= 3:
+                                        if metric in {'P_H', 'P_BB', 'P_ER'}:
+                                            hr = (vals < line_val).mean()
+                                            sig_label = "U"
+                                        else:
+                                            hr = (vals > line_val).mean()
+                                            sig_label = "O"
+                                        ip = implied_prob_american(over_odds if sig_label == 'O' else under_odds)
+                                        edge = (hr - ip) * 100 if ip is not None else None
+                                        sig = f"{metric} {sig_label}{line_val:g} HR={hr*100:.0f}%"
+                                        if edge is not None:
+                                            sig += f" EV={edge:.0f}%"
+                                        signal_lines.append(sig)
+                            if prop_lines:
+                                ln += f" | REAL DK props: {', '.join(prop_lines[:6])}"
+                            if signal_lines:
+                                ln += f" | Best prop signals: {'; '.join(signal_lines[:3])}"
+                else:
+                    ln = f"{p.get('player_name','?')} [BATTER] ({p.get('team_abbr','?')} vs {p.get('opp_abbr_tonight','?')})"
+                    if truthy_flag(p.get('STAR', False)):
+                        ln += " | STAR"
+                    ln += f" | vs {p.get('opp_pitcher_name','TBD')} ({p.get('opp_pitcher_hand','?')}HP)"
+                    ln += f" | Seas: H={p.get('Seas_H','')} HR={p.get('Seas_HR','')} RBI={p.get('Seas_RBI','')} TB={p.get('Seas_TB','')} R={p.get('Seas_R','')} UD={p.get('Seas_UD_FP','')}"
+                    ln += f" | L7: H={p.get('L7_H','')} HR={p.get('L7_HR','')} RBI={p.get('L7_RBI','')} TB={p.get('L7_TB','')} UD={p.get('L7_UD_FP','')}"
+                    sc_bits = []
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xBA')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"xBA={fmt_dec(p.get('SC_L14_xBA'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xwOBA')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"xwOBA={fmt_dec(p.get('SC_L14_xwOBA'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_hard_hit_pct')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"HH={fmt_pct(p.get('SC_L14_hard_hit_pct'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_barrel_pct')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_avg_ev')]), errors='coerce').iloc[0]):
+                        sc_bits.append(f"EV={fmt_num(p.get('SC_L14_avg_ev'))}")
+                    if sc_bits:
+                        ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
+                    starter_bits = []
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_ERA')]), errors='coerce').iloc[0]):
+                        starter_bits.append(f"ERA={fmt_num(p.get('OPP_SP_SEAS_ERA'), 2)}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_WHIP')]), errors='coerce').iloc[0]):
+                        starter_bits.append(f"WHIP={fmt_num(p.get('OPP_SP_SEAS_WHIP'), 2)}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_HR')]), errors='coerce').iloc[0]):
+                        starter_bits.append(f"HR/start={fmt_num(p.get('OPP_SP_SEAS_HR'), 2)}")
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SC_L14_XWOBA')]), errors='coerce').iloc[0]):
+                        starter_bits.append(f"xwOBA={fmt_dec(p.get('OPP_SP_SC_L14_XWOBA'))}")
+                    if starter_bits:
+                        ln += f" | Opp starter form: {' '.join(starter_bits)}"
+                    edge_bits = []
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('H_EDGE_SCORE')]), errors='coerce').iloc[0]):
+                        edge_bits.append(
+                            f"H={fmt_num(p.get('H_PLAYER_SCORE'), 1)}"
+                            f"{fmt_signed_num(p.get('H_OPP_ADJ'), 1)}"
+                            f"->{fmt_num(p.get('H_EDGE_SCORE'), 1)}"
+                        )
+                    if pd.notna(pd.to_numeric(pd.Series([p.get('POWER_EDGE_SCORE')]), errors='coerce').iloc[0]):
+                        edge_bits.append(
+                            f"Power={fmt_num(p.get('POWER_PLAYER_SCORE'), 1)}"
+                            f"{fmt_signed_num(p.get('POWER_OPP_ADJ'), 1)}"
+                            f"->{fmt_num(p.get('POWER_EDGE_SCORE'), 1)}"
+                        )
+                    if edge_bits:
+                        ln += f" | Model edge: {' '.join(edge_bits)}"
+                    if truthy_flag(p.get('RETURNING', False)):
+                        ln += f" | SAMPLE FLAG: RETURNING (L5 games={safe_int(p.get('L5_GAMES_PLAYED'))}, last7={safe_int(p.get('GAMES_LAST_7D'))})"
+                    elif truthy_flag(p.get('LIMITED_SAMPLE', False)):
+                        ln += f" | SAMPLE FLAG: LIMITED_SAMPLE (L5 games={safe_int(p.get('L5_GAMES_PLAYED'))})"
+                    if truthy_flag(p.get('IBB_RISK', False)):
+                        ln += f" | RISK FLAG: {p.get('LINEUP_PROTECTION_NOTE', 'LINEUP RISK')}"
+                    opp_avg = p.get('vs_OPP_AVG', '')
+                    opp_ops = p.get('vs_OPP_OPS', '')
+                    opp_hr = p.get('vs_OPP_HR', '')
+                    if opp_avg:
+                        ln += f" | vs {p.get('opp_pitcher_hand','?')}HP: AVG={opp_avg} OPS={opp_ops} HR={opp_hr}"
+                    loc = p.get('home_away_tonight', '')
+                    split_bits = []
+                    if loc in ('Home', 'Away'):
+                        for stat in ['H', 'TB', 'HR', 'RBI', 'UD_FP']:
+                            val = p.get(f'{stat}_{loc}')
+                            if pd.notna(val):
+                                split_bits.append(f"{stat}={val}")
+                        if split_bits:
+                            ln += f" | Tonight {loc} split: {' '.join(split_bits[:5])}"
+                    ln += f" | Weather edge: {weather_note_for_venue(p.get('venue_tonight'))}"
+                    streak_bits = player_streak_map.get(player_norm)
+                    if streak_bits:
+                        ln += f" | Streaks: {', '.join(streak_bits[:3])}"
+                    if not df_batter_props.empty:
+                        player_props = df_batter_props[df_batter_props['PLAYER_NORM'] == player_norm]
+                        if not player_props.empty:
+                            prop_lines = []
+                            signal_lines = []
+                            player_logs = df_logs[batter_log_player_norm == player_norm].copy()
+                            for _, prop in player_props.sort_values(['PROMPT_METRIC', 'DK_LINE']).iterrows():
+                                over_odds = prop.get('OVER_ODDS')
+                                under_odds = prop.get('UNDER_ODDS')
+                                odds_bits = []
+                                over_odds_str = fmt_american_odds(over_odds)
+                                under_odds_str = fmt_american_odds(under_odds)
+                                if over_odds_str:
+                                    odds_bits.append(f"O {over_odds_str}")
+                                if under_odds_str:
+                                    odds_bits.append(f"U {under_odds_str}")
+                                odds_str = f" ({', '.join(odds_bits)})" if odds_bits else ""
+                                prop_lines.append(f"{prop.get('PROMPT_METRIC')} {prop.get('DK_LINE')}{odds_str}")
+                                metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
+                                metric_col = 'SO' if metric == 'SO' else metric
+                                line_val = pd.to_numeric(prop.get('DK_LINE'), errors='coerce')
+                                if metric_col in player_logs.columns and pd.notna(line_val) and len(player_logs) >= 3:
+                                    vals = pd.to_numeric(player_logs[metric_col], errors='coerce').dropna()
+                                    if len(vals) >= 3:
                                         hr = (vals > line_val).mean()
-                                        sig_label = "O"
-                                    ip = implied_prob_american(over_odds if sig_label == 'O' else under_odds)
-                                    edge = (hr - ip) * 100 if ip is not None else None
-                                    sig = f"{metric} {sig_label}{line_val:g} HR={hr*100:.0f}%"
-                                    if edge is not None:
-                                        sig += f" EV={edge:.0f}%"
-                                    signal_lines.append(sig)
-                        if prop_lines:
-                            ln += f" | REAL DK props: {', '.join(prop_lines[:6])}"
-                        if signal_lines:
-                            ln += f" | Best prop signals: {'; '.join(signal_lines[:3])}"
-            else:
-                ln = f"{p.get('player_name','?')} [BATTER] ({p.get('team_abbr','?')} vs {p.get('opp_abbr_tonight','?')})"
-                if truthy_flag(p.get('STAR', False)):
-                    ln += " | STAR"
-                ln += f" | vs {p.get('opp_pitcher_name','TBD')} ({p.get('opp_pitcher_hand','?')}HP)"
-                ln += f" | Seas: H={p.get('Seas_H','')} HR={p.get('Seas_HR','')} RBI={p.get('Seas_RBI','')} TB={p.get('Seas_TB','')} R={p.get('Seas_R','')} UD={p.get('Seas_UD_FP','')}"
-                ln += f" | L7: H={p.get('L7_H','')} HR={p.get('L7_HR','')} RBI={p.get('L7_RBI','')} TB={p.get('L7_TB','')} UD={p.get('L7_UD_FP','')}"
-                sc_bits = []
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xBA')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"xBA={fmt_dec(p.get('SC_L14_xBA'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_xwOBA')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"xwOBA={fmt_dec(p.get('SC_L14_xwOBA'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_hard_hit_pct')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"HH={fmt_pct(p.get('SC_L14_hard_hit_pct'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_barrel_pct')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"Bar={fmt_pct(p.get('SC_L14_barrel_pct'))}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('SC_L14_avg_ev')]), errors='coerce').iloc[0]):
-                    sc_bits.append(f"EV={fmt_num(p.get('SC_L14_avg_ev'))}")
-                if sc_bits:
-                    ln += f" | Statcast L14: {' '.join(sc_bits[:5])}"
-                starter_bits = []
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_ERA')]), errors='coerce').iloc[0]):
-                    starter_bits.append(f"ERA={fmt_num(p.get('OPP_SP_SEAS_ERA'), 2)}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_WHIP')]), errors='coerce').iloc[0]):
-                    starter_bits.append(f"WHIP={fmt_num(p.get('OPP_SP_SEAS_WHIP'), 2)}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SEAS_HR')]), errors='coerce').iloc[0]):
-                    starter_bits.append(f"HR/start={fmt_num(p.get('OPP_SP_SEAS_HR'), 2)}")
-                if pd.notna(pd.to_numeric(pd.Series([p.get('OPP_SP_SC_L14_XWOBA')]), errors='coerce').iloc[0]):
-                    starter_bits.append(f"xwOBA={fmt_dec(p.get('OPP_SP_SC_L14_XWOBA'))}")
-                if starter_bits:
-                    ln += f" | Opp starter form: {' '.join(starter_bits)}"
-                edge_bits = []
-                if pd.notna(pd.to_numeric(pd.Series([p.get('H_EDGE_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(
-                        f"H={fmt_num(p.get('H_PLAYER_SCORE'), 1)}"
-                        f"{fmt_signed_num(p.get('H_OPP_ADJ'), 1)}"
-                        f"->{fmt_num(p.get('H_EDGE_SCORE'), 1)}"
-                    )
-                if pd.notna(pd.to_numeric(pd.Series([p.get('POWER_EDGE_SCORE')]), errors='coerce').iloc[0]):
-                    edge_bits.append(
-                        f"Power={fmt_num(p.get('POWER_PLAYER_SCORE'), 1)}"
-                        f"{fmt_signed_num(p.get('POWER_OPP_ADJ'), 1)}"
-                        f"->{fmt_num(p.get('POWER_EDGE_SCORE'), 1)}"
-                    )
-                if edge_bits:
-                    ln += f" | Model edge: {' '.join(edge_bits)}"
-                if truthy_flag(p.get('RETURNING', False)):
-                    ln += f" | SAMPLE FLAG: RETURNING (L5 games={safe_int(p.get('L5_GAMES_PLAYED'))}, last7={safe_int(p.get('GAMES_LAST_7D'))})"
-                elif truthy_flag(p.get('LIMITED_SAMPLE', False)):
-                    ln += f" | SAMPLE FLAG: LIMITED_SAMPLE (L5 games={safe_int(p.get('L5_GAMES_PLAYED'))})"
-                if truthy_flag(p.get('IBB_RISK', False)):
-                    ln += f" | RISK FLAG: {p.get('LINEUP_PROTECTION_NOTE', 'LINEUP RISK')}"
-                opp_avg = p.get('vs_OPP_AVG', '')
-                opp_ops = p.get('vs_OPP_OPS', '')
-                opp_hr = p.get('vs_OPP_HR', '')
-                if opp_avg:
-                    ln += f" | vs {p.get('opp_pitcher_hand','?')}HP: AVG={opp_avg} OPS={opp_ops} HR={opp_hr}"
-                loc = p.get('home_away_tonight', '')
-                split_bits = []
-                if loc in ('Home', 'Away'):
-                    for stat in ['H', 'TB', 'HR', 'RBI', 'UD_FP']:
-                        val = p.get(f'{stat}_{loc}')
-                        if pd.notna(val):
-                            split_bits.append(f"{stat}={val}")
-                    if split_bits:
-                        ln += f" | Tonight {loc} split: {' '.join(split_bits[:5])}"
-                ln += f" | Weather edge: {weather_note_for_venue(p.get('venue_tonight'))}"
-                streak_bits = player_streak_map.get(player_norm)
-                if streak_bits:
-                    ln += f" | Streaks: {', '.join(streak_bits[:3])}"
-                if not df_batter_props.empty:
-                    player_props = df_batter_props[df_batter_props['PLAYER_NORM'] == player_norm]
-                    if not player_props.empty:
-                        prop_lines = []
-                        signal_lines = []
-                        player_logs = df_logs[batter_log_player_norm == player_norm].copy()
-                        for _, prop in player_props.sort_values(['PROMPT_METRIC', 'DK_LINE']).iterrows():
-                            over_odds = prop.get('OVER_ODDS')
-                            under_odds = prop.get('UNDER_ODDS')
-                            odds_bits = []
-                            over_odds_str = fmt_american_odds(over_odds)
-                            under_odds_str = fmt_american_odds(under_odds)
-                            if over_odds_str:
-                                odds_bits.append(f"O {over_odds_str}")
-                            if under_odds_str:
-                                odds_bits.append(f"U {under_odds_str}")
-                            odds_str = f" ({', '.join(odds_bits)})" if odds_bits else ""
-                            prop_lines.append(f"{prop.get('PROMPT_METRIC')} {prop.get('DK_LINE')}{odds_str}")
-                            metric = str(prop.get('PROMPT_METRIC', '')).strip().upper()
-                            metric_col = 'SO' if metric == 'SO' else metric
-                            line_val = pd.to_numeric(prop.get('DK_LINE'), errors='coerce')
-                            if metric_col in player_logs.columns and pd.notna(line_val) and len(player_logs) >= 3:
-                                vals = pd.to_numeric(player_logs[metric_col], errors='coerce').dropna()
-                                if len(vals) >= 3:
-                                    hr = (vals > line_val).mean()
-                                    ip = implied_prob_american(over_odds)
-                                    edge = (hr - ip) * 100 if ip is not None else None
-                                    if truthy_flag(p.get('RETURNING', False)) and edge is not None:
-                                        edge *= 0.5
-                                    sig = f"{metric} {line_val:g} HR={hr*100:.0f}%"
-                                    if edge is not None:
-                                        sig += f" EV={edge:.0f}%"
-                                    signal_lines.append(sig)
-                        if prop_lines:
-                            ln += f" | REAL DK props: {', '.join(prop_lines[:8])}"
-                        if signal_lines:
-                            ln += f" | Best prop signals: {'; '.join(signal_lines[:3])}"
-            player_lines.append(ln)
+                                        ip = implied_prob_american(over_odds)
+                                        edge = (hr - ip) * 100 if ip is not None else None
+                                        if truthy_flag(p.get('RETURNING', False)) and edge is not None:
+                                            edge *= 0.5
+                                        sig = f"{metric} {line_val:g} HR={hr*100:.0f}%"
+                                        if edge is not None:
+                                            sig += f" EV={edge:.0f}%"
+                                        signal_lines.append(sig)
+                            if prop_lines:
+                                ln += f" | REAL DK props: {', '.join(prop_lines[:8])}"
+                            if signal_lines:
+                                ln += f" | Best prop signals: {'; '.join(signal_lines[:3])}"
+                player_lines.append(ln)
+        _phase_build_prompt_context()
 
         if gemini_pool.empty:
             print("⚠️ No usable Gemini player pool after fallbacks — skipping AI picks.")
             return df_picks
 
-        games_str = json.dumps(games_context, indent=2, default=str)
-        player_ctx = '\n'.join(player_lines[:80])
-        two_way_notice = ""
-        if two_way_tonight:
-            names_str = ', '.join(sorted(two_way_tonight))
-            two_way_notice = f"""
+        def _phase_build_gemini_prompt():
+            nonlocal allowed_prompt_props, allowed_prompt_props_str, games_str, names_str, player_ctx, prompt, two_way_notice
+            games_str = json.dumps(games_context, indent=2, default=str)
+            player_ctx = '\n'.join(player_lines[:80])
+            two_way_notice = ""
+            if two_way_tonight:
+                names_str = ', '.join(sorted(two_way_tonight))
+                two_way_notice = f"""
 ⚠️  TWO-WAY PLAYER ALERT: {names_str} is a scheduled starting pitcher AND a qualified batter tonight.
 Default assumption: they hit when they pitch. However, teams occasionally scratch two-way players from the batting lineup on pitching days.
 IF you pick {names_str} for a BATTER prop, you MUST set injury_context to start with "LINEUP RISK:".
 """
 
-        allowed_prompt_props = ['H', 'R', 'P_SO', 'P_ER', 'P_BB']
-        print(f"   📋 Gemini available prop types: {', '.join(allowed_prompt_props)}")
-        allowed_prompt_props_str = ', '.join(allowed_prompt_props)
-        prompt = f"""You are an expert MLB props analyst. Today is {schedule_date}. MLB Regular Season.
+            allowed_prompt_props = ['H', 'R', 'P_SO', 'P_ER', 'P_BB']
+            print(f"   📋 Gemini available prop types: {', '.join(allowed_prompt_props)}")
+            allowed_prompt_props_str = ', '.join(allowed_prompt_props)
+            prompt = f"""You are an expert MLB props analyst. Today is {schedule_date}. MLB Regular Season.
 {two_way_notice}
 TONIGHT'S GAMES (with pitchers and weather):
 {games_str}
@@ -3031,63 +1995,70 @@ For each pick provide:
 - injury_context (under 10 words)
 OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no backticks, no explanation:
 [{{"rank":1,"player":"Aaron Judge","team":"NYY","game":"NYY @ TOR","opponent":"TOR","opp_pitcher":"Jose Berrios","prop_type":"H","line":0.5,"lean":"OVER","confidence":"SMASH","rationale":"Elite recent form, favorable split.","injury_context":"Healthy."}}]"""
+        _phase_build_gemini_prompt()
 
-        consensus_pick_lists = []
-        consensus_temps = [0.35, 0.55, 0.75]
-        for run_idx, temp in enumerate(consensus_temps, start=1):
-            gen_config = types.GenerateContentConfig(temperature=temp, max_output_tokens=8192, response_mime_type="application/json")
-            try:
-                print(f"🤖 Calling Gemini API run {run_idx}/3 with {GEMINI_MODEL} (temp={temp:.2f})...")
-                raw = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=gen_config
-                ).text.strip()
-                run_picks = parse_gemini_json_array(raw)
-                print(f"   ↳ {len(run_picks)} picks returned")
-                consensus_pick_lists.append(run_picks)
-            except json.JSONDecodeError:
-                print(f"   ⚠️ Run {run_idx} returned malformed JSON — ignoring that pass")
-            except Exception as e:
-                msg = f"Gemini run {run_idx}/3 failed: {type(e).__name__}: {str(e)[:180]}"
+        def _phase_run_gemini_consensus():
+            nonlocal consensus_hits, consensus_pick_lists, consensus_temps, gen_config, msg, picks_data, raw, run_idx
+            nonlocal run_picks, temp
+            consensus_pick_lists = []
+            consensus_temps = [0.35, 0.55, 0.75]
+            for run_idx, temp in enumerate(consensus_temps, start=1):
+                gen_config = types.GenerateContentConfig(temperature=temp, max_output_tokens=8192, response_mime_type="application/json")
+                try:
+                    print(f"🤖 Calling Gemini API run {run_idx}/3 with {GEMINI_MODEL} (temp={temp:.2f})...")
+                    raw = client.models.generate_content(
+                        model=GEMINI_MODEL,
+                        contents=prompt,
+                        config=gen_config
+                    ).text.strip()
+                    run_picks = parse_gemini_json_array(raw)
+                    print(f"   ↳ {len(run_picks)} picks returned")
+                    consensus_pick_lists.append(run_picks)
+                except json.JSONDecodeError:
+                    print(f"   ⚠️ Run {run_idx} returned malformed JSON — ignoring that pass")
+                except Exception as e:
+                    msg = f"Gemini run {run_idx}/3 failed: {type(e).__name__}: {str(e)[:180]}"
+                    print(f"   ⚠️ {msg}")
+                    try:
+                        runlog.warn(msg)
+                    except Exception:
+                        pass
+            picks_data = build_consensus_pick_pool(consensus_pick_lists)
+            consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
+            print(f"🤝 Consensus merge: {len(picks_data)} unique picks, {consensus_hits} appearing in 2+ runs")
+            if not consensus_pick_lists:
+                msg = "All Gemini consensus runs failed or returned unusable output"
                 print(f"   ⚠️ {msg}")
                 try:
                     runlog.warn(msg)
                 except Exception:
                     pass
-        picks_data = build_consensus_pick_pool(consensus_pick_lists)
-        consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
-        print(f"🤝 Consensus merge: {len(picks_data)} unique picks, {consensus_hits} appearing in 2+ runs")
-        if not consensus_pick_lists:
-            msg = "All Gemini consensus runs failed or returned unusable output"
-            print(f"   ⚠️ {msg}")
-            try:
-                runlog.warn(msg)
-            except Exception:
-                pass
+        _phase_run_gemini_consensus()
 
-        # Count candidates through the same eligibility and slate-cap gates
-        # used by the real post-filter. Raw Gemini output can look full while
-        # leaving too few usable picks after invalid markets and caps drop out.
-        projected_survivors = projected_valid_gemini_count(
-            picks_data,
-            valid_player_map,
-            valid_prop_keys,
-        )
-        print(
-            f"   Gemini validation preflight: {projected_survivors} projected survivor(s) "
-            f"from {len(picks_data)} unique candidate(s)"
-        )
-
-        # Give Gemini one focused recovery pass when the validated projection
-        # under-delivers. The deterministic market backfill below remains the
-        # final guarantee, so this cannot turn into an unbounded retry loop.
-        if projected_survivors < MIN_DAILY_PICKS:
-            print(
-                f"⚠️ Gemini validation projected only {projected_survivors} usable pick(s); "
-                "requesting one recovery pass..."
+        def _phase_run_gemini_recovery():
+            nonlocal consensus_hits, msg, picks_data, projected_survivors, recovery_config, recovery_picks, recovery_prompt, recovery_raw
+            # Count candidates through the same eligibility and slate-cap gates
+            # used by the real post-filter. Raw Gemini output can look full while
+            # leaving too few usable picks after invalid markets and caps drop out.
+            projected_survivors = projected_valid_gemini_count(
+                picks_data,
+                valid_player_map,
+                valid_prop_keys,
             )
-            recovery_prompt = prompt + f"""
+            print(
+                f"   Gemini validation preflight: {projected_survivors} projected survivor(s) "
+            f"from {len(picks_data)} unique candidate(s)"
+            )
+
+            # Give Gemini one focused recovery pass when the validated projection
+            # under-delivers. The deterministic market backfill below remains the
+            # final guarantee, so this cannot turn into an unbounded retry loop.
+            if projected_survivors < MIN_DAILY_PICKS:
+                print(
+                    f"⚠️ Gemini validation projected only {projected_survivors} usable pick(s); "
+                "requesting one recovery pass..."
+                )
+                recovery_prompt = prompt + f"""
 
 RECOVERY REQUIREMENT:
 The previous responses yielded only {projected_survivors} candidates that survived validation.
@@ -3096,388 +2067,415 @@ Respect these final caps: at most 10 H, 2 R, 4 P_SO, 3 P_ER, 3 P_BB, and 4 total
 Use only exact real props listed in PLAYER DATA. Include LEAN picks when the evidence is merely adequate.
 Do not explain anything outside the JSON array.
 """
-            try:
-                recovery_config = types.GenerateContentConfig(
-                    temperature=0.45,
-                    max_output_tokens=8192,
-                    response_mime_type="application/json",
-                )
-                print(f"🤖 Calling Gemini recovery pass with {GEMINI_MODEL}...")
-                recovery_raw = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=recovery_prompt,
-                    config=recovery_config,
-                ).text.strip()
-                recovery_picks = parse_gemini_json_array(recovery_raw)
-                print(f"   ↳ Recovery returned {len(recovery_picks)} picks")
-                if recovery_picks:
-                    consensus_pick_lists.append(recovery_picks)
-                    picks_data = build_consensus_pick_pool(consensus_pick_lists)
-                    consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
-                    projected_survivors = projected_valid_gemini_count(
-                        picks_data,
-                        valid_player_map,
-                        valid_prop_keys,
-                    )
-                    print(
-                        f"   ↳ Recovery merge: {len(picks_data)} unique picks, "
-                        f"{consensus_hits} appearing in 2+ passes, "
-                        f"{projected_survivors} projected survivor(s)"
-                    )
-            except Exception as e:
-                msg = f"Gemini recovery pass failed: {type(e).__name__}: {str(e)[:180]}"
-                print(f"   ⚠️ {msg}")
                 try:
-                    runlog.warn(msg)
-                except Exception:
-                    pass
+                    recovery_config = types.GenerateContentConfig(
+                        temperature=0.45,
+                        max_output_tokens=8192,
+                        response_mime_type="application/json",
+                    )
+                    print(f"🤖 Calling Gemini recovery pass with {GEMINI_MODEL}...")
+                    recovery_raw = client.models.generate_content(
+                        model=GEMINI_MODEL,
+                        contents=recovery_prompt,
+                        config=recovery_config,
+                    ).text.strip()
+                    recovery_picks = parse_gemini_json_array(recovery_raw)
+                    print(f"   ↳ Recovery returned {len(recovery_picks)} picks")
+                    if recovery_picks:
+                        consensus_pick_lists.append(recovery_picks)
+                        picks_data = build_consensus_pick_pool(consensus_pick_lists)
+                        consensus_hits = sum(1 for pk in picks_data if int(pk.get('CONSENSUS_COUNT', 1) or 1) >= 2)
+                        projected_survivors = projected_valid_gemini_count(
+                            picks_data,
+                            valid_player_map,
+                            valid_prop_keys,
+                        )
+                        print(
+                            f"   ↳ Recovery merge: {len(picks_data)} unique picks, "
+                            f"{consensus_hits} appearing in 2+ passes, "
+                            f"{projected_survivors} projected survivor(s)"
+                        )
+                except Exception as e:
+                    msg = f"Gemini recovery pass failed: {type(e).__name__}: {str(e)[:180]}"
+                    print(f"   ⚠️ {msg}")
+                    try:
+                        runlog.warn(msg)
+                    except Exception:
+                        pass
+        _phase_run_gemini_recovery()
 
-        picks_before_filter = len(picks_data)
-        print(f"   Gemini picks before post-filter: {picks_before_filter}")
-        hr_count = 0
-        pitcher_pick_count = 0
-        prop_type_counts = {}
-        hit_count = 0
-        run_prop_count = 0
-        filtered = []
-        dropped_reasons = []
-        for pk in picks_data:
-            raw_prop = str(pk.get('prop_type', '')).strip()
-            player_norm = normalize_player_name(pk.get('player', ''))
-            prompt_metric = normalize_prop_metric(raw_prop)
-            player_meta = valid_player_map.get(player_norm)
-            if not player_meta:
-                dropped_reasons.append(f"{pk.get('player')} — player not in Gemini pool")
-                continue
-            if prompt_metric in {'SB', '2B', '1B', 'BB', 'SO', 'TB', 'HR', 'RBI', 'P_H', 'P_OUTS'}:
-                dropped_reasons.append(f"{pk.get('player')} — {prompt_metric} removed from slate")
-                continue
-            if prompt_metric == 'H':
-                line_num = pd.to_numeric(pk.get('line'), errors='coerce')
-                if pd.notna(line_num) and float(line_num) > 0.5:
-                    dropped_reasons.append(f"{pk.get('player')} H {line_num:g} — H lines above 0.5 removed")
+        def _phase_apply_post_filter():
+            nonlocal best_book, best_odds, desired_line, dropped_reasons, edge_col, existing_ctx, filtered, gemini_survivor_count
+            nonlocal hit_count, hr_count, line_matches, line_num, line_val, lineup_risk_note, matched_idx, matched_prop
+            nonlocal metric_cap_key, per_type_cap, pick_odds, picks_before_filter, picks_data, pitcher_pick_count, pk, player_meta
+            nonlocal player_norm, priced_lean, prompt_metric, prop_type_counts, raw_prop, reference_book, reference_odds, run_prop_count
+            nonlocal side
+            picks_before_filter = len(picks_data)
+            print(f"   Gemini picks before post-filter: {picks_before_filter}")
+            hr_count = 0
+            pitcher_pick_count = 0
+            prop_type_counts = {}
+            hit_count = 0
+            run_prop_count = 0
+            filtered = []
+            dropped_reasons = []
+            for pk in picks_data:
+                raw_prop = str(pk.get('prop_type', '')).strip()
+                player_norm = normalize_player_name(pk.get('player', ''))
+                prompt_metric = normalize_prop_metric(raw_prop)
+                player_meta = valid_player_map.get(player_norm)
+                if not player_meta:
+                    dropped_reasons.append(f"{pk.get('player')} — player not in Gemini pool")
                     continue
-            if prompt_metric == 'HR':
-                hr_count += 1
-                if hr_count > 1:
-                    dropped_reasons.append(f"{pk.get('player')} — extra HR cap")
+                if prompt_metric in {'SB', '2B', '1B', 'BB', 'SO', 'TB', 'HR', 'RBI', 'P_H', 'P_OUTS'}:
+                    dropped_reasons.append(f"{pk.get('player')} — {prompt_metric} removed from slate")
                     continue
-            metric_cap_key = 'Batter_SO' if prompt_metric == 'SO' else prompt_metric
-            line_val = pk.get('line')
-            if (player_norm, prompt_metric) not in valid_prop_keys:
-                dropped_reasons.append(f"{pk.get('player')} {raw_prop} {line_val} — invalid prop for player")
-                continue
-            line_matches = pd.DataFrame(prop_rows_by_key.get((player_norm, prompt_metric), []))
-            if line_matches.empty:
-                dropped_reasons.append(f"{pk.get('player')} {raw_prop} — no DK market after normalization")
-                continue
-            try:
-                desired_line = float(line_val)
-            except (TypeError, ValueError):
-                desired_line = float(line_matches.iloc[0]['DK_LINE'])
-            matched_idx = line_matches['DK_LINE'].astype(float).sub(desired_line).abs().idxmin()
-            matched_prop = line_matches.loc[matched_idx]
-            pk['line'] = float(matched_prop['DK_LINE'])
-            priced_lean = str(pk.get('lean', '') or '').strip().upper().replace('FADE', 'UNDER')
-            side = 'UNDER' if priced_lean == 'UNDER' else 'OVER'
-            reference_book = clean_text(
-                matched_prop.get('REFERENCE_BOOK'),
-                clean_text(matched_prop.get('BOOK'), 'draftkings'),
-            )
-            reference_odds = pd.to_numeric(matched_prop.get(f'{side}_ODDS'), errors='coerce')
-            best_book = clean_text(matched_prop.get(f'BEST_{side}_BOOK'), reference_book)
-            best_odds = pd.to_numeric(matched_prop.get(f'BEST_{side}_ODDS'), errors='coerce')
-            pick_odds = best_odds if pd.notna(best_odds) else reference_odds
-            pk['REFERENCE_BOOK'] = reference_book
-            pk['REFERENCE_ODDS'] = float(reference_odds) if pd.notna(reference_odds) else np.nan
-            pk['PICK_BOOK'] = best_book if pd.notna(best_odds) else reference_book
-            pk['PICK_ODDS'] = float(pick_odds) if pd.notna(pick_odds) else np.nan
-            pk['IMPLIED_PROBABILITY'] = round(american_to_implied(pick_odds), 4) if pd.notna(pick_odds) else np.nan
-            if prompt_metric == 'H' and float(pk['line']) > 0.5:
-                dropped_reasons.append(f"{pk.get('player')} H {float(pk['line']):g} — snapped to banned H line")
-                continue
-            if prompt_metric == 'SO':
-                pk['prop_type'] = 'Batter_SO'
-                metric_cap_key = 'Batter_SO'
-            if metric_cap_key == 'H' and hit_count >= 10:
-                dropped_reasons.append(f"{pk.get('player')} H — hit prop cap")
-                continue
-            per_type_cap = 4 if metric_cap_key == 'P_SO' else 3
-            if metric_cap_key != 'H' and prop_type_counts.get(metric_cap_key, 0) >= per_type_cap:
-                dropped_reasons.append(f"{pk.get('player')} {metric_cap_key} — per-type cap")
-                continue
-            if metric_cap_key == 'TB' and prop_type_counts.get('TB', 0) >= 2:
-                dropped_reasons.append(f"{pk.get('player')} TB — TB cap")
-                continue
-            if metric_cap_key == 'R' and run_prop_count >= 2:
-                dropped_reasons.append(f"{pk.get('player')} R — run prop cap")
-                continue
-            if metric_cap_key.startswith('P_'):
-                if pitcher_pick_count >= 4:
-                    dropped_reasons.append(f"{pk.get('player')} {metric_cap_key} — pitcher cap")
+                if prompt_metric == 'H':
+                    line_num = pd.to_numeric(pk.get('line'), errors='coerce')
+                    if pd.notna(line_num) and float(line_num) > 0.5:
+                        dropped_reasons.append(f"{pk.get('player')} H {line_num:g} — H lines above 0.5 removed")
+                        continue
+                if prompt_metric == 'HR':
+                    hr_count += 1
+                    if hr_count > 1:
+                        dropped_reasons.append(f"{pk.get('player')} — extra HR cap")
+                        continue
+                metric_cap_key = 'Batter_SO' if prompt_metric == 'SO' else prompt_metric
+                line_val = pk.get('line')
+                if (player_norm, prompt_metric) not in valid_prop_keys:
+                    dropped_reasons.append(f"{pk.get('player')} {raw_prop} {line_val} — invalid prop for player")
                     continue
-                pitcher_pick_count += 1
-            pk['player'] = player_meta['player_name']
-            pk['team'] = pk.get('team') or player_meta['team']
-            pk['opponent'] = pk.get('opponent') or player_meta['opp']
-            pk['opp_pitcher'] = pk.get('opp_pitcher') or player_meta['opp_pitcher']
-            pk['venue'] = pk.get('venue') or player_meta['venue']
-            pk['game'] = pk.get('game') or f"{player_meta['team']} @ {player_meta['opp']}"
-            pk['weather_note'] = pk.get('weather_note') or weather_note_for_venue(player_meta['venue'])
-            for edge_col in [
-                'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
-                'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
-                'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
-                'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
-            ]:
-                pk[edge_col] = player_meta.get(edge_col, np.nan)
-            lineup_risk_note = str(player_meta.get('lineup_risk_note', '') or '').strip()
-            if lineup_risk_note:
-                existing_ctx = str(pk.get('injury_context', '') or '').strip()
-                if existing_ctx:
-                    if not existing_ctx.upper().startswith('LINEUP RISK'):
-                        pk['injury_context'] = f"{lineup_risk_note}. {existing_ctx}"
-                else:
-                    pk['injury_context'] = lineup_risk_note
-            prop_type_counts[metric_cap_key] = prop_type_counts.get(metric_cap_key, 0) + 1
-            if metric_cap_key == 'H':
-                hit_count += 1
-            if metric_cap_key == 'R':
-                run_prop_count += 1
-            filtered.append(pk)
-            if len(filtered) >= 14:
-                break
-        picks_data = filtered
-        gemini_survivor_count = len(picks_data)
-        print(
-            f"   Gemini validation result: {gemini_survivor_count} survived "
-            f"from {picks_before_filter} unique candidate(s)"
-        )
-
-        # Backfill only from props that were actually returned by the books.
-        # This is deliberately conservative: fallback picks are LEAN, retain
-        # the same market caps, and never invent a line or a player.
-        fresh_pick_keys = set()
-        for pick in picks_data:
-            pick_key = (
-                normalize_player_name(pick.get('player', '')),
-                str(pick.get('prop_type', '')).strip().upper(),
-                str(pick.get('lean', '')).strip().upper(),
-            )
-            if pick_key not in seen_pick_keys:
-                fresh_pick_keys.add(pick_key)
-
-        fallback_added = 0
-        if len(fresh_pick_keys) < MIN_DAILY_PICKS:
-            fallback_candidates = build_validated_fallback_candidates()
-            for fallback_pick in fallback_candidates:
-                if len(fresh_pick_keys) >= MIN_DAILY_PICKS:
+                line_matches = pd.DataFrame(prop_rows_by_key.get((player_norm, prompt_metric), []))
+                if line_matches.empty:
+                    dropped_reasons.append(f"{pk.get('player')} {raw_prop} — no DK market after normalization")
+                    continue
+                try:
+                    desired_line = float(line_val)
+                except (TypeError, ValueError):
+                    desired_line = float(line_matches.iloc[0]['DK_LINE'])
+                matched_idx = line_matches['DK_LINE'].astype(float).sub(desired_line).abs().idxmin()
+                matched_prop = line_matches.loc[matched_idx]
+                pk['line'] = float(matched_prop['DK_LINE'])
+                priced_lean = str(pk.get('lean', '') or '').strip().upper().replace('FADE', 'UNDER')
+                side = 'UNDER' if priced_lean == 'UNDER' else 'OVER'
+                reference_book = clean_text(
+                    matched_prop.get('REFERENCE_BOOK'),
+                    clean_text(matched_prop.get('BOOK'), 'draftkings'),
+                )
+                reference_odds = pd.to_numeric(matched_prop.get(f'{side}_ODDS'), errors='coerce')
+                best_book = clean_text(matched_prop.get(f'BEST_{side}_BOOK'), reference_book)
+                best_odds = pd.to_numeric(matched_prop.get(f'BEST_{side}_ODDS'), errors='coerce')
+                pick_odds = best_odds if pd.notna(best_odds) else reference_odds
+                pk['REFERENCE_BOOK'] = reference_book
+                pk['REFERENCE_ODDS'] = float(reference_odds) if pd.notna(reference_odds) else np.nan
+                pk['PICK_BOOK'] = best_book if pd.notna(best_odds) else reference_book
+                pk['PICK_ODDS'] = float(pick_odds) if pd.notna(pick_odds) else np.nan
+                pk['IMPLIED_PROBABILITY'] = round(american_to_implied(pick_odds), 4) if pd.notna(pick_odds) else np.nan
+                if prompt_metric == 'H' and float(pk['line']) > 0.5:
+                    dropped_reasons.append(f"{pk.get('player')} H {float(pk['line']):g} — snapped to banned H line")
+                    continue
+                if prompt_metric == 'SO':
+                    pk['prop_type'] = 'Batter_SO'
+                    metric_cap_key = 'Batter_SO'
+                if metric_cap_key == 'H' and hit_count >= 10:
+                    dropped_reasons.append(f"{pk.get('player')} H — hit prop cap")
+                    continue
+                per_type_cap = 4 if metric_cap_key == 'P_SO' else 3
+                if metric_cap_key != 'H' and prop_type_counts.get(metric_cap_key, 0) >= per_type_cap:
+                    dropped_reasons.append(f"{pk.get('player')} {metric_cap_key} — per-type cap")
+                    continue
+                if metric_cap_key == 'TB' and prop_type_counts.get('TB', 0) >= 2:
+                    dropped_reasons.append(f"{pk.get('player')} TB — TB cap")
+                    continue
+                if metric_cap_key == 'R' and run_prop_count >= 2:
+                    dropped_reasons.append(f"{pk.get('player')} R — run prop cap")
+                    continue
+                if metric_cap_key.startswith('P_'):
+                    if pitcher_pick_count >= 4:
+                        dropped_reasons.append(f"{pk.get('player')} {metric_cap_key} — pitcher cap")
+                        continue
+                    pitcher_pick_count += 1
+                pk['player'] = player_meta['player_name']
+                pk['team'] = pk.get('team') or player_meta['team']
+                pk['opponent'] = pk.get('opponent') or player_meta['opp']
+                pk['opp_pitcher'] = pk.get('opp_pitcher') or player_meta['opp_pitcher']
+                pk['venue'] = pk.get('venue') or player_meta['venue']
+                pk['game'] = pk.get('game') or f"{player_meta['team']} @ {player_meta['opp']}"
+                pk['weather_note'] = pk.get('weather_note') or weather_note_for_venue(player_meta['venue'])
+                for edge_col in [
+                    'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+                    'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+                    'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+                    'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+                ]:
+                    pk[edge_col] = player_meta.get(edge_col, np.nan)
+                lineup_risk_note = str(player_meta.get('lineup_risk_note', '') or '').strip()
+                if lineup_risk_note:
+                    existing_ctx = str(pk.get('injury_context', '') or '').strip()
+                    if existing_ctx:
+                        if not existing_ctx.upper().startswith('LINEUP RISK'):
+                            pk['injury_context'] = f"{lineup_risk_note}. {existing_ctx}"
+                    else:
+                        pk['injury_context'] = lineup_risk_note
+                prop_type_counts[metric_cap_key] = prop_type_counts.get(metric_cap_key, 0) + 1
+                if metric_cap_key == 'H':
+                    hit_count += 1
+                if metric_cap_key == 'R':
+                    run_prop_count += 1
+                filtered.append(pk)
+                if len(filtered) >= 14:
                     break
-                metric = fallback_pick['prop_type']
+            picks_data = filtered
+            gemini_survivor_count = len(picks_data)
+            print(
+                f"   Gemini validation result: {gemini_survivor_count} survived "
+            f"from {picks_before_filter} unique candidate(s)"
+            )
+        _phase_apply_post_filter()
+
+        def _phase_backfill_and_challengers():
+            nonlocal challenger, challenger_added, fallback_added, fallback_candidates, fallback_pick, fresh_pick_keys, hit_count, metric
+            nonlocal per_type_cap, pick, pick_key, pitcher_pick_count, run_prop_count, validated_challengers
+            # Backfill only from props that were actually returned by the books.
+            # This is deliberately conservative: fallback picks are LEAN, retain
+            # the same market caps, and never invent a line or a player.
+            fresh_pick_keys = set()
+            for pick in picks_data:
                 pick_key = (
-                    normalize_player_name(fallback_pick['player']),
-                    metric,
-                    fallback_pick['lean'],
+                    normalize_player_name(pick.get('player', '')),
+                    str(pick.get('prop_type', '')).strip().upper(),
+                    str(pick.get('lean', '')).strip().upper(),
+                )
+                if pick_key not in seen_pick_keys:
+                    fresh_pick_keys.add(pick_key)
+
+            fallback_added = 0
+            if len(fresh_pick_keys) < MIN_DAILY_PICKS:
+                fallback_candidates = build_validated_fallback_candidates()
+                for fallback_pick in fallback_candidates:
+                    if len(fresh_pick_keys) >= MIN_DAILY_PICKS:
+                        break
+                    metric = fallback_pick['prop_type']
+                    pick_key = (
+                        normalize_player_name(fallback_pick['player']),
+                        metric,
+                        fallback_pick['lean'],
+                    )
+                    if pick_key in seen_pick_keys or pick_key in fresh_pick_keys:
+                        continue
+                    if metric == 'H' and hit_count >= 10:
+                        continue
+                    per_type_cap = 4 if metric == 'P_SO' else 3
+                    if metric != 'H' and prop_type_counts.get(metric, 0) >= per_type_cap:
+                        continue
+                    if metric == 'R' and run_prop_count >= 2:
+                        continue
+                    if metric.startswith('P_') and pitcher_pick_count >= 4:
+                        continue
+                    fallback_pick['rationale'] = (
+                        'Validated sportsbook backfill added to satisfy the fresh-pick floor.'
+                    )
+                    fallback_pick['CONSENSUS_TAG'] = 'VALIDATED BACKFILL'
+                    picks_data.append(fallback_pick)
+                    fresh_pick_keys.add(pick_key)
+                    prop_type_counts[metric] = prop_type_counts.get(metric, 0) + 1
+                    if metric == 'H':
+                        hit_count += 1
+                    if metric == 'R':
+                        run_prop_count += 1
+                    if metric.startswith('P_'):
+                        pitcher_pick_count += 1
+                    fallback_added += 1
+                if fallback_added:
+                    print(f"   🧰 Added {fallback_added} validated sportsbook fallback pick(s) to reach {len(fresh_pick_keys)} fresh picks")
+                if len(fresh_pick_keys) < MIN_DAILY_PICKS:
+                    print(f"   ⚠️ Only {len(fresh_pick_keys)} fresh picks were available after Gemini recovery and market backfill")
+
+            # Always let the audited deterministic H model compete with Gemini,
+            # even when Gemini already filled the nominal pick count. These rows
+            # drove the strongest observed ROI and should not be relegated to an
+            # emergency-only backfill path.
+            validated_challengers = [
+                row for row in build_validated_fallback_candidates()
+                if row.get('prop_type') == 'H' and row.get('lean') == 'OVER'
+            ]
+            challenger_added = 0
+            for challenger in validated_challengers:
+                pick_key = (
+                    normalize_player_name(challenger.get('player', '')),
+                    str(challenger.get('prop_type', '')).strip().upper(),
+                    str(challenger.get('lean', '')).strip().upper(),
                 )
                 if pick_key in seen_pick_keys or pick_key in fresh_pick_keys:
                     continue
-                if metric == 'H' and hit_count >= 10:
-                    continue
-                per_type_cap = 4 if metric == 'P_SO' else 3
-                if metric != 'H' and prop_type_counts.get(metric, 0) >= per_type_cap:
-                    continue
-                if metric == 'R' and run_prop_count >= 2:
-                    continue
-                if metric.startswith('P_') and pitcher_pick_count >= 4:
-                    continue
-                fallback_pick['rationale'] = (
-                    'Validated sportsbook backfill added to satisfy the fresh-pick floor.'
+                challenger['rationale'] = (
+                    'Audited Hits model challenger added for calibrated comparison.'
                 )
-                fallback_pick['CONSENSUS_TAG'] = 'VALIDATED BACKFILL'
-                picks_data.append(fallback_pick)
+                challenger['CONSENSUS_TAG'] = 'VALIDATED CHALLENGER'
+                picks_data.append(challenger)
                 fresh_pick_keys.add(pick_key)
-                prop_type_counts[metric] = prop_type_counts.get(metric, 0) + 1
-                if metric == 'H':
-                    hit_count += 1
-                if metric == 'R':
-                    run_prop_count += 1
-                if metric.startswith('P_'):
-                    pitcher_pick_count += 1
-                fallback_added += 1
-            if fallback_added:
-                print(f"   🧰 Added {fallback_added} validated sportsbook fallback pick(s) to reach {len(fresh_pick_keys)} fresh picks")
-            if len(fresh_pick_keys) < MIN_DAILY_PICKS:
-                print(f"   ⚠️ Only {len(fresh_pick_keys)} fresh picks were available after Gemini recovery and market backfill")
+                challenger_added += 1
+                if challenger_added >= 6:
+                    break
+            if challenger_added:
+                print(f"   📐 Added {challenger_added} validated-model challenger(s) for calibrated ranking")
+        _phase_backfill_and_challengers()
 
-        # Always let the audited deterministic H model compete with Gemini,
-        # even when Gemini already filled the nominal pick count. These rows
-        # drove the strongest observed ROI and should not be relegated to an
-        # emergency-only backfill path.
-        validated_challengers = [
-            row for row in build_validated_fallback_candidates()
-            if row.get('prop_type') == 'H' and row.get('lean') == 'OVER'
-        ]
-        challenger_added = 0
-        for challenger in validated_challengers:
-            pick_key = (
-                normalize_player_name(challenger.get('player', '')),
-                str(challenger.get('prop_type', '')).strip().upper(),
-                str(challenger.get('lean', '')).strip().upper(),
-            )
-            if pick_key in seen_pick_keys or pick_key in fresh_pick_keys:
-                continue
-            challenger['rationale'] = (
-                'Audited Hits model challenger added for calibrated comparison.'
-            )
-            challenger['CONSENSUS_TAG'] = 'VALIDATED CHALLENGER'
-            picks_data.append(challenger)
-            fresh_pick_keys.add(pick_key)
-            challenger_added += 1
-            if challenger_added >= 6:
-                break
-        if challenger_added:
-            print(f"   📐 Added {challenger_added} validated-model challenger(s) for calibrated ranking")
+        def _phase_score_and_summarize():
+            nonlocal msg, pick
+            for pick in picks_data:
+                pick['MODEL_VERSION'] = MODEL_VERSION
+                pick['SELECTION_METHOD'] = pick_selection_method(pick)
+                pick['RECOMMENDATION_STATUS'] = recommendation_status(pick)
+                pick['CALIBRATION_SCORE'] = round(calibrated_pick_priority(pick), 3)
+            picks_data.sort(key=lambda pick: (-float(pick.get('CALIBRATION_SCORE', 0) or 0), float(pick.get('rank', 999) or 999)))
+            # Preserve the full research cohort. The initial Gemini/post-filter
+            # pool is already capped, and challengers add at most six rows. Public
+            # promotion is controlled by RECOMMENDATION_STATUS, not by deleting
+            # lower-ranked observations before they can be graded.
 
-        for pick in picks_data:
-            pick['MODEL_VERSION'] = MODEL_VERSION
-            pick['SELECTION_METHOD'] = pick_selection_method(pick)
-            pick['RECOMMENDATION_STATUS'] = recommendation_status(pick)
-            pick['CALIBRATION_SCORE'] = round(calibrated_pick_priority(pick), 3)
-        picks_data.sort(key=lambda pick: (-float(pick.get('CALIBRATION_SCORE', 0) or 0), float(pick.get('rank', 999) or 999)))
-        # Preserve the full research cohort. The initial Gemini/post-filter
-        # pool is already capped, and challengers add at most six rows. Public
-        # promotion is controlled by RECOMMENDATION_STATUS, not by deleting
-        # lower-ranked observations before they can be graded.
+            print(f"   Tracked picks after calibrated merge: {len(picks_data)}")
+            if dropped_reasons:
+                print(f"   🚫 Dropped hallucinated/invalid picks: {len(dropped_reasons)}")
+                if len(dropped_reasons) <= 25:
+                    for msg in dropped_reasons:
+                        print(f"      - {msg}")
+            print("   Gemini pool summary:")
+            print(f"      batters after props filter: {len(batter_prop_pool)}")
+            print(f"      pitchers after props filter: {len(pitcher_prop_pool)}")
+            print(f"      final sent to Gemini: {len(gemini_pool)}")
+            print(f"      unique Gemini candidates: {picks_before_filter}")
+            print(f"      Gemini survivors: {gemini_survivor_count}")
+            print(f"      emergency backfills: {fallback_added}")
+            print(f"      deterministic challengers: {challenger_added}")
+            print(f"      total tracked cohort: {len(picks_data)}")
+        _phase_score_and_summarize()
 
-        print(f"   Tracked picks after calibrated merge: {len(picks_data)}")
-        if dropped_reasons:
-            print(f"   🚫 Dropped hallucinated/invalid picks: {len(dropped_reasons)}")
-            if len(dropped_reasons) <= 25:
-                for msg in dropped_reasons:
-                    print(f"      - {msg}")
-        print("   Gemini pool summary:")
-        print(f"      batters after props filter: {len(batter_prop_pool)}")
-        print(f"      pitchers after props filter: {len(pitcher_prop_pool)}")
-        print(f"      final sent to Gemini: {len(gemini_pool)}")
-        print(f"      unique Gemini candidates: {picks_before_filter}")
-        print(f"      Gemini survivors: {gemini_survivor_count}")
-        print(f"      emergency backfills: {fallback_added}")
-        print(f"      deterministic challengers: {challenger_added}")
-        print(f"      total tracked cohort: {len(picks_data)}")
-        for i, pk in enumerate(picks_data):
-            pk['rank'] = i + 1
-        df_picks = pd.DataFrame(picks_data)
-        if not df_picks.empty:
-            df_picks['confidence'] = df_picks['confidence'].map(normalize_confidence)
-            smash_idx = df_picks.index[df_picks['confidence'] == 'SMASH'].tolist()
-            max_smash = min(3, max(1, len(df_picks) // 4 + (1 if len(df_picks) >= 8 else 0)))
-            for idx in smash_idx[max_smash:]:
-                df_picks.at[idx, 'confidence'] = 'STRONG'
-            batter_prop_types = {'H', 'HR', 'RBI', 'R', 'TB', 'UD_FP', '2B', '3B', '1B', 'BB', 'Batter_SO'}
-            if two_way_tonight and 'player' in df_picks.columns:
-                for i, row in df_picks.iterrows():
-                    if row.get('player') in two_way_tonight and row.get('prop_type') in batter_prop_types:
-                        existing_ctx = str(row.get('injury_context', '')).strip()
-                        if not existing_ctx.upper().startswith('LINEUP RISK'):
-                            df_picks.at[i, 'injury_context'] = f"LINEUP RISK: Pitching tonight — confirm batting lineup before bet. {existing_ctx}".strip()
-                            print(f"   🚨 Forced LINEUP RISK flag on {row['player']} ({row.get('prop_type')})")
-            returning_mask = df_picks['player'].map(lambda n: returning_player_map.get(normalize_player_name(n), False))
-            if returning_mask.any():
-                df_picks.loc[returning_mask & (df_picks['confidence'] == 'SMASH'), 'confidence'] = 'STRONG'
-            df_picks['matchup'] = df_picks['game']
-            df_picks['reasoning'] = df_picks['rationale']
-            df_picks['DATE'] = schedule_date
-            df_picks['RUN_TIME'] = timestamp_est
-            df_picks['RUN_NUMBER'] = today_run_number
-            df_picks['LAST_UPDATED'] = timestamp_est
-            df_picks['RESULT'] = ''
-            df_picks['ACTUAL_STAT'] = np.nan
-            df_picks['HIT'] = ''
-            df_picks['REALIZED_PROFIT'] = np.nan
-            df_picks['ACTUAL_ROI_PER_PICK'] = np.nan
-            df_picks['CLV_OPEN_LINE'] = df_picks['line']
-            df_picks['CLV_LATEST_LINE'] = df_picks['line']
-            df_picks['CLV_DELTA'] = 0.0
-            df_picks['CLV_LAST_UPDATE'] = timestamp_est
-            df_picks['DATA_SOURCE'] = 'mixed_props_validated'
-            df_picks['source'] = df_picks['DATA_SOURCE']
-            if 'CONSENSUS_COUNT' not in df_picks.columns:
-                df_picks['CONSENSUS_COUNT'] = 1
-            if 'CONSENSUS_RUNS' not in df_picks.columns:
-                df_picks['CONSENSUS_RUNS'] = '1'
-            if 'CONSENSUS_TAG' not in df_picks.columns:
-                df_picks['CONSENSUS_TAG'] = ''
-            # Picks_Current is a complete snapshot of this run. Capture it
-            # before Daily_Picks removes same-day duplicates for grading.
-            df_picks_current = df_picks[
-                [c for c in PICK_OUTPUT_COLUMNS if c in df_picks.columns]
-            ].copy()
-            df_picks_current = df_picks_current.reset_index(drop=True)
-            df_picks_current['rank'] = range(1, len(df_picks_current) + 1)
-            print(
-                f"   📍 Picks_Current snapshot: {len(df_picks_current)} complete current pick(s)"
-            )
-            dedup_keep = []
-            duplicate_drop_msgs = []
-            duplicate_reserve = []
-            for _, row in df_picks.iterrows():
-                pick_key = (
-                    normalize_player_name(row.get('player', '')),
-                    str(row.get('prop_type', '')).strip().upper(),
-                    str(row.get('lean', '')).strip().upper(),
-                )
-                if pick_key in seen_pick_keys:
-                    duplicate_drop_msgs.append(f"{row.get('player')} {row.get('prop_type')} {row.get('lean')} — duplicate prior run")
-                    print(f"   🔁 Skipping duplicate pick: {row.get('player')} {row.get('prop_type')} {row.get('lean')}")
-                    duplicate_reserve.append(row.to_dict())
-                    continue
-                seen_pick_keys.add(pick_key)
-                dedup_keep.append(row.to_dict())
-            if len(dedup_keep) < MIN_DAILY_PICKS and duplicate_reserve:
-                needed = MIN_DAILY_PICKS - len(dedup_keep)
-                restored = duplicate_reserve[:needed]
-                dedup_keep.extend(restored)
-                print(f"   ♻️ Restored {len(restored)} same-day duplicate pick(s) to keep a minimum of {MIN_DAILY_PICKS} picks")
-                for restored_row in restored:
-                    existing_ctx = str(restored_row.get('injury_context', '') or '').strip()
-                    restored_row['injury_context'] = f"RERUN DUPLICATE. {existing_ctx}".strip()
-            if len(dedup_keep) < MIN_DAILY_PICKS:
-                shortfall_msg = (
-                    f"Final picks ({len(dedup_keep)}) below MIN_DAILY_PICKS floor "
-                    f"({MIN_DAILY_PICKS}) — insufficient distinct Gemini output or validated markets"
-                )
-                print(f"   🚨 {shortfall_msg}")
-                try:
-                    runlog.warn(shortfall_msg)
-                except Exception:
-                    pass
-            if duplicate_drop_msgs:
-                dropped_reasons.extend(duplicate_drop_msgs)
-            df_picks = pd.DataFrame(dedup_keep)
-            df_picks = df_picks[[c for c in PICK_OUTPUT_COLUMNS if c in df_picks.columns]]
+        def _phase_finalize_dataframe():
+            nonlocal _, batter_prop_types, conf_series, dedup_keep, df_picks, duplicate_drop_msgs, duplicate_reserve, existing_ctx
+            nonlocal i, idx, lean_series, max_smash, needed, pick_key, pk, prop_dist
+            nonlocal restored, restored_row, returning_ct, returning_mask, row, shortfall_msg, smash_idx, star_ct
+            global df_picks_current
+            for i, pk in enumerate(picks_data):
+                pk['rank'] = i + 1
+            df_picks = pd.DataFrame(picks_data)
             if not df_picks.empty:
-                df_picks = df_picks.reset_index(drop=True)
-                df_picks['rank'] = range(1, len(df_picks) + 1)
-            prop_dist = df_picks['prop_type'].fillna('').astype(str).str.upper().value_counts().to_dict()
-            lean_series = df_picks['lean'].fillna('').astype(str).str.upper().replace({'FADE': 'UNDER'})
-            conf_series = df_picks['confidence'].fillna('').astype(str).str.upper()
-            star_ct = int(df_picks['player'].map(lambda n: normalize_player_name(n) in star_top20_norms).sum())
-            returning_ct = int(df_picks['player'].map(lambda n: returning_player_map.get(normalize_player_name(n), False)).sum())
-            print("📊 Final pick distribution:")
-            print(f"   Prop types: {prop_dist}")
-            print(f"   Lean: {int((lean_series == 'OVER').sum())} OVER / {int((lean_series == 'UNDER').sum())} UNDER")
-            print(f"   Confidence: {int((conf_series == 'SMASH').sum())} SMASH / {int((conf_series == 'STRONG').sum())} STRONG / {int((conf_series == 'LEAN').sum())} LEAN")
-            print(f"   Stars: {star_ct}")
-            print(f"   Returning: {returning_ct}")
-            print(f"   Dropped: {len(dropped_reasons)} — {', '.join(dropped_reasons[:10]) if dropped_reasons else 'none'}")
-        print(f"\n✅ Generated {len(df_picks)} picks across {df_picks['game'].nunique() if not df_picks.empty and 'game' in df_picks.columns else 0} games!")
-        if not df_picks.empty:
-            print(f"🏆 #1 Pick: {df_picks.iloc[0]['player']} — {df_picks.iloc[0]['prop_type']} {df_picks.iloc[0]['lean']} {df_picks.iloc[0]['line']} ({df_picks.iloc[0]['confidence']})")
-            smash_ct = len(df_picks[df_picks['confidence'] == 'SMASH'])
-            pitcher_ct = int(df_picks['prop_type'].astype(str).str.startswith('P_').sum())
-            print(f"💪 {smash_ct} SMASH picks | {pitcher_ct} pitcher props | {len(df_picks) - smash_ct} standard picks")
-        else:
-            print("⚠️ No validated Gemini picks were produced after post-filtering.")
+                df_picks['confidence'] = df_picks['confidence'].map(normalize_confidence)
+                smash_idx = df_picks.index[df_picks['confidence'] == 'SMASH'].tolist()
+                max_smash = min(3, max(1, len(df_picks) // 4 + (1 if len(df_picks) >= 8 else 0)))
+                for idx in smash_idx[max_smash:]:
+                    df_picks.at[idx, 'confidence'] = 'STRONG'
+                batter_prop_types = {'H', 'HR', 'RBI', 'R', 'TB', 'UD_FP', '2B', '3B', '1B', 'BB', 'Batter_SO'}
+                if two_way_tonight and 'player' in df_picks.columns:
+                    for i, row in df_picks.iterrows():
+                        if row.get('player') in two_way_tonight and row.get('prop_type') in batter_prop_types:
+                            existing_ctx = str(row.get('injury_context', '')).strip()
+                            if not existing_ctx.upper().startswith('LINEUP RISK'):
+                                df_picks.at[i, 'injury_context'] = f"LINEUP RISK: Pitching tonight — confirm batting lineup before bet. {existing_ctx}".strip()
+                                print(f"   🚨 Forced LINEUP RISK flag on {row['player']} ({row.get('prop_type')})")
+                returning_mask = df_picks['player'].map(lambda n: returning_player_map.get(normalize_player_name(n), False))
+                if returning_mask.any():
+                    df_picks.loc[returning_mask & (df_picks['confidence'] == 'SMASH'), 'confidence'] = 'STRONG'
+                df_picks['matchup'] = df_picks['game']
+                df_picks['reasoning'] = df_picks['rationale']
+                df_picks['DATE'] = schedule_date
+                df_picks['RUN_TIME'] = timestamp_est
+                df_picks['RUN_NUMBER'] = today_run_number
+                df_picks['LAST_UPDATED'] = timestamp_est
+                df_picks['RESULT'] = ''
+                df_picks['ACTUAL_STAT'] = np.nan
+                df_picks['HIT'] = ''
+                df_picks['REALIZED_PROFIT'] = np.nan
+                df_picks['ACTUAL_ROI_PER_PICK'] = np.nan
+                df_picks['CLV_OPEN_LINE'] = df_picks['line']
+                df_picks['CLV_LATEST_LINE'] = df_picks['line']
+                df_picks['CLV_DELTA'] = 0.0
+                df_picks['CLV_LAST_UPDATE'] = timestamp_est
+                df_picks['DATA_SOURCE'] = 'mixed_props_validated'
+                df_picks['source'] = df_picks['DATA_SOURCE']
+                if 'CONSENSUS_COUNT' not in df_picks.columns:
+                    df_picks['CONSENSUS_COUNT'] = 1
+                if 'CONSENSUS_RUNS' not in df_picks.columns:
+                    df_picks['CONSENSUS_RUNS'] = '1'
+                if 'CONSENSUS_TAG' not in df_picks.columns:
+                    df_picks['CONSENSUS_TAG'] = ''
+                # Picks_Current is a complete snapshot of this run. Capture it
+                # before Daily_Picks removes same-day duplicates for grading.
+                df_picks_current = df_picks[
+                    [c for c in PICK_OUTPUT_COLUMNS if c in df_picks.columns]
+                ].copy()
+                df_picks_current = df_picks_current.reset_index(drop=True)
+                df_picks_current['rank'] = range(1, len(df_picks_current) + 1)
+                print(
+                    f"   📍 Picks_Current snapshot: {len(df_picks_current)} complete current pick(s)"
+                )
+                dedup_keep = []
+                duplicate_drop_msgs = []
+                duplicate_reserve = []
+                for _, row in df_picks.iterrows():
+                    pick_key = (
+                        normalize_player_name(row.get('player', '')),
+                        str(row.get('prop_type', '')).strip().upper(),
+                        str(row.get('lean', '')).strip().upper(),
+                    )
+                    if pick_key in seen_pick_keys:
+                        duplicate_drop_msgs.append(f"{row.get('player')} {row.get('prop_type')} {row.get('lean')} — duplicate prior run")
+                        print(f"   🔁 Skipping duplicate pick: {row.get('player')} {row.get('prop_type')} {row.get('lean')}")
+                        duplicate_reserve.append(row.to_dict())
+                        continue
+                    seen_pick_keys.add(pick_key)
+                    dedup_keep.append(row.to_dict())
+                if len(dedup_keep) < MIN_DAILY_PICKS and duplicate_reserve:
+                    needed = MIN_DAILY_PICKS - len(dedup_keep)
+                    restored = duplicate_reserve[:needed]
+                    dedup_keep.extend(restored)
+                    print(f"   ♻️ Restored {len(restored)} same-day duplicate pick(s) to keep a minimum of {MIN_DAILY_PICKS} picks")
+                    for restored_row in restored:
+                        existing_ctx = str(restored_row.get('injury_context', '') or '').strip()
+                        restored_row['injury_context'] = f"RERUN DUPLICATE. {existing_ctx}".strip()
+                if len(dedup_keep) < MIN_DAILY_PICKS:
+                    shortfall_msg = (
+                        f"Final picks ({len(dedup_keep)}) below MIN_DAILY_PICKS floor "
+                    f"({MIN_DAILY_PICKS}) — insufficient distinct Gemini output or validated markets"
+                    )
+                    print(f"   🚨 {shortfall_msg}")
+                    try:
+                        runlog.warn(shortfall_msg)
+                    except Exception:
+                        pass
+                if duplicate_drop_msgs:
+                    dropped_reasons.extend(duplicate_drop_msgs)
+                df_picks = pd.DataFrame(dedup_keep)
+                df_picks = df_picks[[c for c in PICK_OUTPUT_COLUMNS if c in df_picks.columns]]
+                if not df_picks.empty:
+                    df_picks = df_picks.reset_index(drop=True)
+                    df_picks['rank'] = range(1, len(df_picks) + 1)
+                prop_dist = df_picks['prop_type'].fillna('').astype(str).str.upper().value_counts().to_dict()
+                lean_series = df_picks['lean'].fillna('').astype(str).str.upper().replace({'FADE': 'UNDER'})
+                conf_series = df_picks['confidence'].fillna('').astype(str).str.upper()
+                star_ct = int(df_picks['player'].map(lambda n: normalize_player_name(n) in star_top20_norms).sum())
+                returning_ct = int(df_picks['player'].map(lambda n: returning_player_map.get(normalize_player_name(n), False)).sum())
+                print("📊 Final pick distribution:")
+                print(f"   Prop types: {prop_dist}")
+                print(f"   Lean: {int((lean_series == 'OVER').sum())} OVER / {int((lean_series == 'UNDER').sum())} UNDER")
+                print(f"   Confidence: {int((conf_series == 'SMASH').sum())} SMASH / {int((conf_series == 'STRONG').sum())} STRONG / {int((conf_series == 'LEAN').sum())} LEAN")
+                print(f"   Stars: {star_ct}")
+                print(f"   Returning: {returning_ct}")
+                print(f"   Dropped: {len(dropped_reasons)} — {', '.join(dropped_reasons[:10]) if dropped_reasons else 'none'}")
+        _phase_finalize_dataframe()
+
+        def _phase_print_final_summary():
+            nonlocal pitcher_ct, smash_ct
+            print(f"\n✅ Generated {len(df_picks)} picks across {df_picks['game'].nunique() if not df_picks.empty and 'game' in df_picks.columns else 0} games!")
+            if not df_picks.empty:
+                print(f"🏆 #1 Pick: {df_picks.iloc[0]['player']} — {df_picks.iloc[0]['prop_type']} {df_picks.iloc[0]['lean']} {df_picks.iloc[0]['line']} ({df_picks.iloc[0]['confidence']})")
+                smash_ct = len(df_picks[df_picks['confidence'] == 'SMASH'])
+                pitcher_ct = int(df_picks['prop_type'].astype(str).str.startswith('P_').sum())
+                print(f"💪 {smash_ct} SMASH picks | {pitcher_ct} pitcher props | {len(df_picks) - smash_ct} standard picks")
+            else:
+                print("⚠️ No validated Gemini picks were produced after post-filtering.")
+        _phase_print_final_summary()
+
     except json.JSONDecodeError as e:
         print(f"❌ Failed to parse Gemini response: {e}")
     except Exception as e:
@@ -3485,13 +2483,6 @@ Do not explain anything outside the JSON array.
     return df_picks
 
 # --- 12. PITCHER GAME LOGS ---
-print(f"\nFetching pitcher game logs for {SEASON} season...")
-print("⚡ Using parallel fetching...")
-
-df_pitcher_logs = pd.DataFrame()
-df_pitcher_tonight = pd.DataFrame()
-p_ha_pivot = pd.DataFrame()
-
 def get_qualified_pitchers(season):
     # Use the complete player pool and enforce the engine's innings threshold
     # locally. MLB's default qualified pool omits valid probable starters.
@@ -3545,22 +2536,6 @@ def get_pitcher_game_log(player_id, season):
     except Exception:
         return []
 
-PITCHER_LOG_BASE_COLS = ['player_id', 'game_pk', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
-                         'IP', 'IP_DISPLAY', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP', 'ERA']
-PITCHER_LOG_NUMERIC_COLS = ['player_id', 'IP', 'IP_DISPLAY', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP', 'ERA']
-existing_pitcher_logs = load_existing_log_sheet('Pitcher_Game_Logs', PITCHER_LOG_BASE_COLS, PITCHER_LOG_NUMERIC_COLS)
-latest_pitcher_date_by_pid = {}
-if len(existing_pitcher_logs) > 0:
-    latest_pitcher_date_by_pid = existing_pitcher_logs.dropna(subset=['player_id']).groupby('player_id')['game_date'].max().to_dict()
-    latest_pitcher_seed_date = max(latest_pitcher_date_by_pid.values()) if latest_pitcher_date_by_pid else ''
-    if latest_pitcher_seed_date:
-        print(f"♻️ Seeded Pitcher_Game_Logs through {latest_pitcher_seed_date} ({len(existing_pitcher_logs)} existing rows)")
-else:
-    print("🆕 No existing Pitcher_Game_Logs seed found — full pitcher fetch")
-
-qualified_pitchers = get_qualified_pitchers(SEASON)
-print(f"✅ Found {len(qualified_pitchers)} qualified pitchers")
-
 def fetch_one_pitcher_log(pitcher):
     logs = get_pitcher_game_log(pitcher['player_id'], SEASON)
     cutoff = latest_pitcher_date_by_pid.get(pitcher['player_id'])
@@ -3571,404 +2546,6 @@ def fetch_one_pitcher_log(pitcher):
         log['player_name'] = pitcher['player_name']
         log['game_date'] = normalize_game_date(log['game_date'])
     return logs
-
-all_pitcher_logs = []
-start_time = time.time()
-with ThreadPoolExecutor(max_workers=15) as executor:
-    futures = {executor.submit(fetch_one_pitcher_log, p): p for p in qualified_pitchers}
-    done_count = 0
-    for future in as_completed(futures):
-        all_pitcher_logs.extend(future.result())
-        done_count += 1
-        if done_count % 50 == 0:
-            print(f"   Fetched {done_count}/{len(qualified_pitchers)} pitchers...")
-
-elapsed = time.time() - start_time
-new_pitcher_logs = pd.DataFrame(all_pitcher_logs, columns=PITCHER_LOG_BASE_COLS)
-refreshed_pitcher_rows = 0
-if len(existing_pitcher_logs) > 0 and len(new_pitcher_logs) > 0:
-    new_pitcher_logs['game_date'] = new_pitcher_logs['game_date'].map(normalize_game_date)
-    refresh_keys = {
-        (int(float(pid)), game_date)
-        for pid, game_date in zip(new_pitcher_logs['player_id'], new_pitcher_logs['game_date'])
-        if pd.notna(pid) and game_date
-    }
-    existing_pitcher_logs['game_date'] = existing_pitcher_logs['game_date'].map(normalize_game_date)
-    keep_existing = [
-        (int(float(pid)), game_date) not in refresh_keys
-        if pd.notna(pid) else True
-        for pid, game_date in zip(existing_pitcher_logs['player_id'], existing_pitcher_logs['game_date'])
-    ]
-    refreshed_pitcher_rows = len(existing_pitcher_logs) - sum(keep_existing)
-    existing_pitcher_logs = existing_pitcher_logs.loc[keep_existing].copy()
-combined_pitcher_logs = pd.concat([existing_pitcher_logs, new_pitcher_logs], ignore_index=True)
-if len(combined_pitcher_logs) > 0:
-    combined_pitcher_logs['game_date'] = combined_pitcher_logs['game_date'].map(normalize_game_date)
-    dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP']
-    has_game_pk = combined_pitcher_logs['game_pk'].notna() & combined_pitcher_logs['game_pk'].astype(str).str.strip().ne('')
-    logs_with_pk = combined_pitcher_logs.loc[has_game_pk].drop_duplicates(subset=['player_id', 'game_pk'], keep='last')
-    logs_without_pk = combined_pitcher_logs.loc[~has_game_pk].drop_duplicates(subset=dedupe_cols, keep='last')
-    combined_pitcher_logs = pd.concat([logs_without_pk, logs_with_pk], ignore_index=True)
-    combined_pitcher_logs['game_date'] = pd.to_datetime(combined_pitcher_logs['game_date'], errors='coerce')
-    df_pitcher_logs = combined_pitcher_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
-    print(f"✅ Fetched {len(new_pitcher_logs)} recent/new pitcher logs; refreshed {refreshed_pitcher_rows} cached rows; {len(df_pitcher_logs)} combined pitcher logs across {df_pitcher_logs['player_name'].nunique()} pitchers in {elapsed:.1f}s")
-else:
-    df_pitcher_logs = combined_pitcher_logs
-    print("⚠️ No pitcher game logs found")
-
-# --- 13. PITCHER METRICS ---
-if len(df_pitcher_logs) > 0:
-    print("\nCalculating pitcher metrics and rolling averages...")
-    if 'IP_OUTS' not in df_pitcher_logs.columns:
-        df_pitcher_logs['IP_OUTS'] = df_pitcher_logs['IP'].apply(innings_to_outs)
-    df_pitcher_logs['DK_FP'] = (
-        df_pitcher_logs['IP'] * 2.25 + df_pitcher_logs['SO'] * 2 + df_pitcher_logs['W'] * 4 +
-        df_pitcher_logs['ER'] * -2 + df_pitcher_logs['H'] * -0.6 + df_pitcher_logs['BB'] * -0.6 +
-        df_pitcher_logs['HBP'] * -0.6 +
-        (df_pitcher_logs['IP_OUTS'] >= 18).astype(int) * (df_pitcher_logs['ER'] <= 3).astype(int) * 2.5).round(2)
-    df_pitcher_logs['CG'] = (df_pitcher_logs['IP_OUTS'] >= 27).astype(int)
-
-    # v1.3.0: Quality Start column + Underdog Fantasy scoring
-    df_pitcher_logs['QS'] = ((df_pitcher_logs['IP_OUTS'] >= 18) & (df_pitcher_logs['ER'] <= 3)).astype(int)
-
-    # Underdog: W=5, QS=5, K=3, IP=3, ER=-3
-    df_pitcher_logs['UD_FP'] = (
-        df_pitcher_logs['W'] * 5 + df_pitcher_logs['QS'] * 5 +
-        df_pitcher_logs['SO'] * 3 + df_pitcher_logs['IP'] * 3 +
-        df_pitcher_logs['ER'] * -3
-    ).round(2)
-
-    # v1.3.0: Added QS, UD_FP to rolling averages
-    p_metrics = ['IP', 'H', 'ER', 'HR', 'BB', 'SO', 'PC', 'DK_FP', 'UD_FP', 'QS', 'R', 'W', 'L']
-    p_windows = {'L3': 3, 'L7': 7, 'L15': 15}
-
-    df_pitcher_logs = df_pitcher_logs.set_index('game_date').sort_index()
-    for m in p_metrics:
-        grp = df_pitcher_logs.groupby('player_id')[m]
-        df_pitcher_logs[f'Seas_{m}'] = grp.transform(lambda x: x.expanding().mean()).round(3)
-        for label, w in p_windows.items():
-            df_pitcher_logs[f'{label}_{m}'] = grp.transform(lambda x: x.rolling(w, min_periods=1).mean()).round(3)
-
-    for label, w in p_windows.items():
-        roll_er = df_pitcher_logs.groupby('player_id')['ER'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        roll_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        df_pitcher_logs[f'{label}_ERA'] = np.where(roll_ip > 0, (roll_er * 9 / roll_ip).round(2), 0)
-
-    seas_er = df_pitcher_logs.groupby('player_id')['ER'].transform(lambda x: x.expanding().sum())
-    seas_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.expanding().sum())
-    df_pitcher_logs['Seas_ERA'] = np.where(seas_ip > 0, (seas_er * 9 / seas_ip).round(2), 0)
-
-    for label, w in p_windows.items():
-        roll_h = df_pitcher_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        roll_bb = df_pitcher_logs.groupby('player_id')['BB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        roll_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        df_pitcher_logs[f'{label}_WHIP'] = np.where(roll_ip > 0, ((roll_h + roll_bb) / roll_ip).round(2), 0)
-
-    seas_h = df_pitcher_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
-    seas_bb = df_pitcher_logs.groupby('player_id')['BB'].transform(lambda x: x.expanding().sum())
-    df_pitcher_logs['Seas_WHIP'] = np.where(seas_ip > 0, ((seas_h + seas_bb) / seas_ip).round(2), 0)
-
-    for label, w in p_windows.items():
-        roll_so = df_pitcher_logs.groupby('player_id')['SO'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        roll_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
-        df_pitcher_logs[f'{label}_K9'] = np.where(roll_ip > 0, (roll_so * 9 / roll_ip).round(2), 0)
-
-    seas_so = df_pitcher_logs.groupby('player_id')['SO'].transform(lambda x: x.expanding().sum())
-    df_pitcher_logs['Seas_K9'] = np.where(seas_ip > 0, (seas_so * 9 / seas_ip).round(2), 0)
-
-    df_pitcher_logs = df_pitcher_logs.reset_index()
-    df_pitcher_logs['game_date'] = df_pitcher_logs['game_date'].dt.strftime('%Y-%m-%d')
-    df_pitcher_logs['LAST_UPDATED'] = timestamp_est
-    print(f"✅ Pitcher metrics calculated — {len(df_pitcher_logs.columns)} columns total")
-    print(f"   📊 New columns: QS, UD_FP, Seas_UD_FP, L3_UD_FP, L7_UD_FP, Seas_QS, L3_QS, L7_QS")
-
-# --- 14. PITCHER HOME/AWAY SPLITS ---
-if len(df_pitcher_logs) > 0:
-    print("\nCalculating pitcher Home/Away splits...")
-    p_split_metrics = ['IP', 'H', 'ER', 'HR', 'BB', 'SO', 'DK_FP', 'UD_FP', 'PC', 'R']
-    df_plogs_temp = df_pitcher_logs.copy()
-
-    p_ha_mean = df_plogs_temp.groupby(['player_id', 'home_away'])[p_split_metrics].mean().round(3)
-    p_ha_count = df_plogs_temp.groupby(['player_id', 'home_away'])['IP'].count().rename('GAMES')
-    df_p_home_away = p_ha_mean.join(p_ha_count).reset_index()
-
-    p_ha_pivot = df_p_home_away.pivot(index='player_id', columns='home_away', values=p_split_metrics)
-    p_ha_pivot.columns = [f'{stat}_{loc}' for stat, loc in p_ha_pivot.columns]
-    p_ha_count_pivot = df_p_home_away.pivot(index='player_id', columns='home_away', values='GAMES')
-    p_ha_count_pivot.columns = [f'{c}_GAMES' for c in p_ha_count_pivot.columns]
-    p_ha_pivot = p_ha_pivot.join(p_ha_count_pivot)
-
-    for m in p_split_metrics:
-        for loc in ['Home', 'Away']:
-            col = f'{m}_{loc}'
-            if col not in p_ha_pivot.columns:
-                p_ha_pivot[col] = np.nan
-    for loc in ['Home', 'Away']:
-        gcol = f'{loc}_GAMES'
-        if gcol not in p_ha_pivot.columns:
-            p_ha_pivot[gcol] = np.nan
-
-    for m in p_split_metrics:
-        hc, ac = f'{m}_Home', f'{m}_Away'
-        if hc in p_ha_pivot.columns and ac in p_ha_pivot.columns:
-            p_ha_pivot[f'{m}_SPLIT_DIFF'] = (p_ha_pivot[hc] - p_ha_pivot[ac]).where(
-                p_ha_pivot[hc].notna() & p_ha_pivot[ac].notna(), other=np.nan).round(3)
-
-    p_names = df_plogs_temp.groupby('player_id')['player_name'].first()
-    p_ha_pivot = p_ha_pivot.reset_index().merge(p_names, on='player_id', how='left')
-    p_ha_pivot = p_ha_pivot.reindex(sorted(p_ha_pivot.columns), axis=1)
-    cols = ['player_id', 'player_name'] + [c for c in p_ha_pivot.columns if c not in ['player_id', 'player_name']]
-    p_ha_pivot = p_ha_pivot[cols]
-    p_ha_pivot['LAST_UPDATED'] = timestamp_est
-    print(f"✅ Pitcher Home/Away splits for {p_ha_pivot['player_name'].nunique()} pitchers")
-
-# --- 15. TONIGHT'S PITCHER SHEET (EARLY-SEASON SAFE) ---
-if len(games_tonight) > 0:
-    print("\nBuilding tonight's pitcher stats sheet...")
-    pitcher_current_team = {p['player_id']: p['team_abbr'] for p in qualified_pitchers}
-
-    tonight_sp_ids = set()
-    tonight_sp_info = {}
-    for g in games_tonight:
-        if g.get('home_pitcher_id'):
-            tonight_sp_ids.add(g['home_pitcher_id'])
-            tonight_sp_info[g['home_pitcher_id']] = {'player_name': g['home_pitcher_name'], 'team_abbr': g['home_abbr']}
-        if g.get('away_pitcher_id'):
-            tonight_sp_ids.add(g['away_pitcher_id'])
-            tonight_sp_info[g['away_pitcher_id']] = {'player_name': g['away_pitcher_name'], 'team_abbr': g['away_abbr']}
-
-    if len(df_pitcher_logs) > 0:
-        p_most_recent = df_pitcher_logs.sort_values('game_date').groupby('player_id').last().reset_index()
-        df_pitcher_tonight = p_most_recent[p_most_recent['player_id'].isin(tonight_sp_ids)].copy()
-        # The probable-pitcher feed is authoritative for tonight's identity and
-        # team. A qualified-pitcher lookup can be incomplete and must not erase
-        # a valid starter name already present in the game logs.
-        schedule_name_map = {pid: info['player_name'] for pid, info in tonight_sp_info.items()}
-        schedule_team_map = {pid: info['team_abbr'] for pid, info in tonight_sp_info.items()}
-        qualified_name_map = {p['player_id']: p['player_name'] for p in qualified_pitchers}
-        df_pitcher_tonight['player_name'] = (
-            df_pitcher_tonight['player_id'].map(schedule_name_map)
-            .combine_first(df_pitcher_tonight['player_id'].map(qualified_name_map))
-            .combine_first(df_pitcher_tonight['player_name'])
-        )
-        df_pitcher_tonight['team_abbr'] = (
-            df_pitcher_tonight['player_id'].map(schedule_team_map)
-            .combine_first(df_pitcher_tonight['player_id'].map(pitcher_current_team))
-            .combine_first(df_pitcher_tonight['team_abbr'])
-        )
-    else:
-        df_pitcher_tonight = pd.DataFrame()
-
-    existing_sp_ids = set(df_pitcher_tonight['player_id'].unique()) if len(df_pitcher_tonight) > 0 else set()
-    missing_sp_ids = tonight_sp_ids - existing_sp_ids
-    if missing_sp_ids:
-        print(f"   🔄 Early-season expansion: adding {len(missing_sp_ids)} starter(s) with no game logs...")
-        expansion_rows = []
-        for pid in missing_sp_ids:
-            info = tonight_sp_info.get(pid, {})
-            expansion_rows.append({'player_id': pid, 'player_name': info.get('player_name', 'Unknown'), 'team_abbr': info.get('team_abbr', '')})
-
-        df_sp_expansion = pd.DataFrame(expansion_rows)
-        if len(df_pitcher_tonight) > 0:
-            for col in df_pitcher_tonight.columns:
-                if col not in df_sp_expansion.columns:
-                    df_sp_expansion[col] = np.nan
-            df_pitcher_tonight = pd.concat([df_pitcher_tonight, df_sp_expansion[df_pitcher_tonight.columns]], ignore_index=True)
-        else:
-            df_pitcher_tonight = df_sp_expansion.copy()
-        for pid in missing_sp_ids:
-            info = tonight_sp_info.get(pid, {})
-            print(f"      + {info.get('player_name', pid)} ({info.get('team_abbr', '?')})")
-
-    pitcher_to_game = {}
-    for g in games_tonight:
-        if g.get('home_pitcher_id'):
-            pitcher_to_game[g['home_pitcher_id']] = {'opp_abbr': g['away_abbr'], 'venue': g['venue_name'], 'home_away': 'Home', 'opp_pitcher': g['away_pitcher_name']}
-        if g.get('away_pitcher_id'):
-            pitcher_to_game[g['away_pitcher_id']] = {'opp_abbr': g['home_abbr'], 'venue': g['venue_name'], 'home_away': 'Away', 'opp_pitcher': g['home_pitcher_name']}
-
-    df_pitcher_tonight['opp_abbr_tonight'] = df_pitcher_tonight['player_id'].map({k: v['opp_abbr'] for k, v in pitcher_to_game.items()})
-    df_pitcher_tonight['venue_tonight'] = df_pitcher_tonight['player_id'].map({k: v['venue'] for k, v in pitcher_to_game.items()})
-    df_pitcher_tonight['home_away_tonight'] = df_pitcher_tonight['player_id'].map({k: v['home_away'] for k, v in pitcher_to_game.items()})
-    df_pitcher_tonight['opp_starter'] = df_pitcher_tonight['player_id'].map({k: v['opp_pitcher'] for k, v in pitcher_to_game.items()})
-
-    opponent_offense_cols = [
-        'TEAM_ABBR', 'OFF_K_PCT', 'OFF_OPS', 'OFF_RUNS_PER_GAME', 'OFF_HR_PER_GAME',
-        'OFF_K_PCT_MOST_RANK', 'OFF_OPS_BEST_RANK',
-    ]
-    if df_team_rankings is not None and not df_team_rankings.empty:
-        opponent_offense = df_team_rankings[
-            [c for c in opponent_offense_cols if c in df_team_rankings.columns]
-        ].copy()
-        opponent_offense = opponent_offense.rename(columns={
-            'TEAM_ABBR': 'opp_abbr_tonight',
-            'OFF_K_PCT': 'OPP_OFF_K_PCT',
-            'OFF_OPS': 'OPP_OFF_OPS',
-            'OFF_RUNS_PER_GAME': 'OPP_OFF_RUNS_PER_GAME',
-            'OFF_HR_PER_GAME': 'OPP_OFF_HR_PER_GAME',
-            'OFF_K_PCT_MOST_RANK': 'OPP_OFF_K_PCT_MOST_RANK',
-            'OFF_OPS_BEST_RANK': 'OPP_OFF_OPS_BEST_RANK',
-        })
-        df_pitcher_tonight = df_pitcher_tonight.merge(
-            opponent_offense,
-            on='opp_abbr_tonight',
-            how='left',
-        )
-
-    if df_pitcher_statcast is not None and len(df_pitcher_statcast) > 0:
-        p_statcast_merge_cols = ['player_id'] + [c for c in df_pitcher_statcast.columns if c.startswith('SC_')]
-        df_pitcher_tonight = df_pitcher_tonight.merge(df_pitcher_statcast[p_statcast_merge_cols], on='player_id', how='left')
-        k_score = (
-            50
-            + (numeric_col(df_pitcher_tonight, 'SC_L14_whiff_pct') - 25).fillna(0) * 1.2
-            + (numeric_col(df_pitcher_tonight, 'SC_L14_csw_pct') - 28).fillna(0) * 1.1
-            + (numeric_col(df_pitcher_tonight, 'L3_SO') - numeric_col(df_pitcher_tonight, 'Seas_SO')).fillna(0) * 4
-        )
-        er_risk_score = (
-            50
-            + (numeric_col(df_pitcher_tonight, 'SC_L14_xwOBA') - 0.320).fillna(0) * 120
-            + (numeric_col(df_pitcher_tonight, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
-            + (numeric_col(df_pitcher_tonight, 'SC_L14_hard_hit_pct') - 38).fillna(0) * 0.5
-        )
-        df_pitcher_tonight['P_SO_PLAYER_SCORE'] = clip_score(k_score)
-        df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] = clip_score(er_risk_score)
-
-        league_k_pct = safe_numeric_mean(df_team_rankings.get('OFF_K_PCT', pd.Series(dtype=float)))
-        league_ops = safe_numeric_mean(df_team_rankings.get('OFF_OPS', pd.Series(dtype=float)))
-        league_runs = safe_numeric_mean(df_team_rankings.get('OFF_RUNS_PER_GAME', pd.Series(dtype=float)))
-        league_hr = safe_numeric_mean(df_team_rankings.get('OFF_HR_PER_GAME', pd.Series(dtype=float)))
-
-        k_adjustment = (
-            (numeric_col(df_pitcher_tonight, 'OPP_OFF_K_PCT') - league_k_pct) * 1.5
-            if pd.notna(league_k_pct)
-            else pd.Series(0.0, index=df_pitcher_tonight.index)
-        )
-        er_adjustment = pd.Series(0.0, index=df_pitcher_tonight.index)
-        if pd.notna(league_ops):
-            er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_OPS') - league_ops) * 50
-        if pd.notna(league_runs):
-            er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_RUNS_PER_GAME') - league_runs) * 2
-        if pd.notna(league_hr):
-            er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_HR_PER_GAME') - league_hr) * 2
-
-        df_pitcher_tonight['P_SO_OPP_ADJ'] = k_adjustment.fillna(0).clip(-10, 10).round(1)
-        df_pitcher_tonight['P_ER_OPP_ADJ'] = er_adjustment.fillna(0).clip(-10, 10).round(1)
-        df_pitcher_tonight['P_SO_EDGE_SCORE'] = clip_score(
-            df_pitcher_tonight['P_SO_PLAYER_SCORE'] + df_pitcher_tonight['P_SO_OPP_ADJ']
-        )
-        df_pitcher_tonight['P_ER_RISK_SCORE'] = clip_score(
-            df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] + df_pitcher_tonight['P_ER_OPP_ADJ']
-        )
-        matched_pitcher_opponents = numeric_col(
-            df_pitcher_tonight, 'OPP_OFF_K_PCT'
-        ).notna().sum()
-        print(
-            "✅ Opponent-offense adjustments applied to "
-            f"{matched_pitcher_opponents}/{len(df_pitcher_tonight)} starting pitchers"
-        )
-    else:
-        df_pitcher_tonight['P_SO_PLAYER_SCORE'] = np.nan
-        df_pitcher_tonight['P_SO_OPP_ADJ'] = np.nan
-        df_pitcher_tonight['P_SO_EDGE_SCORE'] = np.nan
-        df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] = np.nan
-        df_pitcher_tonight['P_ER_OPP_ADJ'] = np.nan
-        df_pitcher_tonight['P_ER_RISK_SCORE'] = np.nan
-
-    p_rolling_cols = [c for c in df_pitcher_tonight.columns if any(c.startswith(p) for p in ['L3_', 'L7_', 'L15_', 'Seas_'])]
-    p_statcast_cols = [c for c in df_pitcher_tonight.columns if c.startswith('SC_')]
-    p_matchup_cols = [
-        c for c in df_pitcher_tonight.columns
-        if c.startswith('OPP_OFF_') or c in {
-            'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
-            'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
-        }
-    ]
-    p_final_cols = ['player_name', 'team_abbr', 'opp_abbr_tonight', 'venue_tonight', 'home_away_tonight', 'opp_starter'] + p_rolling_cols + p_statcast_cols + p_matchup_cols + ['LAST_UPDATED']
-    p_final_cols = [c for c in p_final_cols if c in df_pitcher_tonight.columns]
-    df_pitcher_tonight = df_pitcher_tonight[p_final_cols].copy()
-    df_pitcher_tonight = df_pitcher_tonight.sort_values('player_name').reset_index(drop=True)
-
-    has_logs = df_pitcher_tonight[p_rolling_cols[0]].notna().sum() if p_rolling_cols else 0
-    no_logs = len(df_pitcher_tonight) - has_logs
-    print(f"✅ Tonight's pitcher sheet — {len(df_pitcher_tonight)} starting pitchers")
-    print(f"   ({has_logs} with game logs, {no_logs} roster-only)")
-    print(f"   Columns: {len(df_pitcher_tonight.columns)}")
-else:
-    df_pitcher_tonight = pd.DataFrame()
-    print("⚠️ No games tonight — skipping tonight's pitcher sheet")
-
-if not df_tonight.empty and not df_pitcher_tonight.empty:
-    starter_matchup_cols = [
-        'player_name', 'Seas_HR', 'Seas_ERA', 'Seas_WHIP',
-        'SC_L14_xwOBA', 'SC_L14_barrel_pct', 'SC_L14_hard_hit_pct',
-    ]
-    starter_matchups = df_pitcher_tonight[
-        [c for c in starter_matchup_cols if c in df_pitcher_tonight.columns]
-    ].copy()
-    starter_matchups['_opp_pitcher_norm'] = starter_matchups['player_name'].map(normalize_player_name)
-    starter_matchups = starter_matchups.drop_duplicates('_opp_pitcher_norm').rename(columns={
-        'Seas_HR': 'OPP_SP_SEAS_HR',
-        'Seas_ERA': 'OPP_SP_SEAS_ERA',
-        'Seas_WHIP': 'OPP_SP_SEAS_WHIP',
-        'SC_L14_xwOBA': 'OPP_SP_SC_L14_XWOBA',
-        'SC_L14_barrel_pct': 'OPP_SP_SC_L14_BARREL_PCT',
-        'SC_L14_hard_hit_pct': 'OPP_SP_SC_L14_HARD_HIT_PCT',
-    })
-    starter_matchups = starter_matchups.drop(columns=['player_name'], errors='ignore')
-
-    df_tonight['_opp_pitcher_norm'] = df_tonight['opp_pitcher_name'].map(normalize_player_name)
-    df_tonight = df_tonight.merge(starter_matchups, on='_opp_pitcher_norm', how='left')
-    df_tonight = df_tonight.drop(columns=['_opp_pitcher_norm'])
-
-    league_sp_whip = safe_numeric_mean(df_pitcher_tonight.get('Seas_WHIP', pd.Series(dtype=float)))
-    league_sp_hr = safe_numeric_mean(df_pitcher_tonight.get('Seas_HR', pd.Series(dtype=float)))
-    league_sp_xwoba = safe_numeric_mean(df_pitcher_tonight.get('SC_L14_xwOBA', pd.Series(dtype=float)))
-    league_sp_barrel = safe_numeric_mean(df_pitcher_tonight.get('SC_L14_barrel_pct', pd.Series(dtype=float)))
-
-    hit_adjustment = pd.Series(0.0, index=df_tonight.index)
-    if pd.notna(league_sp_whip):
-        hit_adjustment += (numeric_col(df_tonight, 'OPP_SP_SEAS_WHIP') - league_sp_whip) * 12
-    if pd.notna(league_sp_xwoba):
-        hit_adjustment += (numeric_col(df_tonight, 'OPP_SP_SC_L14_XWOBA') - league_sp_xwoba) * 40
-    hit_adjustment += (
-        numeric_col(df_tonight, 'vs_OPP_AVG') - numeric_col(df_tonight, 'Seas_AVG')
-    ).fillna(0) * 12
-
-    power_adjustment = pd.Series(0.0, index=df_tonight.index)
-    if pd.notna(league_sp_hr):
-        power_adjustment += (numeric_col(df_tonight, 'OPP_SP_SEAS_HR') - league_sp_hr) * 3
-    if pd.notna(league_sp_xwoba):
-        power_adjustment += (numeric_col(df_tonight, 'OPP_SP_SC_L14_XWOBA') - league_sp_xwoba) * 35
-    if pd.notna(league_sp_barrel):
-        power_adjustment += (
-            numeric_col(df_tonight, 'OPP_SP_SC_L14_BARREL_PCT') - league_sp_barrel
-        ) * 0.4
-    power_adjustment += (
-        numeric_col(df_tonight, 'vs_OPP_OPS') - numeric_col(df_tonight, 'Seas_OPS')
-    ).fillna(0) * 4
-
-    df_tonight['H_OPP_ADJ'] = hit_adjustment.fillna(0).clip(-10, 10).round(1)
-    df_tonight['POWER_OPP_ADJ'] = power_adjustment.fillna(0).clip(-10, 10).round(1)
-    df_tonight['H_EDGE_SCORE'] = clip_score(
-        numeric_col(df_tonight, 'H_PLAYER_SCORE') + df_tonight['H_OPP_ADJ']
-    )
-    df_tonight['POWER_EDGE_SCORE'] = clip_score(
-        numeric_col(df_tonight, 'POWER_PLAYER_SCORE') + df_tonight['POWER_OPP_ADJ']
-    )
-    matched_starters = numeric_col(df_tonight, 'OPP_SP_SEAS_WHIP').notna().sum()
-    print(f"✅ Opposing-starter adjustments applied to {matched_starters}/{len(df_tonight)} hitters")
-
-# --- 10.75 GEMINI AI DAILY PICKS GENERATOR ---
-df_picks = generate_gemini_picks()
-try:
-    runlog.picks_generated = len(df_picks) if df_picks is not None else 0
-except Exception:
-    pass
-
-# --- 11. WRITE ALL DATA TO GOOGLE SHEETS ---
-print("\n" + "=" * 60)
-print("WRITING ALL DATA TO GOOGLE SHEETS")
-print("=" * 60)
 
 def validate_sheet_schema(sheet_name, df):
     schema = SHEET_SCHEMAS.get(sheet_name) if 'SHEET_SCHEMAS' in globals() else None
@@ -4051,155 +2628,1708 @@ def safe_upload(spreadsheet, sheet_name, df, max_retries=3, allow_empty=False):
     except Exception:
         pass
 
-SHEETS_TO_WRITE = {
-    'Batter_Game_Logs': df_logs,
-    'Tonights_Batters': df_tonight,
-    'LHP_RHP_Splits': df_splits,
-    'Home_Away_Splits': ha_pivot,
-    'Statcast_Daily': df_statcast_daily if len(df_statcast_daily) > 0 else pd.DataFrame(),
-    'Batter_Statcast': df_batter_statcast if len(df_batter_statcast) > 0 else pd.DataFrame(),
-    'Pitcher_Statcast': df_pitcher_statcast if len(df_pitcher_statcast) > 0 else pd.DataFrame(),
-    'Tonights_Schedule': df_schedule,
-    'Tonights_Pitchers': df_pitchers,
-    'Venue_Weather': df_weather,
-    'Odds': df_odds if len(df_odds) > 0 else pd.DataFrame(),
-    'DK_Player_Props': df_props if len(df_props) > 0 else pd.DataFrame(),
-    'All_Books_Props': df_all_books if len(df_all_books) > 0 else pd.DataFrame(),
-    'Teams': df_teams,
-    'Team_Rankings': df_team_rankings if len(df_team_rankings) > 0 else pd.DataFrame(),
-    'Pitcher_Game_Logs': df_pitcher_logs if len(df_pitcher_logs) > 0 else pd.DataFrame(),
-    'Tonights_Starters': df_pitcher_tonight if len(df_pitcher_tonight) > 0 else pd.DataFrame(),
-    'Pitcher_Home_Away': p_ha_pivot if len(p_ha_pivot) > 0 else pd.DataFrame(),
-    'Batter_vs_SP': df_vs_sp if len(df_vs_sp) > 0 else pd.DataFrame(),
-}
 
-print(f"\nWriting {len(SHEETS_TO_WRITE)} sheets to '{SHEET_NAME}'...\n")
-# safe_upload SKIPS an empty frame by default, which silently leaves the previous
-# day's rows in place. For Tonights_Schedule that is actively misleading: the
-# dashboard presents a played-out slate as tonight's. So when the fetch SUCCEEDED and
-# genuinely returned no games (off-season, postseason, or a true no-game day), write
-# the empty frame and let the tab honestly say "no games". When the fetch FAILED,
-# schedule_fetch_ok is False and we fall back to the skip, because blanking the tab on
-# a transient error would hide a real slate — that case is warned about at fetch time.
-ALLOW_EMPTY_SHEETS = {'Tonights_Schedule'} if schedule_fetch_ok else set()
-for sheet_name, df in SHEETS_TO_WRITE.items():
-    safe_upload(sh, sheet_name, df, allow_empty=(sheet_name in ALLOW_EMPTY_SHEETS))
-    time.sleep(2)
 
-# Picks_Current is an overwrite-only snapshot for the dashboard. Unlike
-# Daily_Picks history, an empty run clears stale recommendations.
-print(f"\n📍 Refreshing Picks_Current snapshot...")
-safe_upload(sh, 'Picks_Current', df_picks_current, allow_empty=True)
-time.sleep(2)
-
-# --- DAILY PICKS: APPEND-ONLY (preserves history) ---
-if df_picks is not None and len(df_picks) > 0:
-    print(f"\n📌 Appending today's picks to Daily_Picks...")
+def main():
+    global ACTIVE_PROP_BOOKMAKERS, ALLOW_EMPTY_SHEETS, ALL_BOOKS_PROPS_COLUMNS, BATTER_LOG_BASE_COLS, BATTER_LOG_NUMERIC_COLS, BEST_BOOK_TIE_BREAK, BINARY_PROP_MARKETS, BOOKMAKER
+    global CACHE_DIR, CACHE_TTL_SECONDS, DEFAULT_QUOTA_FLOOR_THIS_SPORT, DK_PLAYER_PROPS_COLUMNS, DOMED_VENUES, ENABLE_FANDUEL_FALLBACK, FALLBACK_BOOKMAKER, GEMINI_API_KEY
+    global GEMINI_MODEL, GEMINI_TARGET_PICKS, IN_SEASON, MARKET_BATCHES, MIN_DAILY_PICKS, MLB_API, MODEL_VERSION, ODDS_API_KEY
+    global ODDS_MARKETS, ODDS_REGIONS, ODDS_SPORT, OPENING_DAY, OPENWEATHER_API_KEY, PICK_OUTPUT_COLUMNS, PITCHER_LOG_BASE_COLS, PITCHER_LOG_NUMERIC_COLS
+    global PROP_BOOKMAKER, QUOTA_FLOOR_GLOBAL, QUOTA_FLOOR_THIS_SPORT, REFERENCE_BOOKMAKER, SEASON, SHEETS_TO_WRITE, SHEET_ID, SHEET_NAME
+    global SHEET_SCHEMAS, SNAPSHOT_DATE, SPORT, SPORT_LABEL, STATCAST_DAILY_COLS, STATCAST_NUMERIC_COLS, SUPPORTED_BOOKMAKERS, TEAM_NAME_TO_ABBR
+    global THIN_MARKET_THRESHOLD, VENUE_COORDS_FALLBACK, _, _last_odds_credits_remaining, ac, active_team_abbrs, active_team_ids, all_book_rows
+    global all_game_logs, all_headers, all_pitcher_logs, api_errors, away, away_abbr, away_pitcher, b
+    global batch, batter_current_team, batter_names, batter_pitcher_pairs, batter_teams, before_games, bk, book
+    global book_ct, book_key, cache_cutoff, cleaned, cleaned_row, col, cols, combined_batter_logs
+    global combined_pitcher_logs, coords, data, date, dedupe_cols, default_val, df, df_all_books
+    global df_append, df_batter_statcast, df_expansion, df_home_away, df_logs, df_logs_temp, df_odds, df_p_home_away
+    global df_picks, df_picks_current, df_pitcher_logs, df_pitcher_statcast, df_pitcher_tonight, df_pitchers, df_plogs_temp, df_props
+    global df_sample_flags, df_schedule, df_sp_expansion, df_splits, df_splits_merge, df_statcast_daily, df_statcast_daily_dt, df_team_rankings
+    global df_teams, df_tonight, df_vs_sp, df_weather, done_count, eastern, eid, elapsed
+    global elite_ops_cutoff, elite_ops_series, entry, er_adjustment, er_risk_score, ev_data, ev_resp, executor
+    global existing_batter_logs, existing_count, existing_daily_picks, existing_headers, existing_ids, existing_pitcher_logs, existing_run_numbers, existing_sp_ids
+    global existing_values, expansion_batters, expansion_rows, final_cols, future, futures, g, game
+    global game_log_count, games_tonight, gc, gcol, grp, grp_ab, grp_h, h_score
+    global ha_count, ha_count_pivot, ha_mean, ha_merge_cols, ha_pivot, ha_prompt_cols, has_game_pk, has_logs
+    global hc, hit_adjustment, home, home_abbr, home_pitcher, idx, info, is_dome
+    global k_adjustment, k_score, keep_existing, key, label, last_resp, latest_batter_date_by_pid, latest_pitcher_date_by_pid
+    global latest_pitcher_seed_date, latest_seed_date, latest_statcast_date, league_hr, league_k_pct, league_ops, league_runs, league_sp_barrel
+    global league_sp_hr, league_sp_whip, league_sp_xwoba, loc, logs_with_pk, logs_without_pk, m, market_mapping
+    global markets_param, matched_pitcher_opponents, matched_starters, metadata_defaults, metric_counts, metrics, missing_sp_ids, mkt
+    global mn, most_recent, name_fixes, needed_cols, needed_rows, new_batter_logs, new_pitcher_logs, new_statcast_daily
+    global no_logs, note, now_est, odds_rows, opponent_offense, opponent_offense_cols, ops, p_final_cols
+    global p_ha_count, p_ha_count_pivot, p_ha_mean, p_ha_pivot, p_matchup_cols, p_metrics, p_most_recent, p_names
+    global p_rolling_cols, p_split_metrics, p_statcast_cols, p_statcast_merge_cols, p_windows, pa, pid, pitcher_current_team
+    global pitcher_map, pitcher_names, pitcher_rows_out, pitcher_teams, pitcher_to_game, player_names, pname, pos_type
+    global power_adjustment, power_score, pr, pybaseball_statcast, qualified_batter_names, qualified_batters, qualified_name_map, qualified_pitchers
+    global raw_odds, refresh_keys, refreshed_batter_rows, refreshed_pitcher_rows, result, rewritten, roll_ab, roll_bb
+    global roll_er, roll_h, roll_hbp, roll_ip, roll_sf, roll_so, roll_tb, rolling_cols
+    global roster_only_count, roster_resp, roster_url, row, row_map, runlog, sched_resp, sched_url
+    global schedule_date, schedule_fetch_ok, schedule_name_map, schedule_team_map, seas_ab, seas_ab_ops, seas_bb, seas_bb_ops
+    global seas_er, seas_h, seas_h_ops, seas_hbp_ops, seas_ip, seas_pa_ops, seas_sf_ops, seas_so
+    global seas_tb_ops, seen_pick_keys, seen_venues, sh, sheet_name, skip_odds_api_props, split_metrics, split_stats
+    global splits_rows, start_time, starter_matchup_cols, starter_matchups, stat, statcast_cache_days, statcast_cols, statcast_enabled
+    global statcast_end_ts, statcast_fetch_start, statcast_lookback_days, statcast_merge_cols, status, support_ops, team, team_abbr
+    global team_id, team_id_to_abbr, team_list, teammate_ops, teammates, teams_resp, thin_metrics, tie_notes
+    global timestamp_est, today_event_count, today_run_number, today_str, tonight_ids, tonight_sp_ids, tonight_sp_info, tonight_sp_names
+    global tonight_team_names, top1, top1_txt, top2, top2_txt, two_way_tonight, v, venue
+    global venue_coords_dynamic, venue_lat, venue_lon, venue_name, vs_sp_rows, w, weak_support, weather_rows
+    global windows, ws_picks, wx
     try:
-        try:
-            ws_picks = sh.worksheet('Daily_Picks')
-            existing_values = ws_picks.get_all_values()
-            existing_headers = existing_values[0] if existing_values else []
-            existing_count = max(len(existing_values) - 1, 0)
-            print(f"   📋 Existing picks: {existing_count} rows")
-        except gspread.exceptions.WorksheetNotFound:
-            ws_picks = sh.add_worksheet(title='Daily_Picks', rows=500, cols=26)
-            existing_values = []
-            existing_headers = []
-            existing_count = 0
-            print(f"   🆕 Created Daily_Picks sheet")
+        from run_logger import RunLogger
+    except Exception:
+        class RunLogger:
+            def __init__(self, *args, **kwargs):
+                self.picks_generated = 0
+            def finalize_and_write(self):
+                pass
+            def warn(self, msg):
+                print(f"⚠️ RunLogger unavailable: {msg}")
+            def record_write(self, sheet_name, rows):
+                pass
+    warnings.filterwarnings('ignore')
 
-        df_append = df_picks.copy().fillna('')
-        validate_sheet_schema('Daily_Picks', df_append)
-        for col in df_append.columns:
-            df_append[col] = df_append[col].apply(lambda x: x.item() if hasattr(x, 'item') else x)
+    try:
+        from pybaseball import statcast as pybaseball_statcast
+    except Exception:
+        pybaseball_statcast = None
 
-        if not existing_headers:
-            ws_picks.update([df_append.columns.tolist()])
-            existing_headers = df_append.columns.tolist()
-        all_headers = existing_headers + [c for c in df_append.columns.tolist() if c not in existing_headers]
-        if all_headers != existing_headers:
-            print("   🔄 Expanding Daily_Picks headers without clearing historical rows")
-            rewritten = [all_headers]
-            for row in existing_values[1:]:
-                row_map = {existing_headers[i]: row[i] for i in range(min(len(existing_headers), len(row)))}
-                rewritten.append([row_map.get(h, "") for h in all_headers])
-            ws_picks.clear()
-            needed_rows = len(rewritten)
-            needed_cols = len(all_headers)
-            if ws_picks.row_count < needed_rows or ws_picks.col_count < needed_cols:
-                ws_picks.resize(rows=max(needed_rows, ws_picks.row_count), cols=max(needed_cols, ws_picks.col_count))
-            ws_picks.update(rewritten, value_input_option='RAW')
-            existing_headers = all_headers
-            existing_values = rewritten
-            existing_count = max(len(existing_values) - 1, 0)
+    # --- 1. AUTHENTICATION & SETUP ---
+    print("Authenticating with Google...")
 
-        for col in existing_headers:
-            if col not in df_append.columns:
-                df_append[col] = ''
-        df_append = df_append[existing_headers]
-        metadata_defaults = {
-            'DATE': schedule_date,
-            'RUN_NUMBER': today_run_number,
-            'RUN_TIME': timestamp_est,
-            'LAST_UPDATED': timestamp_est,
+    SHEET_NAME = 'MLB_Dashboard_Data'
+    SHEET_ID = '1AAwSwFCGIqS6JGdYTdkSau91BtnM_sMdWl2By5A9nFQ'
+    MLB_API = "https://statsapi.mlb.com/api/v1"
+    SNAPSHOT_DATE = datetime.now(pytz.timezone('US/Eastern')).strftime('%Y-%m-%d')
+    SPORT_LABEL = "MLB"
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    MODEL_VERSION = "mlb_hybrid_matchup_v2"
+    ENABLE_FANDUEL_FALLBACK = os.getenv("ENABLE_FANDUEL_FALLBACK", "false").lower() == "true"
+    _last_odds_credits_remaining = None
+    GEMINI_TARGET_PICKS = 14
+    MIN_DAILY_PICKS = 9
+    PICK_OUTPUT_COLUMNS = [
+        'DATE', 'RUN_NUMBER', 'RUN_TIME', 'rank', 'game', 'matchup', 'player', 'team',
+        'opponent', 'opp_pitcher', 'prop_type', 'line', 'lean', 'confidence',
+        'rationale', 'reasoning', 'injury_context', 'venue', 'weather_note',
+        'DATA_SOURCE', 'source', 'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS',
+        'CALIBRATION_SCORE', 'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK',
+        'PICK_ODDS', 'IMPLIED_PROBABILITY', 'H_EDGE_SCORE', 'POWER_EDGE_SCORE',
+        'H_PLAYER_SCORE', 'H_OPP_ADJ', 'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ',
+        'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+        'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+        'CONSENSUS_COUNT', 'CONSENSUS_RUNS',
+        'CONSENSUS_TAG', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE', 'CLV_DELTA',
+        'CLV_LAST_UPDATE', 'RESULT', 'ACTUAL_STAT', 'HIT', 'REALIZED_PROFIT',
+        'ACTUAL_ROI_PER_PICK', 'LAST_UPDATED',
+    ]
+
+    # --- Odds API quota guard ---
+    QUOTA_FLOOR_GLOBAL = 2000
+    DEFAULT_QUOTA_FLOOR_THIS_SPORT = {
+        "MLB": 1000,
+        "NBA": 800,
+        "NHL": 600,
+        "WNBA": 500,
+        "WC": 600,
+    }[SPORT_LABEL]
+    QUOTA_FLOOR_THIS_SPORT = int(os.getenv(f"{SPORT_LABEL}_ODDS_CREDIT_FLOOR", DEFAULT_QUOTA_FLOOR_THIS_SPORT))
+    CACHE_DIR = os.path.expanduser("~/.dfs_engines_cache")
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    CACHE_TTL_SECONDS = {
+        "MLB": 900,
+        "NBA": 900,
+        "NHL": 900,
+        "WNBA": 1800,
+        "WC": 1800,
+    }[SPORT_LABEL]
+
+
+    SHEET_SCHEMAS = {
+        'Tonights_Batters': {
+            'required': [
+                'player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name',
+                'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight',
+                'L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
+                'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'LAST_UPDATED',
+            ],
+            'recommended': ['Seas_OPS', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2'],
+        },
+        'Tonights_Pitchers': {
+            'required': ['team_abbr', 'opp_pitcher_id', 'opp_pitcher_name', 'opp_pitcher_hand', 'LAST_UPDATED'],
+            'recommended': [],
+        },
+        'Daily_Picks': {
+            'required': [
+                'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
+                'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
+            ],
+            'recommended': [
+                'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
+                'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
+                'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS', 'IMPLIED_PROBABILITY',
+                'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+                'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+                'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+                'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+            ],
+        },
+        'Picks_Current': {
+            'required': [
+                'DATE', 'RUN_NUMBER', 'rank', 'player', 'team', 'opponent',
+                'prop_type', 'line', 'lean', 'confidence', 'rationale', 'HIT',
+            ],
+            'recommended': [
+                'MODEL_VERSION', 'SELECTION_METHOD', 'RECOMMENDATION_STATUS', 'CALIBRATION_SCORE',
+                'CONSENSUS_COUNT', 'CONSENSUS_RUNS', 'CLV_OPEN_LINE', 'CLV_LATEST_LINE',
+                'REFERENCE_BOOK', 'REFERENCE_ODDS', 'PICK_BOOK', 'PICK_ODDS',
+                'IMPLIED_PROBABILITY',
+                'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+                'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+                'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+                'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+            ],
+        },
+        'DK_Player_Props': {
+            'required': ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'LAST_UPDATED'],
+            'recommended': ['BOOK', 'REFERENCE_BOOK', 'BEST_OVER_BOOK', 'BEST_OVER_ODDS', 'BEST_OVER_DELTA_PP',
+                            'BEST_UNDER_BOOK', 'BEST_UNDER_ODDS', 'BEST_UNDER_DELTA_PP',
+                            'ALT_LINE_AVAILABLE', 'ALT_LINE_BOOKS'],
+        },
+        'All_Books_Props': {
+            'required': ['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS',
+                         'OVER_IMPLIED', 'UNDER_IMPLIED', 'LAST_UPDATED'],
+            'recommended': [],
+        },
+        'Batter_Game_Logs': {
+            'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
+                         'AB', 'H', 'HR', 'RBI', 'R', 'BB', 'SO', 'TB', 'UD_FP', 'DK_FP'],
+            'recommended': ['Seas_OPS', 'L7_OPS', 'L14_OPS', 'L30_OPS'],
+        },
+        'Pitcher_Game_Logs': {
+            'required': ['player_id', 'player_name', 'game_date', 'team_abbr', 'opp_abbr',
+                         'IP', 'SO', 'ER', 'BB', 'H', 'UD_FP', 'DK_FP'],
+            'recommended': ['QS'],
+        },
+        'Statcast_Daily': {
+            'required': ['game_date', 'player_id', 'player_name', 'role', 'LAST_UPDATED'],
+            'recommended': ['avg_ev', 'hard_hit_pct', 'barrel_pct', 'xBA', 'xSLG', 'xwOBA', 'whiff_pct', 'chase_pct', 'csw_pct'],
+        },
+        'Batter_Statcast': {
+            'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
+            'recommended': ['SC_L14_xBA', 'SC_L14_xwOBA', 'SC_L14_hard_hit_pct', 'SC_L14_barrel_pct'],
+        },
+        'Pitcher_Statcast': {
+            'required': ['player_id', 'player_name', 'SC_GAMES', 'LAST_UPDATED'],
+            'recommended': ['SC_L14_whiff_pct', 'SC_L14_csw_pct', 'SC_L14_xwOBA', 'SC_L14_barrel_pct'],
+        },
+        'Team_Rankings': {
+            'required': [
+                'SEASON', 'TEAM_ID', 'TEAM', 'TEAM_ABBR', 'GAMES_PLAYED',
+                'OFF_PA', 'OFF_SO', 'OFF_K_PCT', 'OFF_HR', 'OFF_HR_PER_GAME',
+                'PIT_HR_ALLOWED', 'PIT_HR9', 'PIT_RUNS_ALLOWED_PER_GAME',
+                'OFF_K_PCT_MOST_RANK', 'PIT_HR_ALLOWED_MOST_RANK', 'LAST_UPDATED',
+            ],
+            'recommended': [
+                'OFF_OPS', 'OFF_RUNS_PER_GAME', 'OFF_HR_MOST_RANK',
+                'PIT_ERA', 'PIT_WHIP', 'PIT_K9', 'PIT_BB9',
+                'PIT_RUNS_ALLOWED_MOST_RANK', 'PIT_BB9_MOST_RANK',
+            ],
+        },
+    }
+
+    now_est = datetime.now(pytz.timezone('US/Eastern'))
+    today_str = now_est.strftime('%Y-%m-%d')
+    timestamp_est = now_est.strftime('%Y-%m-%d %I:%M:%S %p EST')
+    eastern = pytz.timezone('US/Eastern')
+
+    STATCAST_DAILY_COLS = [
+        'game_date', 'player_id', 'player_name', 'role', 'team_abbr',
+        'batted_balls', 'pa_events', 'pitches',
+        'avg_ev', 'max_ev', 'avg_la', 'hard_hit_pct', 'barrel_pct', 'sweet_spot_pct',
+        'xBA', 'xSLG', 'xwOBA',
+        'whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed',
+        'LAST_UPDATED',
+    ]
+    STATCAST_NUMERIC_COLS = [
+        'player_id', 'batted_balls', 'pa_events', 'pitches', 'avg_ev', 'max_ev', 'avg_la',
+        'hard_hit_pct', 'barrel_pct', 'sweet_spot_pct', 'xBA', 'xSLG', 'xwOBA',
+        'whiff_pct', 'chase_pct', 'csw_pct', 'zone_pct', 'avg_release_speed',
+    ]
+
+    SEASON, OPENING_DAY, schedule_date, IN_SEASON = derive_mlb_season_context(now_est)
+    gc = get_gspread_client()
+
+    if IN_SEASON:
+        print(f"🟢 Regular season mode — {SEASON}")
+    else:
+        print(f"🟡 Pre-season detected — using {SEASON} data for testing")
+
+    print(f"📅 Schedule date: {schedule_date}")
+    print(f"📆 Season: {SEASON}")
+
+    try:
+        sh = gc.open_by_key(SHEET_ID)
+        print(f"✅ Connected to Google Sheet: {SHEET_ID}")
+        runlog = RunLogger(gc, SHEET_ID, sport='MLB', kind='engine')
+        atexit.register(runlog.finalize_and_write)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        raise
+
+    ODDS_API_KEY = load_secret('ODDS_API_KEY', '🔑 Paste your Odds API Key: ')
+    OPENWEATHER_API_KEY = load_secret('OPENWEATHER_API_KEY', '🌤️ Paste your OpenWeather API Key: ')
+    GEMINI_API_KEY = load_secret('GEMINI_API_KEY', allow_missing=True)
+    if GEMINI_API_KEY:
+        print("🔐 Gemini API key ready!")
+    else:
+        print("⚠️ No Gemini API key found — AI picks will be skipped.")
+
+    # --- 2. FETCH ALL MLB TEAMS ---
+    print("\nFetching MLB teams...")
+    teams_resp = requests.get(f"{MLB_API}/teams?sportId=1&season={SEASON}", timeout=10).json()
+    team_list = []
+    for team in teams_resp.get('teams', []):
+        team_list.append({
+            'team_id': team['id'],
+            'team_name': team['name'],
+            'team_abbr': team.get('abbreviation', ''),
+            'venue_name': team.get('venue', {}).get('name', ''),
+            'venue_id': team.get('venue', {}).get('id', '')
+        })
+    df_teams = pd.DataFrame(team_list)
+    team_id_to_abbr = dict(zip(df_teams['team_id'], df_teams['team_abbr']))
+    print(f"✅ Loaded {len(df_teams)} MLB teams")
+
+
+    df_team_rankings = fetch_team_rankings(SEASON)
+
+    # --- 3. FETCH BATTER GAME LOGS (PARALLEL) ---
+    print(f"\nFetching batter game logs for {SEASON} season...")
+    print("⚡ Using parallel fetching...")
+
+    BATTER_LOG_BASE_COLS = ['player_id', 'game_pk', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
+                            'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
+    BATTER_LOG_NUMERIC_COLS = ['player_id', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
+    existing_batter_logs = load_existing_log_sheet('Batter_Game_Logs', BATTER_LOG_BASE_COLS, BATTER_LOG_NUMERIC_COLS)
+    latest_batter_date_by_pid = {}
+    if len(existing_batter_logs) > 0:
+        latest_batter_date_by_pid = existing_batter_logs.dropna(subset=['player_id']).groupby('player_id')['game_date'].max().to_dict()
+        latest_seed_date = max(latest_batter_date_by_pid.values()) if latest_batter_date_by_pid else ''
+        if latest_seed_date:
+            print(f"♻️ Seeded Batter_Game_Logs through {latest_seed_date} ({len(existing_batter_logs)} existing rows)")
+    else:
+        print("🆕 No existing Batter_Game_Logs seed found — full batter fetch")
+
+    qualified_batters = get_qualified_batters(SEASON)
+    print(f"✅ Found {len(qualified_batters)} qualified batters")
+
+    all_game_logs = []
+    start_time = time.time()
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {executor.submit(fetch_one_batter_log, b): b for b in qualified_batters}
+        done_count = 0
+        for future in as_completed(futures):
+            result = future.result()
+            all_game_logs.extend(result)
+            done_count += 1
+            if done_count % 50 == 0:
+                print(f"   Fetched {done_count}/{len(qualified_batters)} players...")
+
+    elapsed = time.time() - start_time
+    new_batter_logs = pd.DataFrame(all_game_logs, columns=BATTER_LOG_BASE_COLS)
+    # Replace any cached player/date represented in the refresh batch. A game-log
+    # row may have been captured before the final out; appending alone would leave
+    # both the partial and final lines in history.
+    refreshed_batter_rows = 0
+    if len(existing_batter_logs) > 0 and len(new_batter_logs) > 0:
+        new_batter_logs['game_date'] = new_batter_logs['game_date'].map(normalize_game_date)
+        refresh_keys = {
+            (int(float(pid)), game_date)
+            for pid, game_date in zip(new_batter_logs['player_id'], new_batter_logs['game_date'])
+            if pd.notna(pid) and game_date
         }
-        for col, default_val in metadata_defaults.items():
-            if col in df_append.columns:
-                df_append[col] = df_append[col].replace('', np.nan)
-                df_append[col] = df_append[col].fillna(default_val)
-        cleaned = []
-        for row in df_append.values.tolist():
-            cleaned_row = []
-            for v in row:
-                if hasattr(v, 'item'):
-                    v = v.item()
-                if isinstance(v, float) and (np.isinf(v) or np.isnan(v)):
-                    v = ''
-                elif v is None:
-                    v = ''
-                cleaned_row.append(v)
-            cleaned.append(cleaned_row)
-        ws_picks.append_rows(cleaned, value_input_option='RAW')
-        print(f"   ✅ Daily_Picks: {existing_count + len(df_append)} total rows ({existing_count} old + {len(df_append)} new)")
+        existing_batter_logs['game_date'] = existing_batter_logs['game_date'].map(normalize_game_date)
+        keep_existing = [
+            (int(float(pid)), game_date) not in refresh_keys
+            if pd.notna(pid) else True
+            for pid, game_date in zip(existing_batter_logs['player_id'], existing_batter_logs['game_date'])
+        ]
+        refreshed_batter_rows = len(existing_batter_logs) - sum(keep_existing)
+        existing_batter_logs = existing_batter_logs.loc[keep_existing].copy()
+    combined_batter_logs = pd.concat([existing_batter_logs, new_batter_logs], ignore_index=True)
+    if len(combined_batter_logs) > 0:
+        combined_batter_logs['game_date'] = combined_batter_logs['game_date'].map(normalize_game_date)
+        dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'AB', 'H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', 'HBP', 'SF']
+        has_game_pk = combined_batter_logs['game_pk'].notna() & combined_batter_logs['game_pk'].astype(str).str.strip().ne('')
+        logs_with_pk = combined_batter_logs.loc[has_game_pk].drop_duplicates(subset=['player_id', 'game_pk'], keep='last')
+        logs_without_pk = combined_batter_logs.loc[~has_game_pk].drop_duplicates(subset=dedupe_cols, keep='last')
+        combined_batter_logs = pd.concat([logs_without_pk, logs_with_pk], ignore_index=True)
+        combined_batter_logs['game_date'] = pd.to_datetime(combined_batter_logs['game_date'], errors='coerce')
+        df_logs = combined_batter_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
+    else:
+        df_logs = combined_batter_logs
+    print(f"✅ Fetched {len(new_batter_logs)} recent/new batter logs; refreshed {refreshed_batter_rows} cached rows; {len(df_logs)} combined logs across {df_logs['player_name'].nunique() if len(df_logs) > 0 else 0} players in {elapsed:.1f}s")
+
+    # --- 4. CALCULATE METRICS & ROLLING AVERAGES ---
+    print("\nCalculating metrics and rolling averages...")
+
+    df_logs['1B'] = df_logs['H'] - df_logs['HR'] - df_logs['2B'] - df_logs['3B']
+    df_logs['DK_FP'] = (
+        df_logs['1B'] * 3 + df_logs['2B'] * 5 + df_logs['3B'] * 8 +
+        df_logs['HR'] * 10 + df_logs['R'] * 2 + df_logs['RBI'] * 2 +
+        df_logs['BB'] * 2 + df_logs['SB'] * 5 + df_logs['SO'] * -0.5
+    ).round(2)
+
+    # v1.3.0: Underdog Fantasy scoring: 1B=3, 2B=6, 3B=8, HR=10, BB=3, HBP=3, RBI=2, R=2, SB=4
+    df_logs['UD_FP'] = (
+        df_logs['1B'] * 3 + df_logs['2B'] * 6 + df_logs['3B'] * 8 +
+        df_logs['HR'] * 10 + df_logs['BB'] * 3 + df_logs['HBP'] * 3 +
+        df_logs['RBI'] * 2 + df_logs['R'] * 2 + df_logs['SB'] * 4
+    ).round(2)
+
+    # v1.3.0: Added 1B, 3B, HBP, UD_FP to rolling averages
+    metrics = ['H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', '2B', '3B', '1B', 'HBP', 'AB', 'DK_FP', 'UD_FP']
+    windows = {'L7': 7, 'L14': 14, 'L30': 30}
+
+    df_logs = df_logs.set_index('game_date').sort_index()
+    for m in metrics:
+        grp = df_logs.groupby('player_id')[m]
+        df_logs[f'Seas_{m}'] = grp.transform(lambda x: x.expanding().mean()).round(3)
+        for label, w in windows.items():
+            df_logs[f'{label}_{m}'] = grp.transform(lambda x: x.rolling(w, min_periods=1).mean()).round(3)
+
+    for label, w in windows.items():
+        grp_h = df_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        grp_ab = df_logs.groupby('player_id')['AB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        df_logs[f'{label}_AVG'] = np.where(grp_ab > 0, (grp_h / grp_ab).round(3), 0)
+
+    seas_h = df_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
+    seas_ab = df_logs.groupby('player_id')['AB'].transform(lambda x: x.expanding().sum())
+    df_logs['Seas_AVG'] = np.where(seas_ab > 0, (seas_h / seas_ab).round(3), 0)
+
+    # OPS rollings — supports IBB_RISK / lineup protection in §8
+    for label, w in windows.items():
+        roll_h   = df_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        roll_bb  = df_logs.groupby('player_id')['BB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        roll_hbp = df_logs.groupby('player_id')['HBP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        roll_sf  = df_logs.groupby('player_id')['SF'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        roll_ab  = df_logs.groupby('player_id')['AB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        roll_tb  = df_logs.groupby('player_id')['TB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+        pa = roll_ab + roll_bb + roll_hbp + roll_sf
+        df_logs[f'{label}_OBP'] = np.where(pa > 0, ((roll_h + roll_bb + roll_hbp) / pa).round(3), 0)
+        df_logs[f'{label}_SLG'] = np.where(roll_ab > 0, (roll_tb / roll_ab).round(3), 0)
+        df_logs[f'{label}_OPS'] = (df_logs[f'{label}_OBP'] + df_logs[f'{label}_SLG']).round(3)
+
+    seas_h_ops   = df_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
+    seas_bb_ops  = df_logs.groupby('player_id')['BB'].transform(lambda x: x.expanding().sum())
+    seas_hbp_ops = df_logs.groupby('player_id')['HBP'].transform(lambda x: x.expanding().sum())
+    seas_sf_ops  = df_logs.groupby('player_id')['SF'].transform(lambda x: x.expanding().sum())
+    seas_ab_ops  = df_logs.groupby('player_id')['AB'].transform(lambda x: x.expanding().sum())
+    seas_tb_ops  = df_logs.groupby('player_id')['TB'].transform(lambda x: x.expanding().sum())
+    seas_pa_ops = seas_ab_ops + seas_bb_ops + seas_hbp_ops + seas_sf_ops
+    df_logs['Seas_OBP'] = np.where(seas_pa_ops > 0, ((seas_h_ops + seas_bb_ops + seas_hbp_ops) / seas_pa_ops).round(3), 0)
+    df_logs['Seas_SLG'] = np.where(seas_ab_ops > 0, (seas_tb_ops / seas_ab_ops).round(3), 0)
+    df_logs['Seas_OPS'] = (df_logs['Seas_OBP'] + df_logs['Seas_SLG']).round(3)
+
+    df_logs = df_logs.reset_index()
+    df_sample_flags = build_batter_sample_flags(df_logs, today_str)
+    if not df_sample_flags.empty:
+        df_logs = df_logs.merge(df_sample_flags, on=['player_id', 'player_name'], how='left')
+        df_logs['LIMITED_SAMPLE'] = df_logs['LIMITED_SAMPLE'].fillna(False)
+        df_logs['RETURNING'] = df_logs['RETURNING'].fillna(False)
+        print(f"✅ Sample flags built — {int(df_sample_flags['LIMITED_SAMPLE'].sum())} LIMITED_SAMPLE, {int(df_sample_flags['RETURNING'].sum())} RETURNING")
+    else:
+        df_logs['L5_GAMES_PLAYED'] = 0
+        df_logs['GAMES_LAST_7D'] = 0
+        df_logs['LIMITED_SAMPLE'] = False
+        df_logs['RETURNING'] = False
+    df_logs['game_date'] = df_logs['game_date'].dt.strftime('%Y-%m-%d')
+    df_logs['LAST_UPDATED'] = timestamp_est
+    print(f"✅ Metrics calculated — {len(df_logs.columns)} columns total")
+    print(f"   📊 New columns: UD_FP, Seas_UD_FP, L7_UD_FP, L14_UD_FP, L30_UD_FP + 1B/3B/HBP rolling avgs")
+
+    # --- 5. LHP/RHP SPLITS (PARALLEL) ---
+    print("\nCalculating LHP/RHP splits...")
+
+    splits_rows = []
+    start_time = time.time()
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {executor.submit(fetch_one_batter_splits, b): b for b in qualified_batters}
+        done_count = 0
+        for future in as_completed(futures):
+            splits_rows.append(future.result())
+            done_count += 1
+            if done_count % 50 == 0:
+                print(f"   Fetched splits {done_count}/{len(qualified_batters)}...")
+
+    elapsed = time.time() - start_time
+    df_splits = pd.DataFrame(splits_rows)
+    df_splits['LAST_UPDATED'] = timestamp_est
+    print(f"✅ LHP/RHP splits for {len(df_splits)} players in {elapsed:.1f}s")
+
+    # --- 6. HOME/AWAY SPLITS ---
+    print("\nCalculating Home/Away splits...")
+
+    split_metrics = ['H', 'HR', 'RBI', 'R', 'SB', 'SO', 'BB', 'TB', 'DK_FP', 'UD_FP', 'AB']
+    df_logs_temp = df_logs.copy()
+
+    ha_mean = df_logs_temp.groupby(['player_id', 'home_away'])[split_metrics].mean().round(3)
+    ha_count = df_logs_temp.groupby(['player_id', 'home_away'])['AB'].count().rename('GAMES')
+    df_home_away = ha_mean.join(ha_count).reset_index()
+
+    ha_pivot = df_home_away.pivot(index='player_id', columns='home_away', values=split_metrics)
+    ha_pivot.columns = [f'{stat}_{loc}' for stat, loc in ha_pivot.columns]
+    ha_count_pivot = df_home_away.pivot(index='player_id', columns='home_away', values='GAMES')
+    ha_count_pivot.columns = [f'{c}_GAMES' for c in ha_count_pivot.columns]
+    ha_pivot = ha_pivot.join(ha_count_pivot)
+
+    for m in split_metrics:
+        for loc in ['Home', 'Away']:
+            col = f'{m}_{loc}'
+            if col not in ha_pivot.columns:
+                ha_pivot[col] = np.nan
+    for loc in ['Home', 'Away']:
+        gcol = f'{loc}_GAMES'
+        if gcol not in ha_pivot.columns:
+            ha_pivot[gcol] = np.nan
+
+    for m in split_metrics:
+        hc, ac = f'{m}_Home', f'{m}_Away'
+        if hc in ha_pivot.columns and ac in ha_pivot.columns:
+            ha_pivot[f'{m}_SPLIT_DIFF'] = (ha_pivot[hc] - ha_pivot[ac]).where(
+                ha_pivot[hc].notna() & ha_pivot[ac].notna(), other=np.nan).round(3)
+
+    player_names = df_logs_temp.groupby('player_id')['player_name'].first()
+    ha_pivot = ha_pivot.reset_index().merge(player_names, on='player_id', how='left')
+    ha_pivot = ha_pivot.reindex(sorted(ha_pivot.columns), axis=1)
+    cols = ['player_id', 'player_name'] + [c for c in ha_pivot.columns if c not in ['player_id', 'player_name']]
+    ha_pivot = ha_pivot[cols]
+    ha_pivot['LAST_UPDATED'] = timestamp_est
+    print(f"✅ Home/Away splits for {ha_pivot['player_name'].nunique()} players")
+
+    # --- 6.5 STATCAST QUALITY OF CONTACT / PITCH SHAPE SIGNALS ---
+    print("\nFetching and aggregating Statcast signals...")
+
+    df_statcast_daily = load_existing_log_sheet('Statcast_Daily', STATCAST_DAILY_COLS, STATCAST_NUMERIC_COLS)
+    df_batter_statcast = pd.DataFrame()
+    df_pitcher_statcast = pd.DataFrame()
+
+    statcast_enabled = os.environ.get('STATCAST_ENABLED', '1').strip().lower() not in {'0', 'false', 'no'}
+    statcast_lookback_days = int(os.environ.get('STATCAST_LOOKBACK_DAYS', '21') or 21)
+    statcast_cache_days = int(os.environ.get('STATCAST_CACHE_DAYS', '45') or 45)
+    statcast_end_ts = pd.to_datetime(schedule_date, errors='coerce')
+    if pd.isna(statcast_end_ts):
+        statcast_end_ts = pd.to_datetime(today_str, errors='coerce')
+    statcast_fetch_start = statcast_end_ts - pd.Timedelta(days=statcast_lookback_days - 1)
+
+    if len(df_statcast_daily) > 0:
+        df_statcast_daily['game_date'] = df_statcast_daily['game_date'].map(normalize_game_date)
+        latest_statcast_date = pd.to_datetime(df_statcast_daily['game_date'], errors='coerce').max()
+        if pd.notna(latest_statcast_date):
+            statcast_fetch_start = max(statcast_fetch_start, latest_statcast_date + pd.Timedelta(days=1))
+            print(f"♻️ Seeded Statcast_Daily through {latest_statcast_date.strftime('%Y-%m-%d')} ({len(df_statcast_daily)} rows)")
+    else:
+        print("🆕 No existing Statcast_Daily seed found — recent Statcast fetch")
+
+    if statcast_enabled and pd.notna(statcast_end_ts) and statcast_fetch_start <= statcast_end_ts:
+        batter_names, batter_teams, pitcher_names, pitcher_teams = build_statcast_name_maps(
+            qualified_batters, [], df_logs, None)
+        new_statcast_daily = fetch_statcast_daily_summaries(
+            statcast_fetch_start.strftime('%Y-%m-%d'),
+            statcast_end_ts.strftime('%Y-%m-%d'),
+            batter_names, batter_teams, pitcher_names, pitcher_teams)
+        df_statcast_daily = pd.concat([df_statcast_daily, new_statcast_daily], ignore_index=True)
+    elif not statcast_enabled:
+        print("   ⏭️ Statcast disabled by STATCAST_ENABLED=0")
+    else:
+        print("   ✅ Statcast cache already current for requested date")
+
+    if len(df_statcast_daily) > 0:
+        df_statcast_daily['game_date'] = df_statcast_daily['game_date'].map(normalize_game_date)
+        df_statcast_daily['player_id'] = pd.to_numeric(df_statcast_daily['player_id'], errors='coerce')
+        df_statcast_daily = df_statcast_daily.dropna(subset=['player_id', 'game_date', 'role']).copy()
+        df_statcast_daily['player_id'] = df_statcast_daily['player_id'].astype(int)
+        for col in STATCAST_NUMERIC_COLS:
+            if col in df_statcast_daily.columns:
+                df_statcast_daily[col] = pd.to_numeric(df_statcast_daily[col], errors='coerce')
+        df_statcast_daily = df_statcast_daily.drop_duplicates(
+            subset=['game_date', 'player_id', 'role'], keep='last')
+        cache_cutoff = statcast_end_ts - pd.Timedelta(days=statcast_cache_days - 1)
+        df_statcast_daily_dt = pd.to_datetime(df_statcast_daily['game_date'], errors='coerce')
+        df_statcast_daily = df_statcast_daily[df_statcast_daily_dt >= cache_cutoff].copy()
+        df_statcast_daily['LAST_UPDATED'] = timestamp_est
+        df_batter_statcast = rollup_statcast_players(df_statcast_daily, 'BATTER', schedule_date)
+        df_pitcher_statcast = rollup_statcast_players(df_statcast_daily, 'PITCHER', schedule_date)
+        print(f"✅ Statcast rollups — {len(df_batter_statcast)} batters, {len(df_pitcher_statcast)} pitchers")
+    else:
+        df_statcast_daily = pd.DataFrame(columns=STATCAST_DAILY_COLS)
+        df_batter_statcast = pd.DataFrame()
+        df_pitcher_statcast = pd.DataFrame()
+        print("⚠️ No Statcast data available; continuing without Statcast signals")
+
+    # --- 7. TONIGHT'S SCHEDULE & STARTING PITCHERS ---
+    print("\nFetching tonight's schedule and starting pitchers...")
+
+    games_tonight = []
+    pitcher_map = {}
+    venue_coords_dynamic = {}
+    # Distinguishes "the fetch failed" from "there are genuinely no games today".
+    # Both leave games_tonight empty, but they need opposite write behavior — see the
+    # Tonights_Schedule handling in the write phase.
+    schedule_fetch_ok = False
+
+    DOMED_VENUES = {
+        'Tropicana Field', 'Globe Life Field', 'loanDepot park',
+        'Minute Maid Park', 'Daikin Park',
+        'Rogers Centre', 'T-Mobile Park',
+        'Chase Field', 'American Family Field'
+    }
+
+    try:
+        sched_url = f"{MLB_API}/schedule?sportId=1&date={schedule_date}&hydrate=probablePitcher,team,venue&gameType=R"
+        sched_resp = requests.get(sched_url, timeout=10).json()
+
+        for date in sched_resp.get('dates', []):
+            for game in date.get('games', []):
+                home = game['teams']['home']
+                away = game['teams']['away']
+                venue = game.get('venue', {})
+                home_abbr = home['team'].get('abbreviation', '')
+                away_abbr = away['team'].get('abbreviation', '')
+                home_pitcher = home.get('probablePitcher', {})
+                away_pitcher = away.get('probablePitcher', {})
+
+                venue_name = venue.get('name', '')
+                venue_lat = venue.get('location', {}).get('defaultCoordinates', {}).get('latitude')
+                venue_lon = venue.get('location', {}).get('defaultCoordinates', {}).get('longitude')
+
+                if venue_lat and venue_lon:
+                    venue_coords_dynamic[venue_name] = (venue_lat, venue_lon)
+
+                games_tonight.append({
+                    'game_pk': game['gamePk'], 'home_abbr': home_abbr, 'away_abbr': away_abbr,
+                    'home_team_id': home['team']['id'], 'away_team_id': away['team']['id'],
+                    'venue_name': venue_name, 'venue_id': venue.get('id', ''),
+                    'venue_lat': venue_lat, 'venue_lon': venue_lon,
+                    # game_time is the raw MLB StatsAPI UTC instant (…T23:05:00Z). For any
+                    # game after 8pm ET its UTC *date* is already tomorrow, so consumers
+                    # must convert before comparing. game_date is the Eastern slate date
+                    # this run actually requested, so a stale tab is self-identifying
+                    # instead of requiring the date to be inferred from a UTC timestamp.
+                    'game_date': schedule_date,
+                    'game_time': game.get('gameDate', ''),
+                    'home_pitcher_id': home_pitcher.get('id'),
+                    'home_pitcher_name': home_pitcher.get('fullName', 'TBD'),
+                    'away_pitcher_id': away_pitcher.get('id'),
+                    'away_pitcher_name': away_pitcher.get('fullName', 'TBD'),
+                })
+
+                if home_pitcher.get('id'):
+                    pitcher_map[away_abbr] = {'opp_pitcher_id': home_pitcher['id'], 'opp_pitcher_name': home_pitcher.get('fullName', 'TBD')}
+                if away_pitcher.get('id'):
+                    pitcher_map[home_abbr] = {'opp_pitcher_id': away_pitcher['id'], 'opp_pitcher_name': away_pitcher.get('fullName', 'TBD')}
+
+        print(f"⚾ Found {len(games_tonight)} games on {schedule_date}")
+        for g in games_tonight:
+            print(f"   {g['away_abbr']} ({g['away_pitcher_name']}) @ {g['home_abbr']} ({g['home_pitcher_name']}) — {g['venue_name']}")
+        if venue_coords_dynamic:
+            print(f"📍 Dynamic venue coordinates loaded for {len(venue_coords_dynamic)} venues")
+        schedule_fetch_ok = True
+    except Exception as e:
+        print(f"❌ Schedule fetch failed: {e}")
+        # schedule_fetch_ok stays False, so the write phase will NOT clear
+        # Tonights_Schedule — blanking it would hide tonight's slate entirely. It keeps
+        # the previous contents instead, which is the lesser evil but is invisible on the
+        # sheet, so say so loudly here and in the run log.
+        print("   ⚠️  Tonights_Schedule will KEEP its previous contents — that tab is now STALE.")
         try:
-            runlog.record_write('Daily_Picks', len(df_append))
+            runlog.warn("Schedule fetch failed; Tonights_Schedule left stale (previous day's rows retained).")
         except Exception:
             pass
-    except Exception as e:
-        print(f"   ❌ Daily_Picks append failed: {e}")
-    time.sleep(2)
-else:
-    print(f"\n⏭️  Daily_Picks: No new picks to append")
 
-# --- SUMMARY ---
-print(f"\n{'='*60}")
-print(f"✅ MLB DASHBOARD ENGINE v1.3.0 — COMPLETE")
-print(f"{'='*60}")
-print(f"📅 Schedule date:    {schedule_date}")
-print(f"📆 Season:           {SEASON}")
-print(f"🗂️  Snapshot:         {SNAPSHOT_DATE}")
-print(f"⚾ Games tonight:    {len(games_tonight)}")
-print(f"🏏 Active batters:   {len(df_tonight)}")
-print(f"⚾ Pitchers tracked: {len(df_pitcher_logs) if len(df_pitcher_logs) > 0 else 0}")
-print(f"🎯 Tonight's SPs:    {len(df_pitcher_tonight) if len(df_pitcher_tonight) > 0 else 0}")
-print(f"📊 Batter game logs: {len(df_logs)}")
-print(f"📊 Pitcher game logs:{len(df_pitcher_logs) if len(df_pitcher_logs) > 0 else 0}")
-print(f"🏟️  Team rankings:    {len(df_team_rankings) if len(df_team_rankings) > 0 else 0}")
-print(f"🌤️  Venues w/ weather: {len(df_weather)}")
-print(f"🎰 Odds:             {'✅ ' + str(len(df_odds)) + ' games' if len(df_odds) > 0 else 'Skipped'}")
-if len(df_props) > 0:
-    print(f"🎲 DK Props:         {len(df_props)} props across {df_props['METRIC'].nunique()} markets")
-    print(f"🏪 All Books Props:  {len(df_all_books)} rows across {df_all_books['BOOK'].nunique() if len(df_all_books) > 0 else 0} books")
-else:
-    print(f"🎲 DK Props:         Skipped")
-if len(df_picks) > 0:
-    print(f"🤖 AI Picks:         {len(df_picks)} picks (Top: {df_picks.iloc[0]['player']} {df_picks.iloc[0]['confidence']})")
-    if 'two_way_tonight' in dir() and two_way_tonight:
-        print(f"⚠️  Two-way players: {', '.join(sorted(two_way_tonight))}")
-else:
-    print(f"🤖 AI Picks:         Skipped")
-print(f"📝 Google Sheet:     {SHEET_NAME}")
-print(f"🕐 Last updated:     {timestamp_est}")
-print(f"🆕 v1.3.0: Underdog FP (UD_FP), QS, HBP, 1B/3B rolling averages added")
-print(f"{'='*60}")
+    VENUE_COORDS_FALLBACK = {
+        'Angel Stadium': (33.8003, -117.8827), 'Busch Stadium': (38.6226, -90.1928),
+        'Chase Field': (33.4455, -112.0667), 'Citi Field': (40.7571, -73.8458),
+        'Citizens Bank Park': (39.9061, -75.1665), 'Comerica Park': (42.3390, -83.0485),
+        'Coors Field': (39.7559, -104.9942), 'Dodger Stadium': (34.0739, -118.2400),
+        'UNIQLO FIELD AT DODGER STADIUM': (34.0739, -118.2400),
+        'Fenway Park': (42.3467, -71.0972), 'Globe Life Field': (32.7473, -97.0845),
+        'Great American Ball Park': (39.0974, -84.5082),
+        'Guaranteed Rate Field': (41.8299, -87.6338), 'Rate Field': (41.8299, -87.6338),
+        'Kauffman Stadium': (39.0517, -94.4803), 'loanDepot park': (25.7781, -80.2196),
+        'Minute Maid Park': (29.7573, -95.3555), 'Daikin Park': (29.7573, -95.3555),
+        'Nationals Park': (38.8730, -77.0074),
+        'Oakland Coliseum': (37.7516, -122.2005), 'Sutter Health Park': (38.5802, -121.5101), 'Oracle Park': (37.7786, -122.3893),
+        'Oriole Park at Camden Yards': (39.2838, -76.6216), 'Petco Park': (32.7076, -117.1570),
+        'PNC Park': (40.4469, -80.0058), 'Progressive Field': (41.4962, -81.6852),
+        'Rogers Centre': (43.6414, -79.3894), 'T-Mobile Park': (47.5914, -122.3325),
+        'Target Field': (44.9818, -93.2775), 'Tropicana Field': (27.7682, -82.6534),
+        'Truist Park': (33.8908, -84.4678), 'Wrigley Field': (41.9484, -87.6553),
+        'Yankee Stadium': (40.8296, -73.9262), 'American Family Field': (43.0280, -87.9712),
+        'George M. Steinbrenner Field': (27.9789, -82.5034), 'Salt River Fields': (33.5453, -111.8847),
+    }
+
+    for team_abbr, info in pitcher_map.items():
+        if info.get('opp_pitcher_id'):
+            info['opp_pitcher_hand'] = get_pitcher_hand(info['opp_pitcher_id'])
+            time.sleep(0.1)
+
+    print(f"✅ Pitcher handedness fetched for {len(pitcher_map)} teams")
+    for team, info in pitcher_map.items():
+        print(f"   {team} faces {info['opp_pitcher_name']} ({info.get('opp_pitcher_hand','?')}HP)")
+
+    # --- 7.5 TWO-WAY PLAYER DETECTION (data-driven, future-proof) ---
+    # A two-way player is anyone who is BOTH a probable SP tonight AND a qualified batter.
+    # Ohtani is the known case, but this generalizes to any future two-way player.
+    tonight_sp_names = set()
+    for g in games_tonight:
+        if g.get('home_pitcher_name') and g['home_pitcher_name'] != 'TBD':
+            tonight_sp_names.add(g['home_pitcher_name'])
+        if g.get('away_pitcher_name') and g['away_pitcher_name'] != 'TBD':
+            tonight_sp_names.add(g['away_pitcher_name'])
+
+    qualified_batter_names = {b['player_name'] for b in qualified_batters}
+    two_way_tonight = tonight_sp_names & qualified_batter_names
+
+    if two_way_tonight:
+        print(f"⚠️  TWO-WAY PLAYER ALERT: {', '.join(sorted(two_way_tonight))} pitching AND on qualified batter list")
+        print(f"   → Batter props will carry LINEUP RISK flag (confirm lineup before betting)")
+    else:
+        print(f"ℹ️  No two-way players pitching tonight")
+
+    # --- 8. BUILD TONIGHT'S BATTER SHEET (ROSTER-SAFE + EARLY-SEASON EXPANSION) ---
+    print("\nBuilding tonight's batter sheet...")
+
+    active_team_abbrs = set()
+    active_team_ids = {}
+    for g in games_tonight:
+        active_team_abbrs.add(g['home_abbr'])
+        active_team_abbrs.add(g['away_abbr'])
+        active_team_ids[g['home_abbr']] = g['home_team_id']
+        active_team_ids[g['away_abbr']] = g['away_team_id']
+
+    batter_current_team = {b['player_id']: b['team_abbr'] for b in qualified_batters}
+
+    most_recent = df_logs.sort_values('game_date').groupby('player_id').last().reset_index()
+    most_recent['team_abbr'] = most_recent['player_id'].map(batter_current_team)
+    most_recent['player_name'] = most_recent['player_id'].map(
+        {b['player_id']: b['player_name'] for b in qualified_batters})
+    most_recent = most_recent[most_recent['team_abbr'].isin(active_team_abbrs)].copy()
+
+    print("   🔄 Early-season expansion: fetching full rosters for tonight's teams...")
+    expansion_batters = []
+    existing_ids = set(most_recent['player_id'].unique())
+
+    for team_abbr, team_id in active_team_ids.items():
+        try:
+            roster_url = f"{MLB_API}/teams/{team_id}/roster?rosterType=active&season={SEASON}"
+            roster_resp = requests.get(roster_url, timeout=10).json()
+            for entry in roster_resp.get('roster', []):
+                pid = entry.get('person', {}).get('id')
+                pname = entry.get('person', {}).get('fullName', '')
+                pos_type = entry.get('position', {}).get('type', '')
+                if pid and pid not in existing_ids and pos_type != 'Pitcher':
+                    expansion_batters.append({'player_id': pid, 'player_name': pname, 'team_abbr': team_abbr})
+                    existing_ids.add(pid)
+        except Exception as e:
+            print(f"   ⚠️ Roster fetch failed for {team_abbr}: {e}")
+
+    if expansion_batters:
+        df_expansion = pd.DataFrame(expansion_batters)
+        for col in most_recent.columns:
+            if col not in df_expansion.columns:
+                df_expansion[col] = np.nan
+        most_recent = pd.concat([most_recent, df_expansion[most_recent.columns]], ignore_index=True)
+        print(f"   ✅ Added {len(expansion_batters)} batters from roster expansion (no game logs yet)")
+    else:
+        print(f"   ℹ️ No additional batters needed")
+
+    most_recent['opp_pitcher_name'] = most_recent['team_abbr'].map(
+        {k: v['opp_pitcher_name'] for k, v in pitcher_map.items()})
+    most_recent['opp_pitcher_hand'] = most_recent['team_abbr'].map(
+        {k: v.get('opp_pitcher_hand', 'R') for k, v in pitcher_map.items()})
+    most_recent['opp_abbr_tonight'] = most_recent['team_abbr'].map(
+        {g['home_abbr']: g['away_abbr'] for g in games_tonight} |
+        {g['away_abbr']: g['home_abbr'] for g in games_tonight})
+    most_recent['venue_tonight'] = most_recent['team_abbr'].map(
+        {g['home_abbr']: g['venue_name'] for g in games_tonight} |
+        {g['away_abbr']: g['venue_name'] for g in games_tonight})
+    most_recent['home_away_tonight'] = most_recent['team_abbr'].map(
+        {g['home_abbr']: 'Home' for g in games_tonight} |
+        {g['away_abbr']: 'Away' for g in games_tonight})
+
+    if 'Seas_OPS' in most_recent.columns:
+        elite_ops_series = pd.to_numeric(most_recent['Seas_OPS'], errors='coerce')
+    else:
+        elite_ops_series = pd.Series(dtype=float)
+    elite_ops_cutoff = max(0.850, float(elite_ops_series.dropna().quantile(0.85))) if not elite_ops_series.dropna().empty else 0.850
+    most_recent['IBB_RISK'] = False
+    most_recent['LINEUP_PROTECTION_NOTE'] = ""
+    most_recent['TEAM_SUPPORT_OPS1'] = np.nan
+    most_recent['TEAM_SUPPORT_OPS2'] = np.nan
+
+    for idx, row in most_recent.iterrows():
+        ops = pd.to_numeric(pd.Series([row.get('Seas_OPS')]), errors='coerce').iloc[0]
+        if pd.isna(ops) or ops < elite_ops_cutoff:
+            continue
+        teammates = most_recent[(most_recent['team_abbr'] == row.get('team_abbr')) & (most_recent['player_id'] != row.get('player_id'))]
+        if 'Seas_OPS' in teammates.columns:
+            teammate_ops = pd.to_numeric(teammates['Seas_OPS'], errors='coerce')
+        else:
+            teammate_ops = pd.Series(dtype=float)
+        support_ops = sorted(teammate_ops.dropna().tolist(), reverse=True)
+        top1 = support_ops[0] if len(support_ops) > 0 else np.nan
+        top2 = support_ops[1] if len(support_ops) > 1 else np.nan
+        most_recent.at[idx, 'TEAM_SUPPORT_OPS1'] = top1
+        most_recent.at[idx, 'TEAM_SUPPORT_OPS2'] = top2
+        weak_support = (pd.isna(top1) or top1 < 0.760) and (pd.isna(top2) or top2 < 0.720)
+        if weak_support:
+            top1_txt = f"{top1:.3f}" if pd.notna(top1) else "n/a"
+            top2_txt = f"{top2:.3f}" if pd.notna(top2) else "n/a"
+            most_recent.at[idx, 'IBB_RISK'] = True
+            most_recent.at[idx, 'LINEUP_PROTECTION_NOTE'] = f"LINEUP RISK: weak lineup protection (support OPS {top1_txt}/{top2_txt})"
+
+    df_splits_merge = df_splits.copy()
+    for col in df_splits_merge.columns:
+        if col not in ['player_id', 'player_name', 'team_abbr', 'LAST_UPDATED']:
+            df_splits_merge.rename(columns={col: f'SPLIT_{col}'}, inplace=True)
+
+    most_recent = most_recent.merge(
+        df_splits_merge[['player_id'] + [c for c in df_splits_merge.columns if 'SPLIT_' in c]],
+        on='player_id', how='left')
+    ha_merge_cols = ['player_id', 'Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB_Away',
+                     'HR_Home', 'HR_Away', 'RBI_Home', 'RBI_Away', 'UD_FP_Home', 'UD_FP_Away']
+    ha_merge_cols = [c for c in ha_merge_cols if c in ha_pivot.columns]
+    if ha_merge_cols:
+        most_recent = most_recent.merge(ha_pivot[ha_merge_cols], on='player_id', how='left')
+
+    if df_batter_statcast is not None and len(df_batter_statcast) > 0:
+        statcast_merge_cols = ['player_id'] + [c for c in df_batter_statcast.columns if c.startswith('SC_')]
+        most_recent = most_recent.merge(df_batter_statcast[statcast_merge_cols], on='player_id', how='left')
+        h_score = (
+            50
+            + (numeric_col(most_recent, 'SC_L14_xBA') - 0.250).fillna(0) * 120
+            + (numeric_col(most_recent, 'SC_L14_hard_hit_pct') - 35).fillna(0) * 0.45
+            + (numeric_col(most_recent, 'L7_H') - numeric_col(most_recent, 'Seas_H')).fillna(0) * 5
+        )
+        power_score = (
+            50
+            + (numeric_col(most_recent, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
+            + (numeric_col(most_recent, 'SC_L14_avg_ev') - 89).fillna(0) * 1.7
+            + (numeric_col(most_recent, 'SC_L14_xSLG') - 0.420).fillna(0) * 70
+        )
+        most_recent['H_PLAYER_SCORE'] = clip_score(h_score)
+        most_recent['H_OPP_ADJ'] = 0.0
+        most_recent['H_EDGE_SCORE'] = most_recent['H_PLAYER_SCORE']
+        most_recent['POWER_PLAYER_SCORE'] = clip_score(power_score)
+        most_recent['POWER_OPP_ADJ'] = 0.0
+        most_recent['POWER_EDGE_SCORE'] = most_recent['POWER_PLAYER_SCORE']
+    else:
+        most_recent['H_PLAYER_SCORE'] = np.nan
+        most_recent['H_OPP_ADJ'] = np.nan
+        most_recent['H_EDGE_SCORE'] = np.nan
+        most_recent['POWER_PLAYER_SCORE'] = np.nan
+        most_recent['POWER_OPP_ADJ'] = np.nan
+        most_recent['POWER_EDGE_SCORE'] = np.nan
+
+    split_stats = ['AVG', 'OPS', 'H', 'HR', 'TB', 'RBI', 'SO', 'BB']
+    for stat in split_stats:
+        most_recent[f'vs_OPP_{stat}'] = np.where(
+            most_recent['opp_pitcher_hand'] == 'L',
+            most_recent.get(f'SPLIT_vs_LHP_{stat}', np.nan),
+            most_recent.get(f'SPLIT_vs_RHP_{stat}', np.nan))
+
+    rolling_cols = [c for c in most_recent.columns if any(c.startswith(p) for p in ['L7_', 'L14_', 'L30_', 'Seas_'])]
+    statcast_cols = [c for c in most_recent.columns if c.startswith('SC_')] + [
+        'H_PLAYER_SCORE', 'H_OPP_ADJ', 'H_EDGE_SCORE',
+        'POWER_PLAYER_SCORE', 'POWER_OPP_ADJ', 'POWER_EDGE_SCORE',
+    ]
+    ha_prompt_cols = ['Home_GAMES', 'Away_GAMES', 'H_Home', 'H_Away', 'TB_Home', 'TB_Away',
+                      'HR_Home', 'HR_Away', 'RBI_Home', 'RBI_Away', 'UD_FP_Home', 'UD_FP_Away']
+    final_cols = (
+        ['player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name', 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight'] +
+        [f'vs_OPP_{s}' for s in split_stats] + ha_prompt_cols + rolling_cols + statcast_cols +
+        ['L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
+         'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
+    final_cols = [c for c in final_cols if c in most_recent.columns]
+    df_tonight = most_recent[final_cols].copy()
+    df_tonight = df_tonight.sort_values('player_name').reset_index(drop=True)
+
+    game_log_count = df_tonight['L7_H'].notna().sum() if 'L7_H' in df_tonight.columns else 0
+    roster_only_count = len(df_tonight) - game_log_count
+    print(f"✅ Tonight's batter sheet built — {len(df_tonight)} active batters")
+    print(f"   ({game_log_count} with game logs, {roster_only_count} roster-only)")
+    print(f"   Columns: {len(df_tonight.columns)}")
+
+    # --- 8.5 BATTER vs STARTING PITCHER (CAREER) ---
+    print("\nFetching career batter vs SP stats...")
+    vs_sp_rows = []
+
+    batter_pitcher_pairs = []
+    for b in qualified_batters:
+        team = b['team_abbr']
+        if team in pitcher_map and pitcher_map[team].get('opp_pitcher_id'):
+            if team in active_team_abbrs:
+                batter_pitcher_pairs.append((b['player_name'], b['player_id'],
+                    pitcher_map[team]['opp_pitcher_id'], pitcher_map[team]['opp_pitcher_name']))
+
+    print(f"   Fetching {len(batter_pitcher_pairs)} batter vs SP matchups...")
+    start_time = time.time()
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {executor.submit(fetch_batter_vs_pitcher, *pair): pair for pair in batter_pitcher_pairs}
+        done_count = 0
+        for future in as_completed(futures):
+            result = future.result()
+            if result:
+                vs_sp_rows.append(result)
+            done_count += 1
+            if done_count % 50 == 0:
+                print(f"   Fetched {done_count}/{len(batter_pitcher_pairs)}...")
+
+    elapsed = time.time() - start_time
+    df_vs_sp = pd.DataFrame(vs_sp_rows)
+    if len(df_vs_sp) > 0:
+        df_vs_sp['LAST_UPDATED'] = timestamp_est
+    print(f"✅ Career vs SP data for {len(df_vs_sp)} matchups in {elapsed:.1f}s")
+
+    # --- 9. WEATHER ---
+    print("\nFetching weather for tonight's venues...")
+
+    weather_rows = []
+    seen_venues = set()
+    for game in games_tonight:
+        venue = game['venue_name']
+        if venue in seen_venues:
+            continue
+        seen_venues.add(venue)
+        is_dome = venue.lower() in {v.lower() for v in DOMED_VENUES}
+        coords = get_venue_coords(venue)
+        if coords and OPENWEATHER_API_KEY:
+            wx = get_weather(coords[0], coords[1], OPENWEATHER_API_KEY)
+            if wx:
+                weather_rows.append({
+                    'venue_name': venue, 'home_abbr': game['home_abbr'], 'away_abbr': game['away_abbr'],
+                    'is_dome': is_dome, 'temp_f': wx['temp_f'], 'feels_like_f': wx['feels_like_f'],
+                    'humidity': wx['humidity'], 'wind_mph': wx['wind_mph'],
+                    'wind_dir': wind_direction_label(wx['wind_dir']), 'wind_deg': wx['wind_dir'],
+                    'condition': wx['condition'], 'description': wx['description'], 'clouds_pct': wx['clouds_pct'],
+                    'weather_note': 'Dome/Roof — weather may not apply' if is_dome else '',
+                })
+                status = "🏟️ DOME" if is_dome else f"🌡️ {wx['temp_f']}°F"
+                print(f"   {venue}: {status}, {wx['wind_mph']}mph {wind_direction_label(wx['wind_dir'])}, {wx['description']}")
+        else:
+            weather_rows.append({'venue_name': venue, 'home_abbr': game['home_abbr'], 'away_abbr': game['away_abbr'],
+                'is_dome': is_dome, 'weather_note': 'Dome/Roof' if is_dome else 'No coordinates available'})
+            print(f"   {venue}: {'🏟️ DOME' if is_dome else '⚠️ No coordinates'}")
+        time.sleep(0.25)
+
+    df_weather = pd.DataFrame(weather_rows)
+    df_weather['LAST_UPDATED'] = timestamp_est
+    print(f"✅ Weather data for {len(df_weather)} venues")
+
+    # --- 10. BETTING ODDS ---
+    ODDS_SPORT = 'baseball_mlb'
+    ODDS_REGIONS = 'us'
+    ODDS_MARKETS = 'h2h,spreads,totals'
+
+    TEAM_NAME_TO_ABBR = {
+        'Arizona Diamondbacks': 'AZ', 'Atlanta Braves': 'ATL', 'Baltimore Orioles': 'BAL',
+        'Boston Red Sox': 'BOS', 'Chicago Cubs': 'CHC', 'Chicago White Sox': 'CWS',
+        'Cincinnati Reds': 'CIN', 'Cleveland Guardians': 'CLE', 'Colorado Rockies': 'COL',
+        'Detroit Tigers': 'DET', 'Houston Astros': 'HOU', 'Kansas City Royals': 'KC',
+        'Los Angeles Angels': 'LAA', 'Los Angeles Dodgers': 'LAD', 'Miami Marlins': 'MIA',
+        'Milwaukee Brewers': 'MIL', 'Minnesota Twins': 'MIN', 'New York Mets': 'NYM',
+        'New York Yankees': 'NYY', 'Oakland Athletics': 'OAK', 'Philadelphia Phillies': 'PHI',
+        'Pittsburgh Pirates': 'PIT', 'San Diego Padres': 'SD', 'San Francisco Giants': 'SF',
+        'Seattle Mariners': 'SEA', 'St. Louis Cardinals': 'STL', 'Tampa Bay Rays': 'TB',
+        'Texas Rangers': 'TEX', 'Toronto Blue Jays': 'TOR', 'Washington Nationals': 'WSH',
+    }
+
+    skip_odds_api_props = False
+
+
+    if (now_est >= OPENING_DAY or now_est.month >= 4) and ODDS_API_KEY:
+        print("\nFetching betting odds...")
+        today_event_count = fetch_today_event_count(ODDS_API_KEY, ODDS_SPORT, schedule_date)
+        if today_event_count == 0:
+            print("⛔ No MLB events today — aborting Odds API odds/props fetch to preserve credits.")
+            skip_odds_api_props = True
+            df_odds = pd.DataFrame()
+        else:
+            raw_odds = fetch_odds(ODDS_API_KEY)
+            odds_rows = extract_odds(raw_odds)
+            df_odds = pd.DataFrame(odds_rows)
+        if len(df_odds) > 0:
+            df_odds['total'] = pd.to_numeric(df_odds.get('total', pd.Series()), errors='coerce')
+            df_odds['home_spread'] = pd.to_numeric(df_odds.get('home_spread', pd.Series()), errors='coerce')
+            df_odds['home_implied_total'] = ((df_odds['total'] - df_odds['home_spread']) / 2).round(2)
+            df_odds['away_implied_total'] = ((df_odds['total'] + df_odds['home_spread']) / 2).round(2)
+            df_odds['home_abbr'] = df_odds['home_team'].map(TEAM_NAME_TO_ABBR)
+            df_odds['away_abbr'] = df_odds['away_team'].map(TEAM_NAME_TO_ABBR)
+            if active_team_abbrs:
+                before_games = len(df_odds)
+                df_odds = df_odds[
+                    df_odds['home_abbr'].isin(active_team_abbrs) &
+                    df_odds['away_abbr'].isin(active_team_abbrs)
+                ].copy()
+                print(f"🎯 Odds aligned to tonight's slate: {before_games} -> {len(df_odds)} games")
+            df_odds['LAST_UPDATED'] = timestamp_est
+            print(f"✅ Odds fetched for {len(df_odds)} games")
+        else:
+            df_odds = pd.DataFrame()
+    else:
+        print("\n⏭️ Odds skipped")
+        df_odds = pd.DataFrame()
+
+    df_schedule = pd.DataFrame(games_tonight)
+    # Explicit Eastern slate date. Without this the only date-bearing field is game_time,
+    # a UTC instant — and for any game after 8pm ET its UTC date is already tomorrow, so
+    # consumers can't cheaply tell which slate the tab describes. Stamping the date the run
+    # actually targeted makes a stale tab self-identifying (compare game_date to today).
+    # Assigned even when empty so a header-only write still carries the column.
+    df_schedule['game_date'] = schedule_date
+    df_schedule['LAST_UPDATED'] = timestamp_est
+
+    pitcher_rows_out = []
+    for team_abbr, info in pitcher_map.items():
+        pitcher_rows_out.append({'team_abbr': team_abbr, 'opp_pitcher_id': info.get('opp_pitcher_id', ''),
+            'opp_pitcher_name': info.get('opp_pitcher_name', 'TBD'), 'opp_pitcher_hand': info.get('opp_pitcher_hand', '')})
+    df_pitchers = pd.DataFrame(pitcher_rows_out)
+    df_pitchers['LAST_UPDATED'] = timestamp_est
+
+    # --- MULTI-BOOK PLAYER PROPS ---
+    print("\nFetching Live Multi-Book Player Props...")
+    SPORT = 'baseball_mlb'
+    BOOKMAKER = 'draftkings'
+    PROP_BOOKMAKER = 'draftkings'
+    FALLBACK_BOOKMAKER = 'fanduel'
+    THIN_MARKET_THRESHOLD = 5
+    # Caesars was dropped on 2026-05-27 — returned 0/0 best-book wins in production verification.
+    # May be worth re-adding after 6/1 reset to re-test (could have been a one-day API issue).
+    SUPPORTED_BOOKMAKERS = ['draftkings', 'fanduel', 'betmgm', 'espnbet']
+    ACTIVE_PROP_BOOKMAKERS = SUPPORTED_BOOKMAKERS if ENABLE_FANDUEL_FALLBACK else [
+        b for b in SUPPORTED_BOOKMAKERS if b != FALLBACK_BOOKMAKER
+    ]
+    REFERENCE_BOOKMAKER = 'draftkings'
+    BEST_BOOK_TIE_BREAK = 'alpha'
+
+    MARKET_BATCHES = [
+        'batter_hits,batter_total_bases,batter_home_runs,batter_rbis,batter_runs_scored',
+        'batter_stolen_bases,batter_strikeouts,batter_walks,batter_singles,batter_doubles',
+        'pitcher_strikeouts,pitcher_hits_allowed,pitcher_walks,pitcher_earned_runs,pitcher_outs',
+    ]
+
+    market_mapping = {
+        'batter_hits': 'H', 'batter_total_bases': 'TB', 'batter_home_runs': 'HR',
+        'batter_rbis': 'RBI', 'batter_runs_scored': 'R', 'batter_stolen_bases': 'SB',
+        'batter_strikeouts': 'Batter_SO', 'batter_walks': 'BB',
+        'batter_singles': '1B', 'batter_doubles': '2B',
+        'pitcher_strikeouts': 'P_SO', 'pitcher_hits_allowed': 'P_H',
+        'pitcher_walks': 'P_BB', 'pitcher_earned_runs': 'P_ER', 'pitcher_outs': 'P_OUTS'
+    }
+
+    BINARY_PROP_MARKETS = {
+        'batter_home_runs': 0.5,
+        'batter_stolen_bases': 0.5,
+        'batter_singles': 0.5,
+        'batter_doubles': 0.5,
+    }
+    name_fixes = {}
+
+    DK_PLAYER_PROPS_COLUMNS = [
+        'PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS', 'BOOK',
+        'REFERENCE_BOOK', 'BEST_OVER_BOOK', 'BEST_OVER_ODDS', 'BEST_OVER_DELTA_PP',
+        'BEST_UNDER_BOOK', 'BEST_UNDER_ODDS', 'BEST_UNDER_DELTA_PP',
+        'ALT_LINE_AVAILABLE', 'ALT_LINE_BOOKS', 'LAST_UPDATED'
+    ]
+    ALL_BOOKS_PROPS_COLUMNS = [
+        'PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS',
+        'OVER_IMPLIED', 'UNDER_IMPLIED', 'LAST_UPDATED'
+    ]
+
+
+    df_props = pd.DataFrame(columns=DK_PLAYER_PROPS_COLUMNS)
+    df_all_books = pd.DataFrame(columns=ALL_BOOKS_PROPS_COLUMNS)
+    try:
+        if skip_odds_api_props:
+            print("⏭️  Skipping MLB props pull because the 0-credit events pre-check found no games today.")
+            ev_resp = None
+        else:
+            ev_resp = requests.get(f'https://api.the-odds-api.com/v4/sports/{SPORT}/events', params={'apiKey': ODDS_API_KEY}, timeout=15)
+            check_quota_or_abort(ev_resp, "MLB events")
+        if ev_resp is None:
+            pass
+        elif ev_resp.status_code != 200:
+            print(f"❌ Failed to fetch events: {ev_resp.status_code} — {ev_resp.text[:200]}")
+        else:
+            ev_data = ev_resp.json()
+            tonight_team_names = {t['team_name'].lower() for t in team_list if t['team_abbr'] in active_team_abbrs}
+            tonight_ids = [
+                e['id'] for e in ev_data
+                if e.get('home_team', '').lower() in tonight_team_names
+                or e.get('away_team', '').lower() in tonight_team_names
+            ]
+            if not tonight_ids:
+                print(f"⏭️  No {SPORT_LABEL} games scheduled — skipping props pull.")
+            print(f"🏟️ Found {len(tonight_ids)} events — fetching props from {len(ACTIVE_PROP_BOOKMAKERS)} books...")
+
+            all_book_rows = []
+            api_errors = 0
+            last_resp = None
+            for eid in tonight_ids:
+                for batch in MARKET_BATCHES:
+                    markets_param = batch if isinstance(batch, str) else ','.join(batch)
+                    pr = requests.get(
+                        f'https://api.the-odds-api.com/v4/sports/{SPORT}/events/{eid}/odds',
+                        params={
+                            'apiKey': ODDS_API_KEY,
+                            'regions': 'us',
+                            'markets': markets_param,
+                            'bookmakers': ','.join(ACTIVE_PROP_BOOKMAKERS),
+                            'oddsFormat': 'american'
+                        },
+                        timeout=15
+                    )
+                    check_quota_or_abort(pr, f"MLB event props {eid}")
+                    last_resp = pr
+                    if pr.status_code != 200:
+                        if api_errors < 3:
+                            print(f"   ⚠️ Props API {pr.status_code} for event {eid}: {pr.text[:100]}")
+                        api_errors += 1
+                        if api_errors > 5:
+                            print("   ⚠️ More than 5 props API errors — continuing with partial data")
+                        continue
+                    data = pr.json()
+                    for bk in data.get('bookmakers', []):
+                        book_key = bk.get('key', '')
+                        if book_key not in ACTIVE_PROP_BOOKMAKERS:
+                            continue
+                        for mkt in bk.get('markets', []):
+                            mn = market_mapping.get(mkt.get('key'))
+                            if not mn:
+                                continue
+                            all_book_rows.extend(parse_multi_book_market(mkt, mn, book_key, BINARY_PROP_MARKETS))
+                time.sleep(0.5)
+
+            df_all_books = finalize_all_books_frame(all_book_rows, timestamp_est, name_fixes)
+            if last_resp is not None and hasattr(last_resp, 'headers'):
+                print(f"   📊 API quota remaining: {last_resp.headers.get('x-requests-remaining', '?')}")
+            if api_errors:
+                print(f"   ⚠️ Total props API errors: {api_errors}")
+            for book in ACTIVE_PROP_BOOKMAKERS:
+                book_ct = 0 if df_all_books.empty else int((df_all_books['BOOK'] == book).sum())
+                if book_ct == 0:
+                    print(f"   {book}: 0 props")
+            df_props, tie_notes = compute_best_book_columns(df_all_books, timestamp_est)
+            for note in tie_notes[:10]:
+                print(f"   ℹ️ Best-book tie: {note}")
+            if len(tie_notes) > 10:
+                print(f"   ℹ️ Best-book ties suppressed: {len(tie_notes) - 10} more")
+            if not df_props.empty:
+                metric_counts = df_props['METRIC'].value_counts().to_dict()
+                thin_metrics = sorted([metric for metric in set(market_mapping.values()) if metric_counts.get(metric, 0) < THIN_MARKET_THRESHOLD])
+                if thin_metrics:
+                    print(f"   ⚠️ Thin/missing markets after multi-book fetch: {', '.join(thin_metrics)}")
+                print(f"✅ Fetched {len(df_props)} reference props across {df_props['METRIC'].nunique()} markets")
+                print(f"✅ All_Books_Props rows: {len(df_all_books)} across {df_all_books['BOOK'].nunique()} books")
+            else:
+                print("⚠️ No player props returned.")
+            print_best_book_summary(df_props, df_all_books)
+    except Exception as e:
+        print(f"❌ Failed to fetch player props: {e}")
+
+    # --- 10.6 GEMINI AI PICKS ---
+    print("\n" + "=" * 60)
+    existing_daily_picks = load_existing_daily_picks(sh, schedule_date)
+    seen_pick_keys = set()
+    if len(existing_daily_picks) > 0:
+        for _, row in existing_daily_picks.iterrows():
+            key = (
+                normalize_player_name(str(row.get('player', ''))),
+                str(row.get('prop_type', '')).strip().upper(),
+                str(row.get('lean', '')).strip().upper(),
+            )
+            seen_pick_keys.add(key)
+    existing_run_numbers = pd.to_numeric(existing_daily_picks.get('RUN_NUMBER', pd.Series(dtype=float)), errors='coerce').dropna().astype(int)
+    today_run_number = int(existing_run_numbers.max()) + 1 if not existing_run_numbers.empty else 1
+    df_picks_current = pd.DataFrame(columns=PICK_OUTPUT_COLUMNS)
+
+    print(f"\nFetching pitcher game logs for {SEASON} season...")
+    print("⚡ Using parallel fetching...")
+
+    df_pitcher_logs = pd.DataFrame()
+    df_pitcher_tonight = pd.DataFrame()
+    p_ha_pivot = pd.DataFrame()
+
+    PITCHER_LOG_BASE_COLS = ['player_id', 'game_pk', 'player_name', 'game_date', 'team_abbr', 'opp_abbr', 'home_away',
+                             'IP', 'IP_DISPLAY', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP', 'ERA']
+    PITCHER_LOG_NUMERIC_COLS = ['player_id', 'IP', 'IP_DISPLAY', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP', 'ERA']
+    existing_pitcher_logs = load_existing_log_sheet('Pitcher_Game_Logs', PITCHER_LOG_BASE_COLS, PITCHER_LOG_NUMERIC_COLS)
+    latest_pitcher_date_by_pid = {}
+    if len(existing_pitcher_logs) > 0:
+        latest_pitcher_date_by_pid = existing_pitcher_logs.dropna(subset=['player_id']).groupby('player_id')['game_date'].max().to_dict()
+        latest_pitcher_seed_date = max(latest_pitcher_date_by_pid.values()) if latest_pitcher_date_by_pid else ''
+        if latest_pitcher_seed_date:
+            print(f"♻️ Seeded Pitcher_Game_Logs through {latest_pitcher_seed_date} ({len(existing_pitcher_logs)} existing rows)")
+    else:
+        print("🆕 No existing Pitcher_Game_Logs seed found — full pitcher fetch")
+
+    qualified_pitchers = get_qualified_pitchers(SEASON)
+    print(f"✅ Found {len(qualified_pitchers)} qualified pitchers")
+
+    all_pitcher_logs = []
+    start_time = time.time()
+    with ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {executor.submit(fetch_one_pitcher_log, p): p for p in qualified_pitchers}
+        done_count = 0
+        for future in as_completed(futures):
+            all_pitcher_logs.extend(future.result())
+            done_count += 1
+            if done_count % 50 == 0:
+                print(f"   Fetched {done_count}/{len(qualified_pitchers)} pitchers...")
+
+    elapsed = time.time() - start_time
+    new_pitcher_logs = pd.DataFrame(all_pitcher_logs, columns=PITCHER_LOG_BASE_COLS)
+    refreshed_pitcher_rows = 0
+    if len(existing_pitcher_logs) > 0 and len(new_pitcher_logs) > 0:
+        new_pitcher_logs['game_date'] = new_pitcher_logs['game_date'].map(normalize_game_date)
+        refresh_keys = {
+            (int(float(pid)), game_date)
+            for pid, game_date in zip(new_pitcher_logs['player_id'], new_pitcher_logs['game_date'])
+            if pd.notna(pid) and game_date
+        }
+        existing_pitcher_logs['game_date'] = existing_pitcher_logs['game_date'].map(normalize_game_date)
+        keep_existing = [
+            (int(float(pid)), game_date) not in refresh_keys
+            if pd.notna(pid) else True
+            for pid, game_date in zip(existing_pitcher_logs['player_id'], existing_pitcher_logs['game_date'])
+        ]
+        refreshed_pitcher_rows = len(existing_pitcher_logs) - sum(keep_existing)
+        existing_pitcher_logs = existing_pitcher_logs.loc[keep_existing].copy()
+    combined_pitcher_logs = pd.concat([existing_pitcher_logs, new_pitcher_logs], ignore_index=True)
+    if len(combined_pitcher_logs) > 0:
+        combined_pitcher_logs['game_date'] = combined_pitcher_logs['game_date'].map(normalize_game_date)
+        dedupe_cols = ['player_id', 'game_date', 'opp_abbr', 'home_away', 'IP_OUTS', 'H', 'R', 'ER', 'HR', 'BB', 'SO', 'W', 'L', 'PC', 'GS', 'HBP']
+        has_game_pk = combined_pitcher_logs['game_pk'].notna() & combined_pitcher_logs['game_pk'].astype(str).str.strip().ne('')
+        logs_with_pk = combined_pitcher_logs.loc[has_game_pk].drop_duplicates(subset=['player_id', 'game_pk'], keep='last')
+        logs_without_pk = combined_pitcher_logs.loc[~has_game_pk].drop_duplicates(subset=dedupe_cols, keep='last')
+        combined_pitcher_logs = pd.concat([logs_without_pk, logs_with_pk], ignore_index=True)
+        combined_pitcher_logs['game_date'] = pd.to_datetime(combined_pitcher_logs['game_date'], errors='coerce')
+        df_pitcher_logs = combined_pitcher_logs.sort_values(['player_id', 'game_date']).reset_index(drop=True)
+        print(f"✅ Fetched {len(new_pitcher_logs)} recent/new pitcher logs; refreshed {refreshed_pitcher_rows} cached rows; {len(df_pitcher_logs)} combined pitcher logs across {df_pitcher_logs['player_name'].nunique()} pitchers in {elapsed:.1f}s")
+    else:
+        df_pitcher_logs = combined_pitcher_logs
+        print("⚠️ No pitcher game logs found")
+
+    # --- 13. PITCHER METRICS ---
+    if len(df_pitcher_logs) > 0:
+        print("\nCalculating pitcher metrics and rolling averages...")
+        if 'IP_OUTS' not in df_pitcher_logs.columns:
+            df_pitcher_logs['IP_OUTS'] = df_pitcher_logs['IP'].apply(innings_to_outs)
+        df_pitcher_logs['DK_FP'] = (
+            df_pitcher_logs['IP'] * 2.25 + df_pitcher_logs['SO'] * 2 + df_pitcher_logs['W'] * 4 +
+            df_pitcher_logs['ER'] * -2 + df_pitcher_logs['H'] * -0.6 + df_pitcher_logs['BB'] * -0.6 +
+            df_pitcher_logs['HBP'] * -0.6 +
+            (df_pitcher_logs['IP_OUTS'] >= 18).astype(int) * (df_pitcher_logs['ER'] <= 3).astype(int) * 2.5).round(2)
+        df_pitcher_logs['CG'] = (df_pitcher_logs['IP_OUTS'] >= 27).astype(int)
+
+        # v1.3.0: Quality Start column + Underdog Fantasy scoring
+        df_pitcher_logs['QS'] = ((df_pitcher_logs['IP_OUTS'] >= 18) & (df_pitcher_logs['ER'] <= 3)).astype(int)
+
+        # Underdog: W=5, QS=5, K=3, IP=3, ER=-3
+        df_pitcher_logs['UD_FP'] = (
+            df_pitcher_logs['W'] * 5 + df_pitcher_logs['QS'] * 5 +
+            df_pitcher_logs['SO'] * 3 + df_pitcher_logs['IP'] * 3 +
+            df_pitcher_logs['ER'] * -3
+        ).round(2)
+
+        # v1.3.0: Added QS, UD_FP to rolling averages
+        p_metrics = ['IP', 'H', 'ER', 'HR', 'BB', 'SO', 'PC', 'DK_FP', 'UD_FP', 'QS', 'R', 'W', 'L']
+        p_windows = {'L3': 3, 'L7': 7, 'L15': 15}
+
+        df_pitcher_logs = df_pitcher_logs.set_index('game_date').sort_index()
+        for m in p_metrics:
+            grp = df_pitcher_logs.groupby('player_id')[m]
+            df_pitcher_logs[f'Seas_{m}'] = grp.transform(lambda x: x.expanding().mean()).round(3)
+            for label, w in p_windows.items():
+                df_pitcher_logs[f'{label}_{m}'] = grp.transform(lambda x: x.rolling(w, min_periods=1).mean()).round(3)
+
+        for label, w in p_windows.items():
+            roll_er = df_pitcher_logs.groupby('player_id')['ER'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            roll_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            df_pitcher_logs[f'{label}_ERA'] = np.where(roll_ip > 0, (roll_er * 9 / roll_ip).round(2), 0)
+
+        seas_er = df_pitcher_logs.groupby('player_id')['ER'].transform(lambda x: x.expanding().sum())
+        seas_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.expanding().sum())
+        df_pitcher_logs['Seas_ERA'] = np.where(seas_ip > 0, (seas_er * 9 / seas_ip).round(2), 0)
+
+        for label, w in p_windows.items():
+            roll_h = df_pitcher_logs.groupby('player_id')['H'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            roll_bb = df_pitcher_logs.groupby('player_id')['BB'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            roll_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            df_pitcher_logs[f'{label}_WHIP'] = np.where(roll_ip > 0, ((roll_h + roll_bb) / roll_ip).round(2), 0)
+
+        seas_h = df_pitcher_logs.groupby('player_id')['H'].transform(lambda x: x.expanding().sum())
+        seas_bb = df_pitcher_logs.groupby('player_id')['BB'].transform(lambda x: x.expanding().sum())
+        df_pitcher_logs['Seas_WHIP'] = np.where(seas_ip > 0, ((seas_h + seas_bb) / seas_ip).round(2), 0)
+
+        for label, w in p_windows.items():
+            roll_so = df_pitcher_logs.groupby('player_id')['SO'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            roll_ip = df_pitcher_logs.groupby('player_id')['IP'].transform(lambda x: x.rolling(w, min_periods=1).sum())
+            df_pitcher_logs[f'{label}_K9'] = np.where(roll_ip > 0, (roll_so * 9 / roll_ip).round(2), 0)
+
+        seas_so = df_pitcher_logs.groupby('player_id')['SO'].transform(lambda x: x.expanding().sum())
+        df_pitcher_logs['Seas_K9'] = np.where(seas_ip > 0, (seas_so * 9 / seas_ip).round(2), 0)
+
+        df_pitcher_logs = df_pitcher_logs.reset_index()
+        df_pitcher_logs['game_date'] = df_pitcher_logs['game_date'].dt.strftime('%Y-%m-%d')
+        df_pitcher_logs['LAST_UPDATED'] = timestamp_est
+        print(f"✅ Pitcher metrics calculated — {len(df_pitcher_logs.columns)} columns total")
+        print(f"   📊 New columns: QS, UD_FP, Seas_UD_FP, L3_UD_FP, L7_UD_FP, Seas_QS, L3_QS, L7_QS")
+
+    # --- 14. PITCHER HOME/AWAY SPLITS ---
+    if len(df_pitcher_logs) > 0:
+        print("\nCalculating pitcher Home/Away splits...")
+        p_split_metrics = ['IP', 'H', 'ER', 'HR', 'BB', 'SO', 'DK_FP', 'UD_FP', 'PC', 'R']
+        df_plogs_temp = df_pitcher_logs.copy()
+
+        p_ha_mean = df_plogs_temp.groupby(['player_id', 'home_away'])[p_split_metrics].mean().round(3)
+        p_ha_count = df_plogs_temp.groupby(['player_id', 'home_away'])['IP'].count().rename('GAMES')
+        df_p_home_away = p_ha_mean.join(p_ha_count).reset_index()
+
+        p_ha_pivot = df_p_home_away.pivot(index='player_id', columns='home_away', values=p_split_metrics)
+        p_ha_pivot.columns = [f'{stat}_{loc}' for stat, loc in p_ha_pivot.columns]
+        p_ha_count_pivot = df_p_home_away.pivot(index='player_id', columns='home_away', values='GAMES')
+        p_ha_count_pivot.columns = [f'{c}_GAMES' for c in p_ha_count_pivot.columns]
+        p_ha_pivot = p_ha_pivot.join(p_ha_count_pivot)
+
+        for m in p_split_metrics:
+            for loc in ['Home', 'Away']:
+                col = f'{m}_{loc}'
+                if col not in p_ha_pivot.columns:
+                    p_ha_pivot[col] = np.nan
+        for loc in ['Home', 'Away']:
+            gcol = f'{loc}_GAMES'
+            if gcol not in p_ha_pivot.columns:
+                p_ha_pivot[gcol] = np.nan
+
+        for m in p_split_metrics:
+            hc, ac = f'{m}_Home', f'{m}_Away'
+            if hc in p_ha_pivot.columns and ac in p_ha_pivot.columns:
+                p_ha_pivot[f'{m}_SPLIT_DIFF'] = (p_ha_pivot[hc] - p_ha_pivot[ac]).where(
+                    p_ha_pivot[hc].notna() & p_ha_pivot[ac].notna(), other=np.nan).round(3)
+
+        p_names = df_plogs_temp.groupby('player_id')['player_name'].first()
+        p_ha_pivot = p_ha_pivot.reset_index().merge(p_names, on='player_id', how='left')
+        p_ha_pivot = p_ha_pivot.reindex(sorted(p_ha_pivot.columns), axis=1)
+        cols = ['player_id', 'player_name'] + [c for c in p_ha_pivot.columns if c not in ['player_id', 'player_name']]
+        p_ha_pivot = p_ha_pivot[cols]
+        p_ha_pivot['LAST_UPDATED'] = timestamp_est
+        print(f"✅ Pitcher Home/Away splits for {p_ha_pivot['player_name'].nunique()} pitchers")
+
+    # --- 15. TONIGHT'S PITCHER SHEET (EARLY-SEASON SAFE) ---
+    if len(games_tonight) > 0:
+        print("\nBuilding tonight's pitcher stats sheet...")
+        pitcher_current_team = {p['player_id']: p['team_abbr'] for p in qualified_pitchers}
+
+        tonight_sp_ids = set()
+        tonight_sp_info = {}
+        for g in games_tonight:
+            if g.get('home_pitcher_id'):
+                tonight_sp_ids.add(g['home_pitcher_id'])
+                tonight_sp_info[g['home_pitcher_id']] = {'player_name': g['home_pitcher_name'], 'team_abbr': g['home_abbr']}
+            if g.get('away_pitcher_id'):
+                tonight_sp_ids.add(g['away_pitcher_id'])
+                tonight_sp_info[g['away_pitcher_id']] = {'player_name': g['away_pitcher_name'], 'team_abbr': g['away_abbr']}
+
+        if len(df_pitcher_logs) > 0:
+            p_most_recent = df_pitcher_logs.sort_values('game_date').groupby('player_id').last().reset_index()
+            df_pitcher_tonight = p_most_recent[p_most_recent['player_id'].isin(tonight_sp_ids)].copy()
+            # The probable-pitcher feed is authoritative for tonight's identity and
+            # team. A qualified-pitcher lookup can be incomplete and must not erase
+            # a valid starter name already present in the game logs.
+            schedule_name_map = {pid: info['player_name'] for pid, info in tonight_sp_info.items()}
+            schedule_team_map = {pid: info['team_abbr'] for pid, info in tonight_sp_info.items()}
+            qualified_name_map = {p['player_id']: p['player_name'] for p in qualified_pitchers}
+            df_pitcher_tonight['player_name'] = (
+                df_pitcher_tonight['player_id'].map(schedule_name_map)
+                .combine_first(df_pitcher_tonight['player_id'].map(qualified_name_map))
+                .combine_first(df_pitcher_tonight['player_name'])
+            )
+            df_pitcher_tonight['team_abbr'] = (
+                df_pitcher_tonight['player_id'].map(schedule_team_map)
+                .combine_first(df_pitcher_tonight['player_id'].map(pitcher_current_team))
+                .combine_first(df_pitcher_tonight['team_abbr'])
+            )
+        else:
+            df_pitcher_tonight = pd.DataFrame()
+
+        existing_sp_ids = set(df_pitcher_tonight['player_id'].unique()) if len(df_pitcher_tonight) > 0 else set()
+        missing_sp_ids = tonight_sp_ids - existing_sp_ids
+        if missing_sp_ids:
+            print(f"   🔄 Early-season expansion: adding {len(missing_sp_ids)} starter(s) with no game logs...")
+            expansion_rows = []
+            for pid in missing_sp_ids:
+                info = tonight_sp_info.get(pid, {})
+                expansion_rows.append({'player_id': pid, 'player_name': info.get('player_name', 'Unknown'), 'team_abbr': info.get('team_abbr', '')})
+
+            df_sp_expansion = pd.DataFrame(expansion_rows)
+            if len(df_pitcher_tonight) > 0:
+                for col in df_pitcher_tonight.columns:
+                    if col not in df_sp_expansion.columns:
+                        df_sp_expansion[col] = np.nan
+                df_pitcher_tonight = pd.concat([df_pitcher_tonight, df_sp_expansion[df_pitcher_tonight.columns]], ignore_index=True)
+            else:
+                df_pitcher_tonight = df_sp_expansion.copy()
+            for pid in missing_sp_ids:
+                info = tonight_sp_info.get(pid, {})
+                print(f"      + {info.get('player_name', pid)} ({info.get('team_abbr', '?')})")
+
+        pitcher_to_game = {}
+        for g in games_tonight:
+            if g.get('home_pitcher_id'):
+                pitcher_to_game[g['home_pitcher_id']] = {'opp_abbr': g['away_abbr'], 'venue': g['venue_name'], 'home_away': 'Home', 'opp_pitcher': g['away_pitcher_name']}
+            if g.get('away_pitcher_id'):
+                pitcher_to_game[g['away_pitcher_id']] = {'opp_abbr': g['home_abbr'], 'venue': g['venue_name'], 'home_away': 'Away', 'opp_pitcher': g['home_pitcher_name']}
+
+        df_pitcher_tonight['opp_abbr_tonight'] = df_pitcher_tonight['player_id'].map({k: v['opp_abbr'] for k, v in pitcher_to_game.items()})
+        df_pitcher_tonight['venue_tonight'] = df_pitcher_tonight['player_id'].map({k: v['venue'] for k, v in pitcher_to_game.items()})
+        df_pitcher_tonight['home_away_tonight'] = df_pitcher_tonight['player_id'].map({k: v['home_away'] for k, v in pitcher_to_game.items()})
+        df_pitcher_tonight['opp_starter'] = df_pitcher_tonight['player_id'].map({k: v['opp_pitcher'] for k, v in pitcher_to_game.items()})
+
+        opponent_offense_cols = [
+            'TEAM_ABBR', 'OFF_K_PCT', 'OFF_OPS', 'OFF_RUNS_PER_GAME', 'OFF_HR_PER_GAME',
+            'OFF_K_PCT_MOST_RANK', 'OFF_OPS_BEST_RANK',
+        ]
+        if df_team_rankings is not None and not df_team_rankings.empty:
+            opponent_offense = df_team_rankings[
+                [c for c in opponent_offense_cols if c in df_team_rankings.columns]
+            ].copy()
+            opponent_offense = opponent_offense.rename(columns={
+                'TEAM_ABBR': 'opp_abbr_tonight',
+                'OFF_K_PCT': 'OPP_OFF_K_PCT',
+                'OFF_OPS': 'OPP_OFF_OPS',
+                'OFF_RUNS_PER_GAME': 'OPP_OFF_RUNS_PER_GAME',
+                'OFF_HR_PER_GAME': 'OPP_OFF_HR_PER_GAME',
+                'OFF_K_PCT_MOST_RANK': 'OPP_OFF_K_PCT_MOST_RANK',
+                'OFF_OPS_BEST_RANK': 'OPP_OFF_OPS_BEST_RANK',
+            })
+            df_pitcher_tonight = df_pitcher_tonight.merge(
+                opponent_offense,
+                on='opp_abbr_tonight',
+                how='left',
+            )
+
+        if df_pitcher_statcast is not None and len(df_pitcher_statcast) > 0:
+            p_statcast_merge_cols = ['player_id'] + [c for c in df_pitcher_statcast.columns if c.startswith('SC_')]
+            df_pitcher_tonight = df_pitcher_tonight.merge(df_pitcher_statcast[p_statcast_merge_cols], on='player_id', how='left')
+            k_score = (
+                50
+                + (numeric_col(df_pitcher_tonight, 'SC_L14_whiff_pct') - 25).fillna(0) * 1.2
+                + (numeric_col(df_pitcher_tonight, 'SC_L14_csw_pct') - 28).fillna(0) * 1.1
+                + (numeric_col(df_pitcher_tonight, 'L3_SO') - numeric_col(df_pitcher_tonight, 'Seas_SO')).fillna(0) * 4
+            )
+            er_risk_score = (
+                50
+                + (numeric_col(df_pitcher_tonight, 'SC_L14_xwOBA') - 0.320).fillna(0) * 120
+                + (numeric_col(df_pitcher_tonight, 'SC_L14_barrel_pct') - 8).fillna(0) * 1.8
+                + (numeric_col(df_pitcher_tonight, 'SC_L14_hard_hit_pct') - 38).fillna(0) * 0.5
+            )
+            df_pitcher_tonight['P_SO_PLAYER_SCORE'] = clip_score(k_score)
+            df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] = clip_score(er_risk_score)
+
+            league_k_pct = safe_numeric_mean(df_team_rankings.get('OFF_K_PCT', pd.Series(dtype=float)))
+            league_ops = safe_numeric_mean(df_team_rankings.get('OFF_OPS', pd.Series(dtype=float)))
+            league_runs = safe_numeric_mean(df_team_rankings.get('OFF_RUNS_PER_GAME', pd.Series(dtype=float)))
+            league_hr = safe_numeric_mean(df_team_rankings.get('OFF_HR_PER_GAME', pd.Series(dtype=float)))
+
+            k_adjustment = (
+                (numeric_col(df_pitcher_tonight, 'OPP_OFF_K_PCT') - league_k_pct) * 1.5
+                if pd.notna(league_k_pct)
+                else pd.Series(0.0, index=df_pitcher_tonight.index)
+            )
+            er_adjustment = pd.Series(0.0, index=df_pitcher_tonight.index)
+            if pd.notna(league_ops):
+                er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_OPS') - league_ops) * 50
+            if pd.notna(league_runs):
+                er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_RUNS_PER_GAME') - league_runs) * 2
+            if pd.notna(league_hr):
+                er_adjustment += (numeric_col(df_pitcher_tonight, 'OPP_OFF_HR_PER_GAME') - league_hr) * 2
+
+            df_pitcher_tonight['P_SO_OPP_ADJ'] = k_adjustment.fillna(0).clip(-10, 10).round(1)
+            df_pitcher_tonight['P_ER_OPP_ADJ'] = er_adjustment.fillna(0).clip(-10, 10).round(1)
+            df_pitcher_tonight['P_SO_EDGE_SCORE'] = clip_score(
+                df_pitcher_tonight['P_SO_PLAYER_SCORE'] + df_pitcher_tonight['P_SO_OPP_ADJ']
+            )
+            df_pitcher_tonight['P_ER_RISK_SCORE'] = clip_score(
+                df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] + df_pitcher_tonight['P_ER_OPP_ADJ']
+            )
+            matched_pitcher_opponents = numeric_col(
+                df_pitcher_tonight, 'OPP_OFF_K_PCT'
+            ).notna().sum()
+            print(
+                "✅ Opponent-offense adjustments applied to "
+                f"{matched_pitcher_opponents}/{len(df_pitcher_tonight)} starting pitchers"
+            )
+        else:
+            df_pitcher_tonight['P_SO_PLAYER_SCORE'] = np.nan
+            df_pitcher_tonight['P_SO_OPP_ADJ'] = np.nan
+            df_pitcher_tonight['P_SO_EDGE_SCORE'] = np.nan
+            df_pitcher_tonight['P_ER_PLAYER_RISK_SCORE'] = np.nan
+            df_pitcher_tonight['P_ER_OPP_ADJ'] = np.nan
+            df_pitcher_tonight['P_ER_RISK_SCORE'] = np.nan
+
+        p_rolling_cols = [c for c in df_pitcher_tonight.columns if any(c.startswith(p) for p in ['L3_', 'L7_', 'L15_', 'Seas_'])]
+        p_statcast_cols = [c for c in df_pitcher_tonight.columns if c.startswith('SC_')]
+        p_matchup_cols = [
+            c for c in df_pitcher_tonight.columns
+            if c.startswith('OPP_OFF_') or c in {
+                'P_SO_PLAYER_SCORE', 'P_SO_OPP_ADJ', 'P_SO_EDGE_SCORE',
+                'P_ER_PLAYER_RISK_SCORE', 'P_ER_OPP_ADJ', 'P_ER_RISK_SCORE',
+            }
+        ]
+        p_final_cols = ['player_name', 'team_abbr', 'opp_abbr_tonight', 'venue_tonight', 'home_away_tonight', 'opp_starter'] + p_rolling_cols + p_statcast_cols + p_matchup_cols + ['LAST_UPDATED']
+        p_final_cols = [c for c in p_final_cols if c in df_pitcher_tonight.columns]
+        df_pitcher_tonight = df_pitcher_tonight[p_final_cols].copy()
+        df_pitcher_tonight = df_pitcher_tonight.sort_values('player_name').reset_index(drop=True)
+
+        has_logs = df_pitcher_tonight[p_rolling_cols[0]].notna().sum() if p_rolling_cols else 0
+        no_logs = len(df_pitcher_tonight) - has_logs
+        print(f"✅ Tonight's pitcher sheet — {len(df_pitcher_tonight)} starting pitchers")
+        print(f"   ({has_logs} with game logs, {no_logs} roster-only)")
+        print(f"   Columns: {len(df_pitcher_tonight.columns)}")
+    else:
+        df_pitcher_tonight = pd.DataFrame()
+        print("⚠️ No games tonight — skipping tonight's pitcher sheet")
+
+    if not df_tonight.empty and not df_pitcher_tonight.empty:
+        starter_matchup_cols = [
+            'player_name', 'Seas_HR', 'Seas_ERA', 'Seas_WHIP',
+            'SC_L14_xwOBA', 'SC_L14_barrel_pct', 'SC_L14_hard_hit_pct',
+        ]
+        starter_matchups = df_pitcher_tonight[
+            [c for c in starter_matchup_cols if c in df_pitcher_tonight.columns]
+        ].copy()
+        starter_matchups['_opp_pitcher_norm'] = starter_matchups['player_name'].map(normalize_player_name)
+        starter_matchups = starter_matchups.drop_duplicates('_opp_pitcher_norm').rename(columns={
+            'Seas_HR': 'OPP_SP_SEAS_HR',
+            'Seas_ERA': 'OPP_SP_SEAS_ERA',
+            'Seas_WHIP': 'OPP_SP_SEAS_WHIP',
+            'SC_L14_xwOBA': 'OPP_SP_SC_L14_XWOBA',
+            'SC_L14_barrel_pct': 'OPP_SP_SC_L14_BARREL_PCT',
+            'SC_L14_hard_hit_pct': 'OPP_SP_SC_L14_HARD_HIT_PCT',
+        })
+        starter_matchups = starter_matchups.drop(columns=['player_name'], errors='ignore')
+
+        df_tonight['_opp_pitcher_norm'] = df_tonight['opp_pitcher_name'].map(normalize_player_name)
+        df_tonight = df_tonight.merge(starter_matchups, on='_opp_pitcher_norm', how='left')
+        df_tonight = df_tonight.drop(columns=['_opp_pitcher_norm'])
+
+        league_sp_whip = safe_numeric_mean(df_pitcher_tonight.get('Seas_WHIP', pd.Series(dtype=float)))
+        league_sp_hr = safe_numeric_mean(df_pitcher_tonight.get('Seas_HR', pd.Series(dtype=float)))
+        league_sp_xwoba = safe_numeric_mean(df_pitcher_tonight.get('SC_L14_xwOBA', pd.Series(dtype=float)))
+        league_sp_barrel = safe_numeric_mean(df_pitcher_tonight.get('SC_L14_barrel_pct', pd.Series(dtype=float)))
+
+        hit_adjustment = pd.Series(0.0, index=df_tonight.index)
+        if pd.notna(league_sp_whip):
+            hit_adjustment += (numeric_col(df_tonight, 'OPP_SP_SEAS_WHIP') - league_sp_whip) * 12
+        if pd.notna(league_sp_xwoba):
+            hit_adjustment += (numeric_col(df_tonight, 'OPP_SP_SC_L14_XWOBA') - league_sp_xwoba) * 40
+        hit_adjustment += (
+            numeric_col(df_tonight, 'vs_OPP_AVG') - numeric_col(df_tonight, 'Seas_AVG')
+        ).fillna(0) * 12
+
+        power_adjustment = pd.Series(0.0, index=df_tonight.index)
+        if pd.notna(league_sp_hr):
+            power_adjustment += (numeric_col(df_tonight, 'OPP_SP_SEAS_HR') - league_sp_hr) * 3
+        if pd.notna(league_sp_xwoba):
+            power_adjustment += (numeric_col(df_tonight, 'OPP_SP_SC_L14_XWOBA') - league_sp_xwoba) * 35
+        if pd.notna(league_sp_barrel):
+            power_adjustment += (
+                numeric_col(df_tonight, 'OPP_SP_SC_L14_BARREL_PCT') - league_sp_barrel
+            ) * 0.4
+        power_adjustment += (
+            numeric_col(df_tonight, 'vs_OPP_OPS') - numeric_col(df_tonight, 'Seas_OPS')
+        ).fillna(0) * 4
+
+        df_tonight['H_OPP_ADJ'] = hit_adjustment.fillna(0).clip(-10, 10).round(1)
+        df_tonight['POWER_OPP_ADJ'] = power_adjustment.fillna(0).clip(-10, 10).round(1)
+        df_tonight['H_EDGE_SCORE'] = clip_score(
+            numeric_col(df_tonight, 'H_PLAYER_SCORE') + df_tonight['H_OPP_ADJ']
+        )
+        df_tonight['POWER_EDGE_SCORE'] = clip_score(
+            numeric_col(df_tonight, 'POWER_PLAYER_SCORE') + df_tonight['POWER_OPP_ADJ']
+        )
+        matched_starters = numeric_col(df_tonight, 'OPP_SP_SEAS_WHIP').notna().sum()
+        print(f"✅ Opposing-starter adjustments applied to {matched_starters}/{len(df_tonight)} hitters")
+
+    # --- 10.75 GEMINI AI DAILY PICKS GENERATOR ---
+    df_picks = generate_gemini_picks()
+    try:
+        runlog.picks_generated = len(df_picks) if df_picks is not None else 0
+    except Exception:
+        pass
+
+    # --- 11. WRITE ALL DATA TO GOOGLE SHEETS ---
+    print("\n" + "=" * 60)
+    print("WRITING ALL DATA TO GOOGLE SHEETS")
+    print("=" * 60)
+
+    SHEETS_TO_WRITE = {
+        'Batter_Game_Logs': df_logs,
+        'Tonights_Batters': df_tonight,
+        'LHP_RHP_Splits': df_splits,
+        'Home_Away_Splits': ha_pivot,
+        'Statcast_Daily': df_statcast_daily if len(df_statcast_daily) > 0 else pd.DataFrame(),
+        'Batter_Statcast': df_batter_statcast if len(df_batter_statcast) > 0 else pd.DataFrame(),
+        'Pitcher_Statcast': df_pitcher_statcast if len(df_pitcher_statcast) > 0 else pd.DataFrame(),
+        'Tonights_Schedule': df_schedule,
+        'Tonights_Pitchers': df_pitchers,
+        'Venue_Weather': df_weather,
+        'Odds': df_odds if len(df_odds) > 0 else pd.DataFrame(),
+        'DK_Player_Props': df_props if len(df_props) > 0 else pd.DataFrame(),
+        'All_Books_Props': df_all_books if len(df_all_books) > 0 else pd.DataFrame(),
+        'Teams': df_teams,
+        'Team_Rankings': df_team_rankings if len(df_team_rankings) > 0 else pd.DataFrame(),
+        'Pitcher_Game_Logs': df_pitcher_logs if len(df_pitcher_logs) > 0 else pd.DataFrame(),
+        'Tonights_Starters': df_pitcher_tonight if len(df_pitcher_tonight) > 0 else pd.DataFrame(),
+        'Pitcher_Home_Away': p_ha_pivot if len(p_ha_pivot) > 0 else pd.DataFrame(),
+        'Batter_vs_SP': df_vs_sp if len(df_vs_sp) > 0 else pd.DataFrame(),
+    }
+
+    print(f"\nWriting {len(SHEETS_TO_WRITE)} sheets to '{SHEET_NAME}'...\n")
+    # safe_upload SKIPS an empty frame by default, which silently leaves the previous
+    # day's rows in place. For Tonights_Schedule that is actively misleading: the
+    # dashboard presents a played-out slate as tonight's. So when the fetch SUCCEEDED and
+    # genuinely returned no games (off-season, postseason, or a true no-game day), write
+    # the empty frame and let the tab honestly say "no games". When the fetch FAILED,
+    # schedule_fetch_ok is False and we fall back to the skip, because blanking the tab on
+    # a transient error would hide a real slate — that case is warned about at fetch time.
+    ALLOW_EMPTY_SHEETS = {'Tonights_Schedule'} if schedule_fetch_ok else set()
+    for sheet_name, df in SHEETS_TO_WRITE.items():
+        safe_upload(sh, sheet_name, df, allow_empty=(sheet_name in ALLOW_EMPTY_SHEETS))
+        time.sleep(2)
+
+    # Picks_Current is an overwrite-only snapshot for the dashboard. Unlike
+    # Daily_Picks history, an empty run clears stale recommendations.
+    print(f"\n📍 Refreshing Picks_Current snapshot...")
+    safe_upload(sh, 'Picks_Current', df_picks_current, allow_empty=True)
+    time.sleep(2)
+
+    # --- DAILY PICKS: APPEND-ONLY (preserves history) ---
+    if df_picks is not None and len(df_picks) > 0:
+        print(f"\n📌 Appending today's picks to Daily_Picks...")
+        try:
+            try:
+                ws_picks = sh.worksheet('Daily_Picks')
+                existing_values = ws_picks.get_all_values()
+                existing_headers = existing_values[0] if existing_values else []
+                existing_count = max(len(existing_values) - 1, 0)
+                print(f"   📋 Existing picks: {existing_count} rows")
+            except gspread.exceptions.WorksheetNotFound:
+                ws_picks = sh.add_worksheet(title='Daily_Picks', rows=500, cols=26)
+                existing_values = []
+                existing_headers = []
+                existing_count = 0
+                print(f"   🆕 Created Daily_Picks sheet")
+
+            df_append = df_picks.copy().fillna('')
+            validate_sheet_schema('Daily_Picks', df_append)
+            for col in df_append.columns:
+                df_append[col] = df_append[col].apply(lambda x: x.item() if hasattr(x, 'item') else x)
+
+            if not existing_headers:
+                ws_picks.update([df_append.columns.tolist()])
+                existing_headers = df_append.columns.tolist()
+            all_headers = existing_headers + [c for c in df_append.columns.tolist() if c not in existing_headers]
+            if all_headers != existing_headers:
+                print("   🔄 Expanding Daily_Picks headers without clearing historical rows")
+                rewritten = [all_headers]
+                for row in existing_values[1:]:
+                    row_map = {existing_headers[i]: row[i] for i in range(min(len(existing_headers), len(row)))}
+                    rewritten.append([row_map.get(h, "") for h in all_headers])
+                ws_picks.clear()
+                needed_rows = len(rewritten)
+                needed_cols = len(all_headers)
+                if ws_picks.row_count < needed_rows or ws_picks.col_count < needed_cols:
+                    ws_picks.resize(rows=max(needed_rows, ws_picks.row_count), cols=max(needed_cols, ws_picks.col_count))
+                ws_picks.update(rewritten, value_input_option='RAW')
+                existing_headers = all_headers
+                existing_values = rewritten
+                existing_count = max(len(existing_values) - 1, 0)
+
+            for col in existing_headers:
+                if col not in df_append.columns:
+                    df_append[col] = ''
+            df_append = df_append[existing_headers]
+            metadata_defaults = {
+                'DATE': schedule_date,
+                'RUN_NUMBER': today_run_number,
+                'RUN_TIME': timestamp_est,
+                'LAST_UPDATED': timestamp_est,
+            }
+            for col, default_val in metadata_defaults.items():
+                if col in df_append.columns:
+                    df_append[col] = df_append[col].replace('', np.nan)
+                    df_append[col] = df_append[col].fillna(default_val)
+            cleaned = []
+            for row in df_append.values.tolist():
+                cleaned_row = []
+                for v in row:
+                    if hasattr(v, 'item'):
+                        v = v.item()
+                    if isinstance(v, float) and (np.isinf(v) or np.isnan(v)):
+                        v = ''
+                    elif v is None:
+                        v = ''
+                    cleaned_row.append(v)
+                cleaned.append(cleaned_row)
+            ws_picks.append_rows(cleaned, value_input_option='RAW')
+            print(f"   ✅ Daily_Picks: {existing_count + len(df_append)} total rows ({existing_count} old + {len(df_append)} new)")
+            try:
+                runlog.record_write('Daily_Picks', len(df_append))
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"   ❌ Daily_Picks append failed: {e}")
+        time.sleep(2)
+    else:
+        print(f"\n⏭️  Daily_Picks: No new picks to append")
+
+    # --- SUMMARY ---
+    print(f"\n{'='*60}")
+    print(f"✅ MLB DASHBOARD ENGINE v1.3.0 — COMPLETE")
+    print(f"{'='*60}")
+    print(f"📅 Schedule date:    {schedule_date}")
+    print(f"📆 Season:           {SEASON}")
+    print(f"🗂️  Snapshot:         {SNAPSHOT_DATE}")
+    print(f"⚾ Games tonight:    {len(games_tonight)}")
+    print(f"🏏 Active batters:   {len(df_tonight)}")
+    print(f"⚾ Pitchers tracked: {len(df_pitcher_logs) if len(df_pitcher_logs) > 0 else 0}")
+    print(f"🎯 Tonight's SPs:    {len(df_pitcher_tonight) if len(df_pitcher_tonight) > 0 else 0}")
+    print(f"📊 Batter game logs: {len(df_logs)}")
+    print(f"📊 Pitcher game logs:{len(df_pitcher_logs) if len(df_pitcher_logs) > 0 else 0}")
+    print(f"🏟️  Team rankings:    {len(df_team_rankings) if len(df_team_rankings) > 0 else 0}")
+    print(f"🌤️  Venues w/ weather: {len(df_weather)}")
+    print(f"🎰 Odds:             {'✅ ' + str(len(df_odds)) + ' games' if len(df_odds) > 0 else 'Skipped'}")
+    if len(df_props) > 0:
+        print(f"🎲 DK Props:         {len(df_props)} props across {df_props['METRIC'].nunique()} markets")
+        print(f"🏪 All Books Props:  {len(df_all_books)} rows across {df_all_books['BOOK'].nunique() if len(df_all_books) > 0 else 0} books")
+    else:
+        print(f"🎲 DK Props:         Skipped")
+    if len(df_picks) > 0:
+        print(f"🤖 AI Picks:         {len(df_picks)} picks (Top: {df_picks.iloc[0]['player']} {df_picks.iloc[0]['confidence']})")
+        if 'two_way_tonight' in dir() and two_way_tonight:
+            print(f"⚠️  Two-way players: {', '.join(sorted(two_way_tonight))}")
+    else:
+        print(f"🤖 AI Picks:         Skipped")
+    print(f"📝 Google Sheet:     {SHEET_NAME}")
+    print(f"🕐 Last updated:     {timestamp_est}")
+    print(f"🆕 v1.3.0: Underdog FP (UD_FP), QS, HBP, 1B/3B rolling averages added")
+    print(f"{'='*60}")
+
+
+
+if __name__ == "__main__":
+    main()
