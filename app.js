@@ -285,6 +285,65 @@ function draftAvailability(row){
     lineupRisk,
   };
 }
+function draftDecisionLabel(player){
+  if(player.isPitcher){
+    if(player.priorityScore>=91)return "Take now";
+    if(player.priorityScore>=80)return "Core arm";
+    if(player.priorityScore>=68)return "Can wait";
+    return "Only if needed";
+  }
+  if(player.priorityScore>=90)return "Take now";
+  if(player.priorityScore>=78)return "Priority bat";
+  if(player.priorityScore>=66)return "Can wait";
+  return "Stack filler";
+}
+function draftDecisionTone(label){
+  return {
+    "Take now":"var(--accent)",
+    "Priority bat":"var(--strong)",
+    "Core arm":"var(--strong)",
+    "Can wait":"var(--push)",
+    "Only if needed":"var(--ink-muted)",
+    "Stack filler":"var(--ink-muted)"
+  }[label]||"var(--push)";
+}
+function draftInlineStackTags(player){
+  const tags=new Set();
+  if(player.isPitcher)return tags;
+  const venue=String(player.venue||"").toLowerCase();
+  const pitcherEra=toNum(player.pitcherEra);
+  if(venue.includes("coors"))tags.add("HIGH TOTAL");
+  if(pitcherEra>=4.5)tags.add("STACK TARGET");
+  return tags;
+}
+function computeDraftPriority(player,stackTags){
+  const proj=toNum(player.projUD);
+  const recent=toNum(player.l7UD);
+  const trend=proj>0?(recent-proj)/proj:0;
+  const aiBoost=player.isSmash?8:0;
+  const hotBoost=trend>0.15?7:trend>0.05?3:0;
+  const coldPenalty=trend<-0.2?8:trend<-0.1?4:0;
+  const samplePenalty=player.limitedSample?4:0;
+  const returnPenalty=player.returning?7:0;
+  const lineupPenalty=player.availability?.lineupRisk?4:0;
+  const stackBoost=[...(stackTags||new Set())].reduce((sum,tag)=>{
+    if(tag.includes("HIGH TOTAL"))return sum+6;
+    if(tag.includes("STACK TARGET"))return sum+4;
+    if(tag.includes("CORRELATED"))return sum+2;
+    return sum;
+  },0);
+  const skillBoost=player.isPitcher
+    ?((player.qsRate||0)>=0.6?5:0)+(toNum(player.sSO)>=6?4:0)
+    :((player.sHR||0)>=0.3?3:0)+(toNum(player.sSB)>=0.3?2:0)+(toNum(player.sBB)>=0.5?2:0);
+  const roleBoost=player.isPitcher?6:(player.pos==="IF"?3:player.pos==="OF"?2:1);
+  const base=player.isPitcher?proj*6.5:proj*5.5;
+  const priority=Math.max(0,Math.min(99,base+aiBoost+hotBoost+stackBoost+skillBoost+roleBoost-coldPenalty-samplePenalty-returnPenalty-lineupPenalty));
+  return {
+    priorityScore: Math.round(priority),
+    trend,
+    decision: draftDecisionLabel({...player,priorityScore:Math.round(priority)}),
+  };
+}
 function outsToIPStr(outs){const w=Math.floor(outs/3);const r=outs%3;return r===0?w+".0":w+"."+r;}
 const clearsPropLine=(v,l,lean="OVER")=>lean==="UNDER"?v<l:v>l;
 const barColor=(v,l,lean="OVER")=>!l?"var(--accent)":v===l?"var(--push)":clearsPropLine(v,l,lean)?"var(--over)":"var(--under)";
@@ -1568,7 +1627,9 @@ function getDraftBoard(){
     if(posRaw.includes("C")||posRaw.includes("1B")||posRaw.includes("2B")||posRaw.includes("3B")||posRaw.includes("SS"))pos="IF";
     else if(posRaw.includes("OF")||posRaw.includes("LF")||posRaw.includes("CF")||posRaw.includes("RF"))pos="OF";
     const flags=getSampleFlags(name,false);
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos,returning:flags.returning,limitedSample:flags.limited,availability});
+    const player={name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",venue:p.venue_tonight||"",pitcherEra:getMlbPitcherEra(p.opp_pitcher_name||""),projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos,returning:flags.returning,limitedSample:flags.limited,availability};
+    const stackTagSet=draftInlineStackTags(player);
+    board.push({...player,...computeDraftPriority(player,stackTagSet)});
   }
   for(const p of st.pTonight){
     if(!draftRowInSlate(p))continue;
@@ -1585,9 +1646,10 @@ function getDraftBoard(){
     const l7UD=toNum(most.L7_UD_FP)||(l3W*5+l3QS*5+l3SO*3+l3IP*3+l3ER*-3)||0;
     const ai=aiMap.get(normalizePlayerName(name)),isSmash=ai&&normalizeConfidence(ai.confidence)==="SMASH";
     const flags=getSampleFlags(name,true);
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P",returning:flags.returning,limitedSample:flags.limited,availability});
+    const player={name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P",returning:flags.returning,limitedSample:flags.limited,availability,stackTagSet:new Set()};
+    board.push({...player,...computeDraftPriority(player,player.stackTagSet)});
   }
-  board.sort((a,b)=>parseFloat(b.projUD)-parseFloat(a.projUD));
+  board.sort((a,b)=>b.priorityScore-a.priorityScore||parseFloat(b.projUD)-parseFloat(a.projUD));
   return board;
   });
 }
@@ -2276,6 +2338,9 @@ function renderDraftBoardView(convergenceHTML){
       const stacks=getDraftStacks().slice(0,5);
       const stackTags=getDraftStackTagMap();
       const draftedCount=st.drafted.size;
+      const takeNowCount=available.filter(p=>p.decision==="Take now").length;
+      const coreCount=available.filter(p=>p.decision==="Priority bat"||p.decision==="Core arm").length;
+      const waitCount=available.filter(p=>p.decision==="Can wait").length;
       function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
       function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
       const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
@@ -2289,7 +2354,7 @@ function renderDraftBoardView(convergenceHTML){
         html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
       }
       else{
-        html=draftHeader+`<div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
+        html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${takeNowCount}</div><div class="bs-lbl">TAKE NOW</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${coreCount}</div><div class="bs-lbl">CORE TIER</div></div><div class="bs-card"><div class="bs-val" style="color:var(--push)">${waitCount}</div><div class="bs-lbl">CAN WAIT</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${available.length}</div><div class="bs-lbl">AVAILABLE</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
         html+=`<div class="cards-grid draft-board">`;
         let lastTier="";
         board.forEach((p,i)=>{
@@ -2302,17 +2367,19 @@ function renderDraftBoardView(convergenceHTML){
           if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
           if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
           if(p.availability?.lineupRisk)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}LINEUP RISK</span>`);
+          tags.unshift(`<span class="draft-tag" style="background:${draftDecisionTone(p.decision)}22;color:${draftDecisionTone(p.decision)}">${esc(p.decision.toUpperCase())}</span>`);
           const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
           if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
           if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
           (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
           const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
+          const scoreLine=`Priority ${p.priorityScore} · ${p.trend>0.08?`L7 up ${Math.round(p.trend*100)}%`:p.trend<-0.08?`L7 down ${Math.round(Math.abs(p.trend)*100)}%`:"Stable form"}`;
           const locked=getLockInfo(p.name,p.isPitcher).started;
           const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
           html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
           <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
             <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
-            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${p.availability?.lineupRisk?`<div class="risk-subnote">${esc(p.availability.lineupRisk)}</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div><div class="draft-meta" style="color:${draftDecisionTone(p.decision)}">${esc(scoreLine)}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${p.availability?.lineupRisk?`<div class="risk-subnote">${esc(p.availability.lineupRisk)}</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
             <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
           </div>`;
         });
