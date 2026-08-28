@@ -2751,12 +2751,14 @@ def main():
                 'player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name',
                 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight',
                 'L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
-                'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'LAST_UPDATED',
+                'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'ACTIVE_ROSTER',
+                'ROSTER_STATUS', 'ROSTER_STATUS_DESC', 'LAST_UPDATED',
             ],
             'recommended': ['Seas_OPS', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2'],
         },
         'Tonights_Pitchers': {
-            'required': ['team_abbr', 'opp_pitcher_id', 'opp_pitcher_name', 'opp_pitcher_hand', 'LAST_UPDATED'],
+            'required': ['team_abbr', 'opp_pitcher_id', 'opp_pitcher_name', 'opp_pitcher_hand',
+                         'ACTIVE_ROSTER', 'ROSTER_STATUS', 'ROSTER_STATUS_DESC', 'LAST_UPDATED'],
             'recommended': [],
         },
         'Daily_Picks': {
@@ -3309,6 +3311,10 @@ def main():
         active_team_ids[g['home_abbr']] = g['home_team_id']
         active_team_ids[g['away_abbr']] = g['away_team_id']
 
+    active_batter_ids = set()
+    batter_roster_status_by_pid = {}
+    pitcher_roster_status_by_pid = {}
+
     batter_current_team = {b['player_id']: b['team_abbr'] for b in qualified_batters}
 
     most_recent = df_logs.sort_values('game_date').groupby('player_id').last().reset_index()
@@ -3329,11 +3335,37 @@ def main():
                 pid = entry.get('person', {}).get('id')
                 pname = entry.get('person', {}).get('fullName', '')
                 pos_type = entry.get('position', {}).get('type', '')
+                status_block = entry.get('status', {}) or {}
+                roster_status = str(status_block.get('code', '') or status_block.get('description', '')).strip()
+                roster_status_desc = str(status_block.get('description', '') or status_block.get('code', '')).strip()
+                if pid:
+                    if pos_type == 'Pitcher':
+                        pitcher_roster_status_by_pid[pid] = {
+                            'ACTIVE_ROSTER': True,
+                            'ROSTER_STATUS': roster_status,
+                            'ROSTER_STATUS_DESC': roster_status_desc,
+                        }
+                    else:
+                        active_batter_ids.add(pid)
+                        batter_roster_status_by_pid[pid] = {
+                            'ACTIVE_ROSTER': True,
+                            'ROSTER_STATUS': roster_status,
+                            'ROSTER_STATUS_DESC': roster_status_desc,
+                        }
                 if pid and pid not in existing_ids and pos_type != 'Pitcher':
                     expansion_batters.append({'player_id': pid, 'player_name': pname, 'team_abbr': team_abbr})
                     existing_ids.add(pid)
         except Exception as e:
             print(f"   ⚠️ Roster fetch failed for {team_abbr}: {e}")
+
+    if active_batter_ids:
+        before_active_filter = len(most_recent)
+        most_recent = most_recent[most_recent['player_id'].isin(active_batter_ids)].copy()
+        removed = before_active_filter - len(most_recent)
+        if removed:
+            print(f"   ✅ Active-roster filter removed {removed} inactive batter row(s)")
+    else:
+        print("   ⚠️ Active-roster filter unavailable — keeping team-only batter pool")
 
     if expansion_batters:
         df_expansion = pd.DataFrame(expansion_batters)
@@ -3366,6 +3398,15 @@ def main():
     elite_ops_cutoff = max(0.850, float(elite_ops_series.dropna().quantile(0.85))) if not elite_ops_series.dropna().empty else 0.850
     most_recent['IBB_RISK'] = False
     most_recent['LINEUP_PROTECTION_NOTE'] = ""
+    most_recent['ACTIVE_ROSTER'] = most_recent['player_id'].map(
+        lambda pid: bool((batter_roster_status_by_pid.get(pid) or {}).get('ACTIVE_ROSTER', False))
+    )
+    most_recent['ROSTER_STATUS'] = most_recent['player_id'].map(
+        lambda pid: (batter_roster_status_by_pid.get(pid) or {}).get('ROSTER_STATUS', '')
+    )
+    most_recent['ROSTER_STATUS_DESC'] = most_recent['player_id'].map(
+        lambda pid: (batter_roster_status_by_pid.get(pid) or {}).get('ROSTER_STATUS_DESC', '')
+    )
     most_recent['TEAM_SUPPORT_OPS1'] = np.nan
     most_recent['TEAM_SUPPORT_OPS2'] = np.nan
 
@@ -3451,7 +3492,9 @@ def main():
         ['player_name', 'team_abbr', 'opp_abbr_tonight', 'opp_pitcher_name', 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight'] +
         [f'vs_OPP_{s}' for s in split_stats] + ha_prompt_cols + rolling_cols + statcast_cols +
         ['L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
-         'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
+         'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'ACTIVE_ROSTER',
+         'ROSTER_STATUS', 'ROSTER_STATUS_DESC',
+         'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
     final_cols = [c for c in final_cols if c in most_recent.columns]
     df_tonight = most_recent[final_cols].copy()
     df_tonight = df_tonight.sort_values('player_name').reset_index(drop=True)
@@ -3593,8 +3636,16 @@ def main():
 
     pitcher_rows_out = []
     for team_abbr, info in pitcher_map.items():
-        pitcher_rows_out.append({'team_abbr': team_abbr, 'opp_pitcher_id': info.get('opp_pitcher_id', ''),
-            'opp_pitcher_name': info.get('opp_pitcher_name', 'TBD'), 'opp_pitcher_hand': info.get('opp_pitcher_hand', '')})
+        roster_meta = pitcher_roster_status_by_pid.get(info.get('opp_pitcher_id')) or {}
+        pitcher_rows_out.append({
+            'team_abbr': team_abbr,
+            'opp_pitcher_id': info.get('opp_pitcher_id', ''),
+            'opp_pitcher_name': info.get('opp_pitcher_name', 'TBD'),
+            'opp_pitcher_hand': info.get('opp_pitcher_hand', ''),
+            'ACTIVE_ROSTER': bool(roster_meta.get('ACTIVE_ROSTER', False)),
+            'ROSTER_STATUS': roster_meta.get('ROSTER_STATUS', ''),
+            'ROSTER_STATUS_DESC': roster_meta.get('ROSTER_STATUS_DESC', ''),
+        })
     df_pitchers = pd.DataFrame(pitcher_rows_out)
     df_pitchers['LAST_UPDATED'] = timestamp_est
 

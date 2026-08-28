@@ -30,6 +30,7 @@ const SOFT_LINE_MIN_AGREEMENT = 2;
 const SOFT_LINE_MIN_BOOKS = 2;
 const SOFT_LINE_BOOKS = ['fanduel', 'betmgm', 'espnbet'];
 const MARKET_EDGE_MIN_ODDS = -250;
+const DRAFT_HARD_OUT_STATUSES = new Set(["OUT","O","IL","10-DAY IL","15-DAY IL","60-DAY IL","INJURED LIST","DTD-IL","INACTIVE","SUSPENDED"]);
 const METRICS=["H","HR","RBI","R","SB","SO","BB","TB","2B","UD_FP","H+R+RBI"];
 const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
@@ -266,6 +267,24 @@ function fetchSheet(name,attempt=1){
 }
 
 const toNum=v=>parseFloat(v)||0;
+function boolish(v){const s=String(v??"").trim().toUpperCase();return s==="TRUE"||s==="YES"||s==="1"}
+function draftAvailability(row){
+  const active = rowField(row,"ACTIVE_ROSTER","active_roster");
+  const rosterStatus = String(rowField(row,"ROSTER_STATUS","roster_status")).trim().toUpperCase();
+  const rosterStatusDesc = String(rowField(row,"ROSTER_STATUS_DESC","roster_status_desc")).trim();
+  const lineupRisk = String(rowField(row,"LINEUP_PROTECTION_NOTE","lineup_protection_note")).trim();
+  const isActiveKnown = String(active).trim() !== "";
+  const activeRoster = boolish(active);
+  const hardOut = DRAFT_HARD_OUT_STATUSES.has(rosterStatus);
+  const unavailable = (isActiveKnown && !activeRoster) || hardOut;
+  return {
+    unavailable,
+    activeRoster,
+    rosterStatus,
+    rosterStatusDesc,
+    lineupRisk,
+  };
+}
 function outsToIPStr(outs){const w=Math.floor(outs/3);const r=outs%3;return r===0?w+".0":w+"."+r;}
 const clearsPropLine=(v,l,lean="OVER")=>lean==="UNDER"?v<l:v>l;
 const barColor=(v,l,lean="OVER")=>!l?"var(--accent)":v===l?"var(--push)":clearsPropLine(v,l,lean)?"var(--over)":"var(--under)";
@@ -1527,6 +1546,8 @@ function getDraftBoard(){
   st.picks.forEach(p=>{if(p.player)aiMap.set(normalizePlayerName(p.player),p)});
   for(const p of st.tonight){
     if(!draftRowInSlate(p))continue;
+    const availability=draftAvailability(p);
+    if(availability.unavailable)continue;
     const name=p.player_name;if(!name)continue;
     const logs=getPlayerLogs(name,false);
     if(!logs.length)continue;const most=logs[0]||{};
@@ -1547,10 +1568,12 @@ function getDraftBoard(){
     if(posRaw.includes("C")||posRaw.includes("1B")||posRaw.includes("2B")||posRaw.includes("3B")||posRaw.includes("SS"))pos="IF";
     else if(posRaw.includes("OF")||posRaw.includes("LF")||posRaw.includes("CF")||posRaw.includes("RF"))pos="OF";
     const flags=getSampleFlags(name,false);
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos,returning:flags.returning,limitedSample:flags.limited});
+    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:p.opp_pitcher_name||"TBD",hand:p.opp_pitcher_hand||"?",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sH,sHR,sRBI,sR,sSB,sBB,isSmash,isPitcher:false,pos,returning:flags.returning,limitedSample:flags.limited,availability});
   }
   for(const p of st.pTonight){
     if(!draftRowInSlate(p))continue;
+    const availability=draftAvailability(p);
+    if(availability.unavailable)continue;
     const name=p.player_name;if(!name)continue;
     const logs=getPlayerLogs(name,true);
     if(!logs.length)continue;const most=logs[0]||{};
@@ -1562,7 +1585,7 @@ function getDraftBoard(){
     const l7UD=toNum(most.L7_UD_FP)||(l3W*5+l3QS*5+l3SO*3+l3IP*3+l3ER*-3)||0;
     const ai=aiMap.get(normalizePlayerName(name)),isSmash=ai&&normalizeConfidence(ai.confidence)==="SMASH";
     const flags=getSampleFlags(name,true);
-    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P",returning:flags.returning,limitedSample:flags.limited});
+    board.push({name,team:p.team_abbr||"",opp:p.opp_abbr_tonight||"",pitcher:"",hand:"",projUD:projUD.toFixed(1),l7UD:l7UD.toFixed(1),sSO,sER,sW,sIP,qsRate,isSmash,isPitcher:true,pos:"P",returning:flags.returning,limitedSample:flags.limited,availability});
   }
   board.sort((a,b)=>parseFloat(b.projUD)-parseFloat(a.projUD));
   return board;
@@ -2257,7 +2280,7 @@ function renderDraftBoardView(convergenceHTML){
       function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
       const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
         <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
-        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — Tap to mark as drafted.</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — active-roster only · tap to mark as drafted.</div>
         ${renderDraftSlateSelector()}`;
       if(!board.length){
         const emptyMessage=slateGames.length&&!selectedGames.size
@@ -2278,6 +2301,7 @@ function renderDraftBoardView(convergenceHTML){
           else{if(p.sHR>=0.3)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">💣 POWER</span>`);if(p.sSB>=0.3)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">💨 SPEED</span>`);if(p.sBB>=0.5)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">👁️ PATIENT</span>`)}
           if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
           if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
+          if(p.availability?.lineupRisk)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}LINEUP RISK</span>`);
           const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
           if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
           if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
@@ -2288,7 +2312,7 @@ function renderDraftBoardView(convergenceHTML){
           html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
           <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
             <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
-            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${p.availability?.lineupRisk?`<div class="risk-subnote">${esc(p.availability.lineupRisk)}</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
             <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
           </div>`;
         });
@@ -2996,14 +3020,16 @@ function loadAllData(){
 	  const DASHBOARD_EXPECTS = {
 	    Tonights_Batters: ['player_name', 'team_abbr', 'opp_abbr_tonight',
 	                       'RETURNING', 'LIMITED_SAMPLE', 'L5_GAMES_PLAYED',
-	                       'GAMES_LAST_7D', 'IBB_RISK', 'LINEUP_PROTECTION_NOTE'],
+	                       'GAMES_LAST_7D', 'IBB_RISK', 'LINEUP_PROTECTION_NOTE',
+	                       'ACTIVE_ROSTER', 'ROSTER_STATUS', 'ROSTER_STATUS_DESC'],
 	    Picks_Current: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
 	                  'confidence', 'rationale', 'HIT'],
 	    Daily_Picks: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
 	                  'confidence', 'rationale', 'HIT'],
 	    DK_Player_Props: ['PLAYER_NAME', 'METRIC', 'DK_LINE', 'OVER_ODDS', 'UNDER_ODDS'],
 	    All_Books_Props: ['PLAYER_NAME', 'METRIC', 'LINE', 'BOOK', 'OVER_ODDS', 'UNDER_ODDS'],
-	    Tonights_Pitchers: ['team_abbr', 'opp_pitcher_name', 'opp_pitcher_hand'],
+	    Tonights_Pitchers: ['team_abbr', 'opp_pitcher_name', 'opp_pitcher_hand',
+	                        'ACTIVE_ROSTER', 'ROSTER_STATUS', 'ROSTER_STATUS_DESC'],
 	    Team_Rankings: ['TEAM_ABBR', 'OFF_K_PCT', 'OFF_K_PCT_MOST_RANK',
 	                    'PIT_HR9', 'PIT_HR_ALLOWED_MOST_RANK'],
 	  };
