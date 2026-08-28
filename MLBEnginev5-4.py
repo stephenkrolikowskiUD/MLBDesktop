@@ -1014,6 +1014,64 @@ def get_pitcher_hand(pitcher_id):
     except Exception:
         return 'R'
 
+
+def fetch_confirmed_lineups(games_tonight):
+    """Lineup confirmation from MLB game boxscores.
+
+    If a team's batting order is posted, every active batter on that team can
+    be classified as either in the lineup or out of tonight's starting nine.
+    Teams without a posted order stay in an "awaiting lineup" state rather than
+    being guessed into or out of the board.
+    """
+    player_lookup = {}
+    team_lookup = {}
+    for game in games_tonight or []:
+        game_pk = game.get('game_pk')
+        if not game_pk:
+            continue
+        try:
+            resp = requests.get(f"{MLB_API}/game/{game_pk}/boxscore", timeout=10)
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as e:
+            print(f"   ⚠️ Lineup check failed for game {game_pk}: {e}")
+            continue
+
+        for side, team_abbr in [('home', game.get('home_abbr')), ('away', game.get('away_abbr'))]:
+            team_block = ((payload.get('teams') or {}).get(side) or {})
+            batting_order = team_block.get('battingOrder') or []
+            lineup_posted = len(batting_order) > 0
+            if team_abbr:
+                team_lookup[team_abbr] = {
+                    'LINEUP_POSTED': lineup_posted,
+                    'LINEUP_SOURCE': 'MLB boxscore',
+                }
+            if not lineup_posted:
+                continue
+            players = team_block.get('players') or {}
+            for raw_pid in batting_order:
+                try:
+                    pid = int(raw_pid)
+                except (TypeError, ValueError):
+                    continue
+                player_block = players.get(f'ID{pid}') or {}
+                batting_order_raw = str(player_block.get('battingOrder') or '').strip()
+                order_num = np.nan
+                if batting_order_raw.isdigit():
+                    try:
+                        order_num = int(batting_order_raw) // 100
+                    except Exception:
+                        order_num = np.nan
+                player_lookup[pid] = {
+                    'LINEUP_CONFIRMED': True,
+                    'LINEUP_POSTED': True,
+                    'LINEUP_STATUS': 'CONFIRMED',
+                    'LINEUP_STATUS_DESC': 'Confirmed in starting lineup',
+                    'BATTING_ORDER': order_num,
+                }
+        time.sleep(0.1)
+    return player_lookup, team_lookup
+
 def fetch_batter_vs_pitcher(batter_name, batter_id, pitcher_id, pitcher_name):
     url = f"{MLB_API}/people/{batter_id}/stats?stats=vsPlayer&group=hitting&opposingPlayerId={pitcher_id}"
     try:
@@ -2752,7 +2810,9 @@ def main():
                 'opp_pitcher_hand', 'venue_tonight', 'home_away_tonight',
                 'L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
                 'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'ACTIVE_ROSTER',
-                'ROSTER_STATUS', 'ROSTER_STATUS_DESC', 'LAST_UPDATED',
+                'ROSTER_STATUS', 'ROSTER_STATUS_DESC',
+                'LINEUP_POSTED', 'LINEUP_CONFIRMED', 'LINEUP_STATUS',
+                'LINEUP_STATUS_DESC', 'BATTING_ORDER', 'LAST_UPDATED',
             ],
             'recommended': ['Seas_OPS', 'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2'],
         },
@@ -3300,6 +3360,13 @@ def main():
     else:
         print(f"ℹ️  No two-way players pitching tonight")
 
+    lineup_lookup_by_pid, lineup_status_by_team = fetch_confirmed_lineups(games_tonight)
+    posted_ct = sum(1 for info in lineup_status_by_team.values() if info.get('LINEUP_POSTED'))
+    if lineup_status_by_team:
+        print(f"✅ Lineup check: {posted_ct}/{len(lineup_status_by_team)} team lineups posted")
+    else:
+        print("ℹ️  Lineup check unavailable — no team lineup statuses captured")
+
     # --- 8. BUILD TONIGHT'S BATTER SHEET (ROSTER-SAFE + EARLY-SEASON EXPANSION) ---
     print("\nBuilding tonight's batter sheet...")
 
@@ -3407,6 +3474,29 @@ def main():
     most_recent['ROSTER_STATUS_DESC'] = most_recent['player_id'].map(
         lambda pid: (batter_roster_status_by_pid.get(pid) or {}).get('ROSTER_STATUS_DESC', '')
     )
+    most_recent['LINEUP_POSTED'] = most_recent['team_abbr'].map(
+        lambda team: bool((lineup_status_by_team.get(team) or {}).get('LINEUP_POSTED', False))
+    )
+    most_recent['LINEUP_CONFIRMED'] = most_recent['player_id'].map(
+        lambda pid: bool((lineup_lookup_by_pid.get(pid) or {}).get('LINEUP_CONFIRMED', False))
+    )
+    most_recent['LINEUP_STATUS'] = most_recent.apply(
+        lambda row: (
+            (lineup_lookup_by_pid.get(row.get('player_id')) or {}).get('LINEUP_STATUS')
+            or ('OUT_OF_LINEUP' if row.get('LINEUP_POSTED') else 'AWAITING_LINEUP')
+        ),
+        axis=1,
+    )
+    most_recent['LINEUP_STATUS_DESC'] = most_recent.apply(
+        lambda row: (
+            (lineup_lookup_by_pid.get(row.get('player_id')) or {}).get('LINEUP_STATUS_DESC')
+            or ('Lineup posted, player not in starting order' if row.get('LINEUP_POSTED') else 'Awaiting confirmed lineup')
+        ),
+        axis=1,
+    )
+    most_recent['BATTING_ORDER'] = most_recent['player_id'].map(
+        lambda pid: (lineup_lookup_by_pid.get(pid) or {}).get('BATTING_ORDER', np.nan)
+    )
     most_recent['TEAM_SUPPORT_OPS1'] = np.nan
     most_recent['TEAM_SUPPORT_OPS2'] = np.nan
 
@@ -3494,6 +3584,8 @@ def main():
         ['L5_GAMES_PLAYED', 'GAMES_LAST_7D', 'LIMITED_SAMPLE', 'RETURNING',
          'IBB_RISK', 'LINEUP_PROTECTION_NOTE', 'ACTIVE_ROSTER',
          'ROSTER_STATUS', 'ROSTER_STATUS_DESC',
+         'LINEUP_POSTED', 'LINEUP_CONFIRMED', 'LINEUP_STATUS',
+         'LINEUP_STATUS_DESC', 'BATTING_ORDER',
          'TEAM_SUPPORT_OPS1', 'TEAM_SUPPORT_OPS2', 'LAST_UPDATED'])
     final_cols = [c for c in final_cols if c in most_recent.columns]
     df_tonight = most_recent[final_cols].copy()

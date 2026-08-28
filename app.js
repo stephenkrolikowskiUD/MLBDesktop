@@ -273,16 +273,26 @@ function draftAvailability(row){
   const rosterStatus = String(rowField(row,"ROSTER_STATUS","roster_status")).trim().toUpperCase();
   const rosterStatusDesc = String(rowField(row,"ROSTER_STATUS_DESC","roster_status_desc")).trim();
   const lineupRisk = String(rowField(row,"LINEUP_PROTECTION_NOTE","lineup_protection_note")).trim();
+  const lineupPosted = boolish(rowField(row,"LINEUP_POSTED","lineup_posted"));
+  const lineupConfirmed = boolish(rowField(row,"LINEUP_CONFIRMED","lineup_confirmed"));
+  const lineupStatus = String(rowField(row,"LINEUP_STATUS","lineup_status")).trim().toUpperCase();
+  const lineupStatusDesc = String(rowField(row,"LINEUP_STATUS_DESC","lineup_status_desc")).trim();
+  const battingOrder = Number(rowField(row,"BATTING_ORDER","batting_order"));
   const isActiveKnown = String(active).trim() !== "";
   const activeRoster = boolish(active);
   const hardOut = DRAFT_HARD_OUT_STATUSES.has(rosterStatus);
-  const unavailable = (isActiveKnown && !activeRoster) || hardOut;
+  const unavailable = (isActiveKnown && !activeRoster) || hardOut || lineupStatus==="OUT_OF_LINEUP";
   return {
     unavailable,
     activeRoster,
     rosterStatus,
     rosterStatusDesc,
     lineupRisk,
+    lineupPosted,
+    lineupConfirmed,
+    lineupStatus,
+    lineupStatusDesc,
+    battingOrder: Number.isFinite(battingOrder)?battingOrder:null,
   };
 }
 function draftDecisionLabel(player){
@@ -326,6 +336,9 @@ function computeDraftPriority(player,stackTags){
   const samplePenalty=player.limitedSample?4:0;
   const returnPenalty=player.returning?7:0;
   const lineupPenalty=player.availability?.lineupRisk?4:0;
+  const lineupBoost = player.availability?.lineupConfirmed
+    ? (player.availability?.battingOrder && player.availability.battingOrder <= 4 ? 8 : 5)
+    : player.availability?.lineupPosted ? -8 : -2;
   const stackBoost=[...(stackTags||new Set())].reduce((sum,tag)=>{
     if(tag.includes("HIGH TOTAL"))return sum+6;
     if(tag.includes("STACK TARGET"))return sum+4;
@@ -337,7 +350,7 @@ function computeDraftPriority(player,stackTags){
     :((player.sHR||0)>=0.3?3:0)+(toNum(player.sSB)>=0.3?2:0)+(toNum(player.sBB)>=0.5?2:0);
   const roleBoost=player.isPitcher?6:(player.pos==="IF"?3:player.pos==="OF"?2:1);
   const base=player.isPitcher?proj*6.5:proj*5.5;
-  const priority=Math.max(0,Math.min(99,base+aiBoost+hotBoost+stackBoost+skillBoost+roleBoost-coldPenalty-samplePenalty-returnPenalty-lineupPenalty));
+  const priority=Math.max(0,Math.min(99,base+aiBoost+hotBoost+stackBoost+skillBoost+roleBoost+lineupBoost-coldPenalty-samplePenalty-returnPenalty-lineupPenalty));
   return {
     priorityScore: Math.round(priority),
     trend,
@@ -2367,19 +2380,27 @@ function renderDraftBoardView(convergenceHTML){
           if(p.returning)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}RETURNING</span>`);
           if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
           if(p.availability?.lineupRisk)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}LINEUP RISK</span>`);
+          if(p.availability?.lineupConfirmed&&p.availability?.battingOrder)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">BATTING ${ordinalRank(p.availability.battingOrder)}</span>`);
+          else if(p.availability?.lineupPosted)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}NOT STARTING</span>`);
+          else tags.push(`<span class="draft-tag" style="background:var(--surface-2);color:var(--push)">AWAITING LINEUP</span>`);
           tags.unshift(`<span class="draft-tag" style="background:${draftDecisionTone(p.decision)}22;color:${draftDecisionTone(p.decision)}">${esc(p.decision.toUpperCase())}</span>`);
           const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
           if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
           if(l7v<projv*0.8&&l7v>0)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">📉 COLD</span>`);
           (stackTags.get(normalizePlayerName(p.name))||new Set()).forEach(tag=>{const clr=tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399";tags.push(`<span class="draft-tag" style="background:${clr}22;color:${clr}">${tag}</span>`);});
           const metaLine=p.isPitcher?`${esc(p.team)} vs ${esc(p.opp)} · ${p.sSO.toFixed(1)}K · ${p.sIP.toFixed(1)}IP · ${p.sER.toFixed(1)}ER`:`${esc(p.team)} vs ${esc(p.pitcher)} (${p.hand}HP) · ${p.sH.toFixed(0)}h/${p.sHR.toFixed(1)}hr/${p.sRBI.toFixed(1)}rbi/${p.sR.toFixed(1)}r`;
+          const lineupLine=p.availability?.lineupConfirmed
+            ? `Confirmed lineup${p.availability.battingOrder?` · batting ${ordinalRank(p.availability.battingOrder)}`:""}`
+            : p.availability?.lineupPosted
+              ? (p.availability.lineupStatusDesc||"Lineup posted")
+              : "Awaiting confirmed lineup";
           const scoreLine=`Priority ${p.priorityScore} · ${p.trend>0.08?`L7 up ${Math.round(p.trend*100)}%`:p.trend<-0.08?`L7 down ${Math.round(Math.abs(p.trend)*100)}%`:"Stable form"}`;
           const locked=getLockInfo(p.name,p.isPitcher).started;
           const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
           html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
           <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
             <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
-            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div><div class="draft-meta" style="color:${draftDecisionTone(p.decision)}">${esc(scoreLine)}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${p.availability?.lineupRisk?`<div class="risk-subnote">${esc(p.availability.lineupRisk)}</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
+            <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div><div class="draft-meta" style="color:${draftDecisionTone(p.decision)}">${esc(scoreLine)}</div><div class="draft-meta">${esc(lineupLine)}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${p.availability?.lineupRisk?`<div class="risk-subnote">${esc(p.availability.lineupRisk)}</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
             <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
           </div>`;
         });
@@ -3088,7 +3109,9 @@ function loadAllData(){
 	    Tonights_Batters: ['player_name', 'team_abbr', 'opp_abbr_tonight',
 	                       'RETURNING', 'LIMITED_SAMPLE', 'L5_GAMES_PLAYED',
 	                       'GAMES_LAST_7D', 'IBB_RISK', 'LINEUP_PROTECTION_NOTE',
-	                       'ACTIVE_ROSTER', 'ROSTER_STATUS', 'ROSTER_STATUS_DESC'],
+	                       'ACTIVE_ROSTER', 'ROSTER_STATUS', 'ROSTER_STATUS_DESC',
+	                       'LINEUP_POSTED', 'LINEUP_CONFIRMED', 'LINEUP_STATUS',
+	                       'LINEUP_STATUS_DESC', 'BATTING_ORDER'],
 	    Picks_Current: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
 	                  'confidence', 'rationale', 'HIT'],
 	    Daily_Picks: ['DATE', 'RUN_NUMBER', 'player', 'prop_type', 'line', 'lean',
