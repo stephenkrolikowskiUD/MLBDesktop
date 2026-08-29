@@ -2447,6 +2447,15 @@ function renderDraftBoardView(convergenceHTML){
             </div>
           </div>`;
       }
+      function renderDraftSection(title,subtitle,rows,opts={}){
+        const emptyCopy=opts.emptyCopy||"No players qualify in this section right now.";
+        const rankOffset=opts.rankOffset||0;
+        return `<div style="padding:14px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">${esc(title)}</div>
+        <div style="padding:0 16px 8px;color:var(--ink-muted);font-size:var(--t-xs)">${esc(subtitle)}</div>
+        ${rows.length
+          ? `<div class="cards-grid draft-board">${rows.map((p,idx)=>renderDraftCard(p,rankOffset+idx)).join("")}</div>`
+          : `<div class="props-pass" style="margin:0 16px 12px"><div class="props-pass-title">${esc(title)} is quiet</div><div class="props-pass-copy">${esc(emptyCopy)}</div></div>`}`;
+      }
       const topPitcher=available.find(p=>p.isPitcher)||null;
       const topBat=available.find(p=>!p.isPitcher)||null;
       const topStack=stacks[0]||null;
@@ -2480,6 +2489,11 @@ function renderDraftBoardView(convergenceHTML){
         html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
       }
       else{
+        const anchorPitchers=available.filter(p=>p.isPitcher).slice(0,6);
+        const priorityBats=available.filter(p=>!p.isPitcher&&(p.decision==="Take now"||p.decision==="Priority bat")).slice(0,12);
+        const stackPieces=available.filter(p=>!p.isPitcher&&[...(stackTags.get(normalizePlayerName(p.name))||new Set())].some(tag=>tag.includes("STACK TARGET")||tag.includes("HIGH TOTAL")||tag.includes("CORRELATED"))).slice(0,12);
+        const lineupClimbers=available.filter(p=>!p.isPitcher&&p.availability?.lineupConfirmed).sort((a,b)=>(a.availability?.battingOrder||99)-(b.availability?.battingOrder||99)||b.priorityScore-a.priorityScore).slice(0,8);
+        const secondaryBoard=available.filter(p=>!anchorPitchers.includes(p)&&!priorityBats.includes(p)&&!stackPieces.includes(p)&&!lineupClimbers.includes(p)).slice(0,12);
         html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${takeNowCount}</div><div class="bs-lbl">TAKE NOW</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${coreCount}</div><div class="bs-lbl">CORE TIER</div></div><div class="bs-card"><div class="bs-val" style="color:var(--push)">${waitCount}</div><div class="bs-lbl">CAN WAIT</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${available.length}</div><div class="bs-lbl">LIVE BOARD</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} mine · ${crossedCount} crossed off · ${available.length} live</div></div>`;
         html+=`<div class="draft-lens-grid">
           <div class="draft-lens-card"><div class="draft-lens-title">My Build</div><div class="draft-lens-copy">${mineBoard.length?mineBoard.map(p=>`<button class="draft-mini-chip" onclick="toggleDraftMine('${esc(p.name)}')">${esc(p.name)} · ${esc(p.pos)}</button>`).join(""):`<span class="draft-lens-muted">No one drafted to your team yet.</span>`}</div><div class="draft-lens-foot">P ${mineCounts.p}/1 · IF ${mineCounts.if}/2 · OF ${mineCounts.of}/2 · FLEX ${flexCount}/1</div></div>
@@ -2487,14 +2501,13 @@ function renderDraftBoardView(convergenceHTML){
           <div class="draft-lens-card"><div class="draft-lens-title">Build Lens</div><div class="draft-lens-copy">${topPitcher?`Best SP: ${esc(topPitcher.name)} · ${topPitcher.projUD} UD FP<br>`:""}${topBat?`Best bat: ${esc(topBat.name)} · ${topBat.projUD} UD FP`:"No bats live."}</div><div class="draft-lens-foot">${topStack?`${esc(topStack.players[0].name)} + ${esc(topStack.players[1].name)} · ${topStack.combinedProj} UD FP`:"No stack read yet."}</div></div>
           <div class="draft-lens-card"><div class="draft-lens-title">Lineup Pulse</div><div class="draft-lens-copy">${esc(lineupMoverText)}</div><div class="draft-lens-foot">${postedLineups} players on posted lineups · ${confirmedCount} confirmed starters</div></div>
         </div>`;
-        html+=`<div class="cards-grid draft-board">`;
-        let lastTier="";
-        available.forEach((p,i)=>{
-          const tier=getTier(p.projUD,p.isPitcher);
-          const tierChanged=tier.label!==lastTier;lastTier=tier.label;
-          html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}${renderDraftCard(p,i)}`;
-        });
-        html+=`</div>`;
+        html+=renderDraftSection("Anchor Pitchers","Best starting points for the one pitcher slot, weighted for strikeouts, innings, and quality-start shape.",anchorPitchers,{emptyCopy:"No pitcher anchor stands out yet for this slate."});
+        html+=renderDraftSection("Priority Bats","Top one-off bats to build around first before the room strips the clean ceiling off the board.",priorityBats,{rankOffset:anchorPitchers.length,emptyCopy:"No bats are clearly separating from the field yet."});
+        html+=renderDraftSection("Stack Targets","Hitters getting the biggest environment and opposing-pitcher boosts, useful when you want a correlated build.",stackPieces,{rankOffset:anchorPitchers.length+priorityBats.length,emptyCopy:"No stack-driven hitter cluster is standing out yet."});
+        html+=renderDraftSection("Lineup Climbers","Confirmed starters, especially top-of-order bats, that became more actionable once lineups posted.",lineupClimbers,{rankOffset:anchorPitchers.length+priorityBats.length+stackPieces.length,emptyCopy:"No confirmed lineup climbers yet. This section wakes up as orders post."});
+        if(secondaryBoard.length){
+          html+=renderDraftSection("Secondary Pool","Still live for flex spots, pivots, and late cleanup after the priority board starts thinning.",secondaryBoard,{rankOffset:anchorPitchers.length+priorityBats.length+stackPieces.length+lineupClimbers.length});
+        }
         if(stacks.length){
           html+=`<div style="padding:14px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">⚡ Stacks</div><div style="padding:0 16px 6px;color:var(--ink-muted);font-size:var(--t-xs)">Top 2-player hitter stacks ranked by combined UD projection, weak-pitcher targets, and Coors boosts.</div><div class="cards-grid">`;
           html+=stacks.map((s,i)=>`<div class="bet-card ${i===0?"elite":"mid"}" style="cursor:default"><div class="bet-left"><div class="bet-name">${playerLink(s.players[0].name)} + ${playerLink(s.players[1].name)}</div><div class="bet-meta">${esc(s.team)} vs ${esc(s.pitcher)}${s.era?` · ERA ${s.era.toFixed(2)}`:""}${s.venue?` · ${esc(s.venue)}`:""}</div><div class="draft-tags" style="margin-top:6px">${s.tags.map(tag=>`<span class="draft-tag" style="background:${tag.includes("CORRELATED")?"#60a5fa22":tag.includes("HIGH TOTAL")?"var(--warn-soft)":"#34d39922"};color:${tag.includes("CORRELATED")?"#60a5fa":tag.includes("HIGH TOTAL")?"var(--warn)":"#34d399"}">${tag}</span>`).join("")}</div></div><div class="bet-right"><div class="bet-edge pos">${s.combinedProj}</div><div class="bet-sub">UD FP</div></div></div>`).join("");
