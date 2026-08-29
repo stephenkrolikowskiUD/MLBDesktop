@@ -36,6 +36,7 @@ const P_METRICS=["IP","SO","ER","H","HR","BB","UD_FP","PC","W","L"];
 const MLB_API="https://statsapi.mlb.com/api/v1";
 const SHORTLIST_TRAY_KEY="mlb-shortlist-tray";
 const DRAFT_SLATE_KEY="mlb-draft-slate-v1";
+const DRAFT_BOARD_STATE_KEY="mlb-draft-board-state-v1";
 
 function loadShortlistTray(){
   try{
@@ -54,7 +55,19 @@ function loadDraftSlate(){
   }catch(e){return{signature:"",selectedIds:new Set()}}
 }
 
+function loadDraftBoardState(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(DRAFT_BOARD_STATE_KEY)||"{}");
+    return{
+      signature:String(parsed.signature||""),
+      mine:new Set(Array.isArray(parsed.mine)?parsed.mine.map(String):[]),
+      crossed:new Set(Array.isArray(parsed.crossed)?parsed.crossed.map(String):[])
+    };
+  }catch(e){return{signature:"",mine:new Set(),crossed:new Set()}}
+}
+
 const initialDraftSlate=loadDraftSlate();
+const initialDraftBoardState=loadDraftBoardState();
 let st={
   tonight:[],gameLogs:[],splits:[],weather:[],pitchers:[],schedule:[],
   pTonight:[],pGameLogs:[],pSplits:[],
@@ -66,7 +79,7 @@ let st={
   playerSearch:"",playerSuggestions:[],showPlayerSugs:false,
   loading:true,error:null,dataWarnings:[],lookupError:"",loadedAt:null,latestPickDate:"",pickGuard:null,
   picksView:"shortlist",propsMetric:"ALL",propsSearch:"",propsTeam:"ALL",propsSort:"EDGE",propsMinHit:"0",propsMinEdge:"5",
-  streakFilter:"all",drafted:new Set(),slipLegs:"3",
+  streakFilter:"all",draftMine:initialDraftBoardState.mine,draftCrossed:initialDraftBoardState.crossed,draftBoardSignature:initialDraftBoardState.signature,slipLegs:"3",
   draftSlate:{signature:initialDraftSlate.signature,selectedIds:initialDraftSlate.selectedIds,panelOpen:false},
   vsSP:[],
   lkPlayer:null,lkResults:[],lkQuery:"",lkSubTab:"career",lkPlayerType:"batter",
@@ -1178,8 +1191,42 @@ function pickDashPlayer(name){
 function toggleFullLog(){st.showFullLog=!st.showFullLog;render()}
 function setStreakFilter(f){st.streakFilter=f;render()}
 function setSlipLegs(n){st.slipLegs=n;render()}
-function toggleDrafted(name){if(st.drafted.has(name))st.drafted.delete(name);else st.drafted.add(name);render()}
-function resetDrafted(){st.drafted.clear();render()}
+function persistDraftBoardState(){
+  st.draftBoardSignature=draftSlateSignature();
+  localStorage.setItem(DRAFT_BOARD_STATE_KEY,JSON.stringify({
+    signature:st.draftBoardSignature,
+    mine:[...st.draftMine],
+    crossed:[...st.draftCrossed]
+  }));
+}
+function resetDraftBoardState(){
+  st.draftMine.clear();
+  st.draftCrossed.clear();
+}
+function draftBoardStatus(name){
+  if(st.draftMine.has(name))return"mine";
+  if(st.draftCrossed.has(name))return"crossed";
+  return"live";
+}
+function setDraftBoardStatus(name,status){
+  st.draftMine.delete(name);
+  st.draftCrossed.delete(name);
+  if(status==="mine")st.draftMine.add(name);
+  else if(status==="crossed")st.draftCrossed.add(name);
+  persistDraftBoardState();
+  render();
+}
+function toggleDraftMine(name){
+  setDraftBoardStatus(name,draftBoardStatus(name)==="mine"?"live":"mine");
+}
+function toggleDraftCrossed(name){
+  setDraftBoardStatus(name,draftBoardStatus(name)==="crossed"?"live":"crossed");
+}
+function resetDrafted(){
+  resetDraftBoardState();
+  persistDraftBoardState();
+  render();
+}
 function streakToDash(name,metric,line){
   const metricKey=String(metric||"").toUpperCase();
   const pitcherMetric=metricKey.startsWith("P_")||["SO","ER","IP","IP_OUTS"].includes(metricKey);
@@ -1536,10 +1583,15 @@ function syncDraftSlateSelection(){
   if(st.draftSlate.signature!==signature){
     st.draftSlate.signature=signature;
     st.draftSlate.selectedIds=new Set(valid);
-    st.drafted.clear();
+    resetDraftBoardState();
   }else{
     st.draftSlate.selectedIds=new Set([...st.draftSlate.selectedIds].filter(id=>valid.has(id)));
   }
+  const boardSignature=draftSlateSignature();
+  if(st.draftBoardSignature&&st.draftBoardSignature!==boardSignature){
+    resetDraftBoardState();
+  }
+  persistDraftBoardState();
   persistDraftSlate();
 }
 function draftSlateSelection(){
@@ -1561,7 +1613,8 @@ function draftSlateMemoKey(){return [...draftSlateSelection()].sort().join(",")|
 function applyDraftSlateSelection(ids){
   st.draftSlate.signature=draftSlateSignature();
   st.draftSlate.selectedIds=new Set(ids);
-  st.drafted.clear();
+  resetDraftBoardState();
+  persistDraftBoardState();
   persistDraftSlate();
   render();
 }
@@ -1608,7 +1661,7 @@ function renderDraftSlateSelector(){
   const range=starts.length?starts.length===1?draftDisplayTime(starts[0]):`${draftDisplayTime(starts[0])}–${draftDisplayTime(starts[starts.length-1])}`:"No start window";
   const preset=draftSlatePreset();
   const summary=selectedGames.length?`${selectedGames.length} of ${games.length} games · ${range}`:`0 of ${games.length} games selected`;
-  return`<section class="draft-slate"><div class="draft-slate-head"><div><div class="draft-slate-title">Contest slate</div><div class="draft-slate-summary">${summary}</div></div><button class="draft-slate-toggle" onclick="toggleDraftSlatePanel()">${st.draftSlate.panelOpen?"Done":"Choose games"}</button></div>${selectedGames.length?`<div class="draft-slate-games">${selectedGames.map(game=>`<span class="draft-slate-chip">${esc(game.label)} · ${draftDisplayTime(game.startMs)||"Time TBD"}</span>`).join("")}</div>`:""}${st.draftSlate.panelOpen?`<div class="draft-slate-panel"><div class="draft-slate-presets"><button class="draft-slate-preset${preset==="all"?" active":""}" onclick="setDraftSlatePreset('all')">Full slate</button><button class="draft-slate-preset${preset==="open"?" active":""}" onclick="setDraftSlatePreset('open')">Open games</button><button class="draft-slate-preset${preset==="after7"?" active":""}" onclick="setDraftSlatePreset('after7')">7 PM+</button><button class="draft-slate-preset${preset==="after9"?" active":""}" onclick="setDraftSlatePreset('after9')">9 PM+</button><button class="draft-slate-preset${preset==="clear"?" active":""}" onclick="setDraftSlatePreset('clear')">Clear</button></div><div class="draft-game-grid">${games.map(game=>`<button class="draft-game-option${selected.has(game.id)?" selected":""}" onclick="toggleDraftSlateGame('${esc(game.id)}')"><span class="draft-game-check">✓</span><span><span class="draft-game-matchup">${esc(game.label)}</span><span class="draft-game-status">${game.started?"Started / locked":"Available"}</span></span><span class="draft-game-time">${draftDisplayTime(game.startMs)||"TBD"}</span></button>`).join("")}</div><div class="draft-slate-note">Changing games resets drafted marks so the board stays aligned with this contest.</div></div>`:""}</section>`;
+  return`<section class="draft-slate"><div class="draft-slate-head"><div><div class="draft-slate-title">Contest slate</div><div class="draft-slate-summary">${summary}</div></div><button class="draft-slate-toggle" onclick="toggleDraftSlatePanel()">${st.draftSlate.panelOpen?"Done":"Choose games"}</button></div>${selectedGames.length?`<div class="draft-slate-games">${selectedGames.map(game=>`<span class="draft-slate-chip">${esc(game.label)} · ${draftDisplayTime(game.startMs)||"Time TBD"}</span>`).join("")}</div>`:""}${st.draftSlate.panelOpen?`<div class="draft-slate-panel"><div class="draft-slate-presets"><button class="draft-slate-preset${preset==="all"?" active":""}" onclick="setDraftSlatePreset('all')">Full slate</button><button class="draft-slate-preset${preset==="open"?" active":""}" onclick="setDraftSlatePreset('open')">Open games</button><button class="draft-slate-preset${preset==="after7"?" active":""}" onclick="setDraftSlatePreset('after7')">7 PM+</button><button class="draft-slate-preset${preset==="after9"?" active":""}" onclick="setDraftSlatePreset('after9')">9 PM+</button><button class="draft-slate-preset${preset==="clear"?" active":""}" onclick="setDraftSlatePreset('clear')">Clear</button></div><div class="draft-game-grid">${games.map(game=>`<button class="draft-game-option${selected.has(game.id)?" selected":""}" onclick="toggleDraftSlateGame('${esc(game.id)}')"><span class="draft-game-check">✓</span><span><span class="draft-game-matchup">${esc(game.label)}</span><span class="draft-game-status">${game.started?"Started / locked":"Available"}</span></span><span class="draft-game-time">${draftDisplayTime(game.startMs)||"TBD"}</span></button>`).join("")}</div><div class="draft-slate-note">Changing games resets your Mine and X-off marks so the board stays aligned with this contest.</div></div>`:""}</section>`;
 }
 
 function getDraftBoard(){
@@ -2347,32 +2400,20 @@ function renderDraftBoardView(convergenceHTML){
       const board=getDraftBoard();
       const slateGames=getDraftSlateGames();
       const selectedGames=draftSlateSelection();
-      const available=board.filter(p=>!st.drafted.has(p.name));
+      const mineBoard=board.filter(p=>draftBoardStatus(p.name)==="mine");
+      const crossedBoard=board.filter(p=>draftBoardStatus(p.name)==="crossed");
+      const available=board.filter(p=>draftBoardStatus(p.name)==="live");
       const stacks=getDraftStacks().slice(0,5);
       const stackTags=getDraftStackTagMap();
-      const draftedCount=st.drafted.size;
+      const draftedCount=mineBoard.length;
+      const crossedCount=crossedBoard.length;
       const takeNowCount=available.filter(p=>p.decision==="Take now").length;
       const coreCount=available.filter(p=>p.decision==="Priority bat"||p.decision==="Core arm").length;
       const waitCount=available.filter(p=>p.decision==="Can wait").length;
       function getTier(proj,isP){const v=parseFloat(proj);if(isP){if(v>=8)return{label:"TIER 1 — Ace",cls:"tier1",color:"var(--accent)"};if(v>=5)return{label:"TIER 2 — Solid SP",cls:"tier2",color:"var(--strong)"};return{label:"TIER 3 — Spot Start",cls:"tier3",color:"#8b5cf6"}}if(v>=12)return{label:"TIER 1 — Elite",cls:"tier1",color:"var(--accent)"};if(v>=9)return{label:"TIER 2 — Strong",cls:"tier2",color:"var(--strong)"};if(v>=6)return{label:"TIER 3 — Solid",cls:"tier3",color:"#8b5cf6"};if(v>=4)return{label:"TIER 4 — Role Player",cls:"",color:"var(--accent-soft)"};return{label:"TIER 5 — Dart Throw",cls:"",color:"var(--ink-muted)"}}
       function getPosClass(pos){if(pos==="P")return"draft-pos-p";if(pos==="IF")return"draft-pos-if";if(pos==="OF")return"draft-pos-of";return"draft-pos-flex"}
-      const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
-        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
-        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — active-roster only · tap to mark as drafted.</div>
-        ${renderDraftSlateSelector()}`;
-      if(!board.length){
-        const emptyMessage=slateGames.length&&!selectedGames.size
-          ?"No contest games selected. Choose the games included in this UD contest."
-          :"No draftable players loaded for the selected games.";
-        html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
-      }
-      else{
-        html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${takeNowCount}</div><div class="bs-lbl">TAKE NOW</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${coreCount}</div><div class="bs-lbl">CORE TIER</div></div><div class="bs-card"><div class="bs-val" style="color:var(--push)">${waitCount}</div><div class="bs-lbl">CAN WAIT</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${available.length}</div><div class="bs-lbl">AVAILABLE</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} drafted · ${available.length} available</div></div>`;
-        html+=`<div class="cards-grid draft-board">`;
-        let lastTier="";
-        board.forEach((p,i)=>{
-          const tier=getTier(p.projUD,p.isPitcher);const isDrafted=st.drafted.has(p.name);
-          const tierChanged=tier.label!==lastTier;lastTier=tier.label;
+      function renderDraftCard(p,i){
+          const tier=getTier(p.projUD,p.isPitcher);
           let tags=[];
           if(p.isSmash)tags.push(`<span class="draft-tag" style="background:var(--smash-soft);color:var(--smash)">SMASH</span>`);
           if(p.isPitcher){if(p.qsRate>=0.6)tags.push(`<span class="draft-tag" style="background:color-mix(in srgb, var(--strong) 13%, transparent);color:var(--strong)">QS ${(p.qsRate*100).toFixed(0)}%</span>`);if(p.sSO>=6)tags.push(`<span class="draft-tag" style="background:var(--under-soft);color:var(--under)">🔥 ${p.sSO.toFixed(1)} K/GS</span>`)}
@@ -2381,8 +2422,7 @@ function renderDraftBoardView(convergenceHTML){
           if(p.limitedSample)tags.push(`<span class="draft-tag" style="background:var(--ink-quiet);color:var(--ink-1)">${icon('warn')}LIMITED SAMPLE</span>`);
           if(p.availability?.lineupRisk)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}LINEUP RISK</span>`);
           if(p.availability?.lineupConfirmed&&p.availability?.battingOrder)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">BATTING ${ordinalRank(p.availability.battingOrder)}</span>`);
-          else if(p.availability?.lineupPosted)tags.push(`<span class="draft-tag" style="background:var(--warn-soft);color:var(--warn)">${icon('warn')}NOT STARTING</span>`);
-          else tags.push(`<span class="draft-tag" style="background:var(--surface-2);color:var(--push)">AWAITING LINEUP</span>`);
+          else tags.push(`<span class="draft-tag" style="background:var(--surface-2);color:var(--push)">${p.availability?.lineupPosted?"LINEUP POSTED":"AWAITING LINEUP"}</span>`);
           tags.unshift(`<span class="draft-tag" style="background:${draftDecisionTone(p.decision)}22;color:${draftDecisionTone(p.decision)}">${esc(p.decision.toUpperCase())}</span>`);
           const l7v=parseFloat(p.l7UD),projv=parseFloat(p.projUD);
           if(l7v>projv*1.15)tags.push(`<span class="draft-tag" style="background:var(--over-soft);color:var(--over)">📈 HOT</span>`);
@@ -2396,13 +2436,63 @@ function renderDraftBoardView(convergenceHTML){
               : "Awaiting confirmed lineup";
           const scoreLine=`Priority ${p.priorityScore} · ${p.trend>0.08?`L7 up ${Math.round(p.trend*100)}%`:p.trend<-0.08?`L7 down ${Math.round(Math.abs(p.trend)*100)}%`:"Stable form"}`;
           const locked=getLockInfo(p.name,p.isPitcher).started;
-          const cardCls=`draft-card${isDrafted?" drafted":""}${p.isSmash&&!isDrafted?" smash":!isDrafted?" "+tier.cls:""}${p.isPitcher&&!isDrafted?" pitcher":""}${locked?" locked-card":""}`;
-          html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}
-          <div class="${cardCls}" onclick="toggleDrafted('${esc(p.name)}')">
-            <div class="draft-rank" style="color:${isDrafted?"var(--border-1)":tier.color}">${i+1}</div>
+          const cardCls=`draft-card${p.isSmash?" smash":" "+tier.cls}${p.isPitcher?" pitcher":""}${locked?" locked-card":""}`;
+          return `<div class="${cardCls}" onclick="streakToDash('${esc(p.name)}')">
+            <div class="draft-rank" style="color:${tier.color}">${i+1}</div>
             <div class="draft-main"><div class="draft-name">${playerLink(p.name)}${lockBadge(p.name,p.isPitcher)}<span class="draft-pos ${getPosClass(p.pos)}">${p.pos}</span><span style="margin-left:6px;cursor:pointer;opacity:.6" onclick="event.stopPropagation();streakToDash('${esc(p.name)}')">${icon('stats')}</span></div><div class="draft-meta">${metaLine}</div><div class="draft-meta" style="color:${draftDecisionTone(p.decision)}">${esc(scoreLine)}</div><div class="draft-meta">${esc(lineupLine)}</div>${p.returning?`<div class="risk-subnote">Returning from absence — season averages may not reflect current form.</div>`:""}${p.availability?.lineupRisk?`<div class="risk-subnote">${esc(p.availability.lineupRisk)}</div>`:""}${tags.length?`<div class="draft-tags">${tags.join("")}</div>`:""}</div>
-            <div class="draft-fp"><div class="draft-fp-val" style="color:${isDrafted?"var(--border-1)":tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
+            <div class="draft-fp"><div class="draft-fp-val" style="color:${tier.color}">${p.projUD}</div><div class="draft-fp-lbl">${locked?"STARTED":"UD FP"}</div>${l7v!==projv?`<div style="font-size:var(--t-xs);color:${l7v>projv?"var(--over)":"var(--under)"};margin-top:1px">L7: ${p.l7UD}</div>`:""}</div>
+            <div class="draft-actions">
+              <button class="draft-action mine" onclick="event.stopPropagation();toggleDraftMine('${esc(p.name)}')">Mine</button>
+              <button class="draft-action crossed" onclick="event.stopPropagation();toggleDraftCrossed('${esc(p.name)}')">X</button>
+            </div>
           </div>`;
+      }
+      const topPitcher=available.find(p=>p.isPitcher)||null;
+      const topBat=available.find(p=>!p.isPitcher)||null;
+      const topStack=stacks[0]||null;
+      const lineupMovers=available.filter(p=>!p.isPitcher&&p.availability?.lineupConfirmed).sort((a,b)=>(a.availability?.battingOrder||99)-(b.availability?.battingOrder||99)||b.priorityScore-a.priorityScore);
+      const postedLineups=available.filter(p=>p.availability?.lineupPosted).length;
+      const confirmedCount=available.filter(p=>p.availability?.lineupConfirmed).length;
+      const lineupMoverText=lineupMovers.length
+        ? lineupMovers.slice(0,4).map(p=>`${cleanName(p.name)}${p.availability?.battingOrder?` (${ordinalRank(p.availability.battingOrder)})`:""}`).join(" · ")
+        : "No confirmed lineup movers yet.";
+      const mineCounts={
+        p:mineBoard.filter(p=>p.pos==="P").length,
+        if:mineBoard.filter(p=>p.pos==="IF").length,
+        of:mineBoard.filter(p=>p.pos==="OF").length,
+        total:mineBoard.length
+      };
+      const flexCount=Math.max(0,(mineCounts.if+mineCounts.of)-4);
+      const openNeeds=[];
+      if(mineCounts.p<1)openNeeds.push("Pitcher");
+      if(mineCounts.if<2)openNeeds.push(mineCounts.if===0?"2 infielders":"1 infielder");
+      if(mineCounts.of<2)openNeeds.push(mineCounts.of===0?"2 outfielders":"1 outfielder");
+      const primaryOpen=Math.max(0,1-mineCounts.p)+Math.max(0,2-mineCounts.if)+Math.max(0,2-mineCounts.of);
+      if(Math.max(0,6-mineCounts.total)>primaryOpen)openNeeds.push("Flex bat");
+      const draftHeader=convergenceHTML+`<div style="padding:12px 16px 4px;color:var(--accent);font-size:var(--t-sm);font-weight:700">Draft Cheat Sheet</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Underdog scoring: 1B×3 2B×6 3B×8 HR×10 BB×3 HBP×3 RBI×2 R×2 SB×4 | P: W×5 QS×5 K×3 IP×3 ER×-3</div>
+        <div style="padding:0 16px 4px;color:var(--ink-muted);font-size:var(--t-xs)">Roster: P×1 · IF×2 · OF×2 · FLEX×1 — active-roster only · use Mine for your team or X to clear someone another drafter took.</div>
+        ${renderDraftSlateSelector()}`;
+      if(!board.length){
+        const emptyMessage=slateGames.length&&!selectedGames.size
+          ?"No contest games selected. Choose the games included in this UD contest."
+          :"No draftable players loaded for the selected games.";
+        html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
+      }
+      else{
+        html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${takeNowCount}</div><div class="bs-lbl">TAKE NOW</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${coreCount}</div><div class="bs-lbl">CORE TIER</div></div><div class="bs-card"><div class="bs-val" style="color:var(--push)">${waitCount}</div><div class="bs-lbl">CAN WAIT</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${available.length}</div><div class="bs-lbl">LIVE BOARD</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} mine · ${crossedCount} crossed off · ${available.length} live</div></div>`;
+        html+=`<div class="draft-lens-grid">
+          <div class="draft-lens-card"><div class="draft-lens-title">My Build</div><div class="draft-lens-copy">${mineBoard.length?mineBoard.map(p=>`<button class="draft-mini-chip" onclick="toggleDraftMine('${esc(p.name)}')">${esc(p.name)} · ${esc(p.pos)}</button>`).join(""):`<span class="draft-lens-muted">No one drafted to your team yet.</span>`}</div><div class="draft-lens-foot">P ${mineCounts.p}/1 · IF ${mineCounts.if}/2 · OF ${mineCounts.of}/2 · FLEX ${flexCount}/1</div></div>
+          <div class="draft-lens-card"><div class="draft-lens-title">Need Next</div><div class="draft-lens-copy">${openNeeds.length?esc(openNeeds.join(" · ")):"Roster shape is filled; prioritize raw ceiling now."}</div><div class="draft-lens-foot">${crossedBoard.length?crossedBoard.slice(0,4).map(p=>`<button class="draft-mini-chip muted" onclick="toggleDraftCrossed('${esc(p.name)}')">${esc(p.name)}</button>`).join(""):"No X-off names yet."}</div></div>
+          <div class="draft-lens-card"><div class="draft-lens-title">Build Lens</div><div class="draft-lens-copy">${topPitcher?`Best SP: ${esc(topPitcher.name)} · ${topPitcher.projUD} UD FP<br>`:""}${topBat?`Best bat: ${esc(topBat.name)} · ${topBat.projUD} UD FP`:"No bats live."}</div><div class="draft-lens-foot">${topStack?`${esc(topStack.players[0].name)} + ${esc(topStack.players[1].name)} · ${topStack.combinedProj} UD FP`:"No stack read yet."}</div></div>
+          <div class="draft-lens-card"><div class="draft-lens-title">Lineup Pulse</div><div class="draft-lens-copy">${esc(lineupMoverText)}</div><div class="draft-lens-foot">${postedLineups} players on posted lineups · ${confirmedCount} confirmed starters</div></div>
+        </div>`;
+        html+=`<div class="cards-grid draft-board">`;
+        let lastTier="";
+        available.forEach((p,i)=>{
+          const tier=getTier(p.projUD,p.isPitcher);
+          const tierChanged=tier.label!==lastTier;lastTier=tier.label;
+          html+=`${tierChanged?`<div class="draft-tier-label" style="color:${tier.color}">${tier.label}</div>`:""}${renderDraftCard(p,i)}`;
         });
         html+=`</div>`;
         if(stacks.length){
