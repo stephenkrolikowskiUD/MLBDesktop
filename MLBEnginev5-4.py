@@ -3757,11 +3757,20 @@ def main():
     REFERENCE_BOOKMAKER = 'draftkings'
     BEST_BOOK_TIE_BREAK = 'alpha'
 
-    MARKET_BATCHES = [
-        'batter_hits,batter_total_bases,batter_home_runs,batter_rbis,batter_runs_scored',
-        'batter_stolen_bases,batter_strikeouts,batter_walks,batter_singles,batter_doubles',
-        'pitcher_strikeouts,pitcher_hits_allowed,pitcher_walks,pitcher_earned_runs,pitcher_outs',
-    ]
+    low_quota_mode = os.getenv("MLB_LOW_QUOTA_MODE", "false").lower() in {"1", "true", "yes"}
+    if low_quota_mode:
+        # Preserve a useful final-week dashboard without spending 15 credits per
+        # game. These are the three highest-value, broadly posted core markets.
+        MARKET_BATCHES = [
+            'batter_hits,batter_total_bases,pitcher_strikeouts',
+        ]
+        print("   🪫 MLB low-quota mode: hits, total bases, and pitcher strikeouts only")
+    else:
+        MARKET_BATCHES = [
+            'batter_hits,batter_total_bases,batter_home_runs,batter_rbis,batter_runs_scored',
+            'batter_stolen_bases,batter_strikeouts,batter_walks,batter_singles,batter_doubles',
+            'pitcher_strikeouts,pitcher_hits_allowed,pitcher_walks,pitcher_earned_runs,pitcher_outs',
+        ]
 
     market_mapping = {
         'batter_hits': 'H', 'batter_total_bases': 'TB', 'batter_home_runs': 'HR',
