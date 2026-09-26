@@ -2,12 +2,9 @@ name: MLB Engine
 
 on:
   workflow_dispatch:
-  schedule:
-    # Eastern Daylight Time: 1:45 AM, 9:00 AM, 11:45 AM, and 5:00 PM.
-    - cron: "45 5 * * *"
-    - cron: "0 13 * * *"
-    - cron: "45 15 * * *"
-    - cron: "0 21 * * *"
+
+# Automatic runs are paused while the shared Odds API balance is reserved for
+# NFL. MLB can still be refreshed deliberately with workflow_dispatch.
 
 jobs:
   run-mlb-engine:

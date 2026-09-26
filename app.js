@@ -2472,6 +2472,21 @@ function renderDraftBoardView(convergenceHTML){
         total:mineBoard.length
       };
       const flexCount=Math.max(0,(mineCounts.if+mineCounts.of)-4);
+      function hitterSlotsOpen(){
+        const ifNeed=Math.max(0,2-mineCounts.if);
+        const ofNeed=Math.max(0,2-mineCounts.of);
+        const totalNeed=Math.max(0,6-mineCounts.total);
+        const flexNeed=Math.max(0,totalNeed-ifNeed-ofNeed-Math.max(0,1-mineCounts.p));
+        return {ifNeed,ofNeed,flexNeed,totalNeed};
+      }
+      function isEligibleForOpenSlot(player){
+        const slots=hitterSlotsOpen();
+        if(player.pos==="P")return mineCounts.p<1;
+        if(player.pos==="IF")return slots.ifNeed>0||slots.flexNeed>0;
+        if(player.pos==="OF")return slots.ofNeed>0||slots.flexNeed>0;
+        return slots.flexNeed>0;
+      }
+      const displayBoard=available.filter(isEligibleForOpenSlot);
       const openNeeds=[];
       if(mineCounts.p<1)openNeeds.push("Pitcher");
       if(mineCounts.if<2)openNeeds.push(mineCounts.if===0?"2 infielders":"1 infielder");
@@ -2488,13 +2503,24 @@ function renderDraftBoardView(convergenceHTML){
           :"No draftable players loaded for the selected games.";
         html=draftHeader+`<div class="empty" style="padding:40px">${emptyMessage}</div>`;
       }
+      else if(!displayBoard.length){
+        html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">0</div><div class="bs-lbl">LIVE BOARD</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${draftedCount}</div><div class="bs-lbl">MINE</div></div><div class="bs-card"><div class="bs-val" style="color:var(--warn)">${crossedCount}</div><div class="bs-lbl">X OFF</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${mineCounts.total}</div><div class="bs-lbl">ROSTERED</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} mine · ${crossedCount} crossed off · board filtered to open roster needs</div></div>`;
+        html+=`<div class="draft-lens-grid">
+          <div class="draft-lens-card"><div class="draft-lens-title">My Build</div><div class="draft-lens-copy">${mineBoard.length?mineBoard.map(p=>`<button class="draft-mini-chip" onclick="toggleDraftMine('${esc(p.name)}')">${esc(p.name)} · ${esc(p.pos)}</button>`).join(""):`<span class="draft-lens-muted">No one drafted to your team yet.</span>`}</div><div class="draft-lens-foot">P ${mineCounts.p}/1 · IF ${mineCounts.if}/2 · OF ${mineCounts.of}/2 · FLEX ${flexCount}/1</div></div>
+          <div class="draft-lens-card"><div class="draft-lens-title">Need Next</div><div class="draft-lens-copy">${openNeeds.length?esc(openNeeds.join(" · ")):"Roster is filled. No more position suggestions needed."}</div><div class="draft-lens-foot">Use Reset Board if you want to reopen the full pool.</div></div>
+        </div>`;
+        html+=`<div class="props-pass" style="margin:0 16px 12px"><div class="props-pass-title">No open-slot candidates left</div><div class="props-pass-copy">The board is now hiding players from positions you already filled. If your roster is done, that is the expected result.</div></div>`;
+      }
       else{
-        const anchorPitchers=available.filter(p=>p.isPitcher).slice(0,6);
-        const priorityBats=available.filter(p=>!p.isPitcher&&(p.decision==="Take now"||p.decision==="Priority bat")).slice(0,12);
-        const stackPieces=available.filter(p=>!p.isPitcher&&[...(stackTags.get(normalizePlayerName(p.name))||new Set())].some(tag=>tag.includes("STACK TARGET")||tag.includes("HIGH TOTAL")||tag.includes("CORRELATED"))).slice(0,12);
-        const lineupClimbers=available.filter(p=>!p.isPitcher&&p.availability?.lineupConfirmed).sort((a,b)=>(a.availability?.battingOrder||99)-(b.availability?.battingOrder||99)||b.priorityScore-a.priorityScore).slice(0,8);
-        const secondaryBoard=available.filter(p=>!anchorPitchers.includes(p)&&!priorityBats.includes(p)&&!stackPieces.includes(p)&&!lineupClimbers.includes(p)).slice(0,12);
-        html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${takeNowCount}</div><div class="bs-lbl">TAKE NOW</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${coreCount}</div><div class="bs-lbl">CORE TIER</div></div><div class="bs-card"><div class="bs-val" style="color:var(--push)">${waitCount}</div><div class="bs-lbl">CAN WAIT</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${available.length}</div><div class="bs-lbl">LIVE BOARD</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} mine · ${crossedCount} crossed off · ${available.length} live</div></div>`;
+        const anchorPitchers=displayBoard.filter(p=>p.isPitcher).slice(0,6);
+        const priorityBats=displayBoard.filter(p=>!p.isPitcher&&(p.decision==="Take now"||p.decision==="Priority bat")).slice(0,12);
+        const stackPieces=displayBoard.filter(p=>!p.isPitcher&&[...(stackTags.get(normalizePlayerName(p.name))||new Set())].some(tag=>tag.includes("STACK TARGET")||tag.includes("HIGH TOTAL")||tag.includes("CORRELATED"))).slice(0,12);
+        const lineupClimbers=displayBoard.filter(p=>!p.isPitcher&&p.availability?.lineupConfirmed).sort((a,b)=>(a.availability?.battingOrder||99)-(b.availability?.battingOrder||99)||b.priorityScore-a.priorityScore).slice(0,8);
+        const secondaryBoard=displayBoard.filter(p=>!anchorPitchers.includes(p)&&!priorityBats.includes(p)&&!stackPieces.includes(p)&&!lineupClimbers.includes(p)).slice(0,12);
+        const displayTakeNow=displayBoard.filter(p=>p.decision==="Take now").length;
+        const displayCore=displayBoard.filter(p=>p.decision==="Priority bat"||p.decision==="Core arm").length;
+        const displayWait=displayBoard.filter(p=>p.decision==="Can wait").length;
+        html=draftHeader+`<div class="bet-summary"><div class="bs-card"><div class="bs-val">${displayTakeNow}</div><div class="bs-lbl">TAKE NOW</div></div><div class="bs-card"><div class="bs-val" style="color:var(--strong)">${displayCore}</div><div class="bs-lbl">CORE TIER</div></div><div class="bs-card"><div class="bs-val" style="color:var(--push)">${displayWait}</div><div class="bs-lbl">CAN WAIT</div></div><div class="bs-card"><div class="bs-val" style="color:var(--accent-soft)">${displayBoard.length}</div><div class="bs-lbl">LIVE BOARD</div></div></div><div class="draft-controls"><button class="draft-reset" onclick="resetDrafted()">Reset Board</button><div class="draft-count">${draftedCount} mine · ${crossedCount} crossed off · ${displayBoard.length} fit open slots</div></div>`;
         html+=`<div class="draft-lens-grid">
           <div class="draft-lens-card"><div class="draft-lens-title">My Build</div><div class="draft-lens-copy">${mineBoard.length?mineBoard.map(p=>`<button class="draft-mini-chip" onclick="toggleDraftMine('${esc(p.name)}')">${esc(p.name)} · ${esc(p.pos)}</button>`).join(""):`<span class="draft-lens-muted">No one drafted to your team yet.</span>`}</div><div class="draft-lens-foot">P ${mineCounts.p}/1 · IF ${mineCounts.if}/2 · OF ${mineCounts.of}/2 · FLEX ${flexCount}/1</div></div>
           <div class="draft-lens-card"><div class="draft-lens-title">Need Next</div><div class="draft-lens-copy">${openNeeds.length?esc(openNeeds.join(" · ")):"Roster shape is filled; prioritize raw ceiling now."}</div><div class="draft-lens-foot">${crossedBoard.length?crossedBoard.slice(0,4).map(p=>`<button class="draft-mini-chip muted" onclick="toggleDraftCrossed('${esc(p.name)}')">${esc(p.name)}</button>`).join(""):"No X-off names yet."}</div></div>
