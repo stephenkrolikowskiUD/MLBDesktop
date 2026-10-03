@@ -3249,7 +3249,8 @@ def main():
     }
 
     try:
-        sched_url = f"{MLB_API}/schedule?sportId=1&date={schedule_date}&hydrate=probablePitcher,team,venue&gameType=R"
+        # Use the actual slate, including postseason games (not just gameType=R).
+        sched_url = f"{MLB_API}/schedule?sportId=1&date={schedule_date}&hydrate=probablePitcher,team,venue"
         sched_resp = requests.get(sched_url, timeout=10).json()
 
         for date in sched_resp.get('dates', []):
